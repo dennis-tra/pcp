@@ -29,11 +29,7 @@ go install google.golang.org/protobuf/cmd/protoc-gen-go
 Then run from the root of this repository:
 
 ```shell
-protoc \
-  -I=pkg/proto \
-  --go_out=pkg/proto \
-  --go_opt=paths=source_relative \
-  protocol.proto
+protoc -I=pkg/pb --go_out=pkg/pb --go_opt=paths=source_relative p2p.proto
 ```
 
 The proto defintions were generated with `libprotoc 3.14.0`.

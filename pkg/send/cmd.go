@@ -2,25 +2,16 @@ package send
 
 import (
 	"bufio"
-	"context"
 	"fmt"
-	"io"
-	"net"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/peer"
-	ma "github.com/multiformats/go-multiaddr"
-	manet "github.com/multiformats/go-multiaddr/net"
 	"github.com/urfave/cli/v2"
 	"github.com/whyrusleeping/mdns"
 )
 
-// ServiceTag .
-const ServiceTag = "pcp"
 
 // Command .
 var Command = &cli.Command{
@@ -59,7 +50,7 @@ func Action(c *cli.Context) error {
 
 	fmt.Printf("\nFound the following peer(s):\n")
 
-	err = PrintPeers(peers)
+	err = printPeers(peers)
 	if err != nil {
 		return err
 	}
@@ -111,70 +102,13 @@ func Action(c *cli.Context) error {
 			continue
 		}
 
+		addrInfo, err := parseServiceEntry(peers[num])
+		if err != nil {
+			return err
+		}
 		// The user entered a valid peer index
-		return send(peers[num], f)
+		return send(addrInfo, f)
 	}
-}
-
-func send(targetPeer *mdns.ServiceEntry, contents io.Reader) error {
-
-	fmt.Println("Selected peer: ", targetPeer.Info)
-
-	fmt.Print("Establishing connection... ")
-	ctx := context.Background()
-	host, err := libp2p.New(ctx)
-
-	targetPeerID, err := peer.Decode(targetPeer.Info)
-	if err != nil {
-		return fmt.Errorf("error parsing peer ID from mdns entry: %w", err)
-	}
-
-	var addr net.IP
-	if targetPeer.AddrV4 != nil {
-		addr = targetPeer.AddrV4
-	} else if targetPeer.AddrV6 != nil {
-		addr = targetPeer.AddrV6
-	} else {
-		return fmt.Errorf("error parsing multiaddr from mdns entry: no IP address found")
-	}
-
-	maddr, err := manet.FromNetAddr(&net.TCPAddr{IP: addr, Port: targetPeer.Port})
-	if err != nil {
-		return fmt.Errorf("error parsing multiaddr from mdns entry: %w", err)
-	}
-
-	pi := peer.AddrInfo{
-		ID:    targetPeerID,
-		Addrs: []ma.Multiaddr{maddr},
-	}
-
-	err = host.Connect(ctx, pi)
-	if err != nil {
-		return err
-	}
-
-	// open a stream, this stream will be handled by handleStream other end
-	stream, err := host.NewStream(ctx, targetPeerID, ServiceTag)
-	if err != nil {
-		return fmt.Errorf("stream open faild: %w", err)
-	}
-
-	fmt.Println("Connected!")
-
-	fmt.Println("Streaming file content to peer...")
-	_, err = io.Copy(stream, contents)
-	if err != nil {
-		return err
-	}
-
-	err = stream.Close()
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("Successfully sent file!")
-
-	return nil
 }
 
 // refresh asks the local network if there are peers waiting to receive files
@@ -185,7 +119,7 @@ func refresh() ([]*mdns.ServiceEntry, error) {
 		return nil, err
 	}
 
-	err = PrintPeers(peers)
+	err = printPeers(peers)
 	if err != nil {
 		return nil, err
 	}
@@ -198,45 +132,9 @@ func help() {
 	fmt.Println("Usage description here.")
 }
 
-// QueryPeers will send DNS multicast messages in the local network to
-// find all peers waiting to receive files.
-func QueryPeers() ([]*mdns.ServiceEntry, error) {
-
-	// TODO: Change this to an unbuffered channel. This is currently not
-	// possible because the mdns library does an unblocking send into
-	// their channel and therefore only one entry would be written
-	// and subsequent sends will be dropped, because we don't get
-	// the chance to drown the channel. Adjust the library:
-	// https://github.com/dennis-tra/pcp/projects/1#card-53284716
-	entriesCh := make(chan *mdns.ServiceEntry, 16)
-	query := &mdns.QueryParam{
-		Service:             ServiceTag,
-		Domain:              "local",
-		Timeout:             time.Second,
-		Entries:             entriesCh,
-		WantUnicastResponse: true,
-	}
-
-	err := mdns.Query(query)
-	if err != nil {
-		return nil, err
-	}
-	close(entriesCh)
-
-	services := []*mdns.ServiceEntry{}
-	for entry := range entriesCh {
-		if _, err := peer.Decode(entry.Info); err != nil {
-			continue
-		}
-		services = append(services, entry)
-	}
-
-	return services, nil
-}
-
-// PrintPeers prints the service entries found through mDNS.
+// printPeers prints the service entries found through mDNS.
 // It prefixes each entry with the index in the array.
-func PrintPeers(peers []*mdns.ServiceEntry) error {
+func printPeers(peers []*mdns.ServiceEntry) error {
 	for i, p := range peers {
 		mpeer, err := peer.Decode(p.Info)
 		if err != nil {

@@ -4,17 +4,12 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
-
-	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-core/network"
-	protocol "github.com/libp2p/go-libp2p-protocol"
-	"github.com/libp2p/go-libp2p/p2p/discovery"
-	"github.com/multiformats/go-multiaddr"
+	"github.com/dennis-tra/pcp/pkg/node"
+	p2p "github.com/dennis-tra/pcp/pkg/pb"
 	"github.com/urfave/cli/v2"
+	"os"
+	"strings"
+	"time"
 )
 
 // Command contains the receive sub-command configuration.
@@ -35,66 +30,105 @@ var Command = &cli.Command{
 // running pcp receive.
 func Action(c *cli.Context) error {
 
-	listenIP := "127.0.0.1"
-	listenPort := c.Int64("port")
-
 	ctx := context.Background()
 
-	sourceAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%d", listenIP, listenPort))
+	n, err := node.InitReceiving(ctx, c.Int64("port"))
 	if err != nil {
 		return err
 	}
+	defer n.Close()
 
-	host, err := libp2p.New(ctx, libp2p.ListenAddrs(sourceAddr))
-	if err != nil {
-		return err
+	n.WaitForConnection()
+
+	var sendRequest *p2p.SendRequest
+	var msgData *p2p.MessageData
+	for {
+		msgData, err = n.Receive()
+		if err != nil {
+			return err
+		}
+
+		if msgDatSendReq, ok := msgData.Payload.(*p2p.MessageData_SendRequest); ok {
+			sendRequest = msgDatSendReq.SendRequest
+			break
+		}
+
+		fmt.Println("Received unsupported message")
 	}
 
-	host.SetStreamHandler(protocol.ID("pcp"), handleStream)
+	for {
+		fmt.Printf("Peer %s wants to send you the file %s (%d). Accept? [y,n,q,?] ", msgData.NodeId, sendRequest.FileName, sendRequest.FileSize)
+		scanner := bufio.NewScanner(os.Stdin)
+		scanResult := scanner.Scan()
 
-	fmt.Println("Your identity: ", host.ID().Pretty())
+		if !scanResult {
+			return scanner.Err()
+		}
 
-	ser, err := discovery.NewMdnsService(ctx, host, time.Second, "pcp")
-	if err != nil {
-		return err
-	}
-	defer ser.Close()
+		input := strings.TrimSpace(scanner.Text())
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT)
+		// Empty input, user just pressed enter => do nothing and prompt again
+		if input == "" {
+			continue
+		}
 
-	select {
-	case <-stop:
-		host.Close()
-		os.Exit(0)
+		// Quit the process
+		if input == "q" {
+			return nil
+		}
+
+		// Print the help text and prompt again
+		if input == "?" {
+			help()
+			continue
+		}
+
+		// Print the help text and prompt again
+		if input == "y" {
+			resp, err := n.NewMessageData()
+			if err != nil {
+				return err
+			}
+
+			resp.Payload = &p2p.MessageData_SendResponse{
+				SendResponse: &p2p.SendResponse{
+					Accepted: true,
+				},
+			}
+
+			err = n.Send(resp)
+			if err != nil {
+				return err
+			}
+			time.Sleep(time.Second)
+			break
+		}
+
+		if input == "n" {
+			resp, err := n.NewMessageData()
+			if err != nil {
+				return err
+			}
+
+			resp.Payload = &p2p.MessageData_SendResponse{
+				SendResponse: &p2p.SendResponse{
+					Accepted: false,
+				},
+			}
+
+			err = n.Send(resp)
+			if err != nil {
+				return err
+			}
+			break
+		}
+
+		fmt.Println("Invalid input")
 	}
 
 	return nil
 }
 
-func handleStream(stream network.Stream) {
-	fmt.Println("Got a new stream!")
-
-	// Create a buffer stream for non blocking read and write.
-	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-
-	go readData(rw)
-}
-
-func readData(rw *bufio.ReadWriter) {
-	f, err := os.Create("LICENSE2")
-	if err != nil {
-		panic(err)
-	}
-	for {
-		b, err := rw.ReadByte()
-		if err != nil {
-			panic(err)
-		}
-
-		_, err = f.Write([]byte{b})
-		if err != nil {
-			panic(err)
-		}
-	}
+func help() {
+	fmt.Printf("Help text")
 }

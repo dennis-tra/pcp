@@ -1,0 +1,33 @@
+syntax = "proto3";
+option go_package = "github.com/dennis-tra/pcp/pkg/proto";
+
+// A message object that is shared among all requests.
+message MessageData {
+
+  // Unix time in milliseconds.
+  int64 timestamp = 1;
+
+  // The ID of the node that created the message (not the peer that may have sent it)
+  string node_id = 2;
+
+  // Authoring node Secp256k1 public key (32bytes) - protobufs serialized
+  bytes node_pub_key = 3;
+
+  // The signature of the message data.
+  bytes signature = 4;
+
+  // The actual message content.
+  oneof payload {
+    SendRequest send_request = 9;
+    SendResponse send_response = 10;
+  }
+}
+
+message SendRequest {
+  string file_name = 1;
+  int64 file_size = 2;
+}
+
+message SendResponse {
+  bool accepted = 1;
+}
