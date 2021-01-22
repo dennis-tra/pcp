@@ -7,6 +7,8 @@ import (
 	"github.com/dennis-tra/pcp/pkg/commons"
 	"github.com/libp2p/go-libp2p/p2p/discovery"
 	"github.com/multiformats/go-multiaddr"
+	"io"
+	"os"
 	"sync"
 	"time"
 
@@ -109,8 +111,8 @@ func (n *Node) WaitForConnection() {
 	n.RemoveStreamHandler(commons.ServiceTag)
 }
 
-func (n *Node) Shutdown() error {
-	err := n.Close()
+func (n *Node) Close() error {
+	err := n.Host.Close()
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -214,6 +216,25 @@ func (n *Node) Receive() (*p2p.MessageData, error) {
 	}
 
 	return &msg, nil
+}
+
+func (n *Node) SendBytes(data io.Reader) error {
+	_, err := io.Copy(n.stream, data)
+	if err != nil {
+		return err
+	}
+	return n.stream.Flush()
+}
+
+func (n *Node) ReceiveBytes(filename string) error {
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(f, n.stream)
+
+	return err
 }
 
 func (n *Node) NewMessageData() (*p2p.MessageData, error) {

@@ -12,14 +12,26 @@ import (
 	"github.com/whyrusleeping/mdns"
 )
 
-
 // Command .
 var Command = &cli.Command{
-	Name:      "send",
-	Usage:     "sends a file to a peer in your local network that is waiting to receive files",
+	Name:    "send",
+	Usage:   "sends a file to a peer in your local network that is waiting to receive files",
+	Aliases: []string{"s"},
+	Action:  Action,
+	Flags: []cli.Flag{
+		&cli.Int64Flag{
+			Name:    "timeout",
+			EnvVars: []string{"PCP_MDNS_TIMEOUT"},
+			Aliases: []string{"t"},
+			Usage:   "The timeout to wait for multicast DNS replies in seconds.",
+			Value:   1,
+		},
+	},
 	ArgsUsage: "FILE",
-	Aliases:   []string{"s"},
-	Action:    Action,
+	UsageText: `FILE	The file you want to transmit to your peer (required).`,
+	Description: `The send subcommand will look for multicast DNS services
+that have registered in your local network. You will be able to choose
+the desired peer or refresh the list.`,
 }
 
 // Action contains the logic for the send subcommand of the pcp program. It is
@@ -44,19 +56,19 @@ func Action(c *cli.Context) error {
 		return err
 	}
 
-	if len(peers) == 0 {
-		return fmt.Errorf("no peer found in your local network")
-	}
-
-	fmt.Printf("\nFound the following peer(s):\n")
-
-	err = printPeers(peers)
-	if err != nil {
-		return err
-	}
-
 	for {
-		fmt.Print("Select the peer you want to send the file to [#,r,q,?]: ")
+		if len(peers) == 0 {
+			fmt.Print("No peer found in your local network [r,q,?]: ")
+		} else {
+			fmt.Printf("\nFound the following peer(s):\n")
+
+			err = printPeers(peers)
+			if err != nil {
+				return err
+			}
+
+			fmt.Print("Select the peer you want to send the file to [#,r,q,?]: ")
+		}
 
 		scanner := bufio.NewScanner(os.Stdin)
 		scanResult := scanner.Scan()
@@ -89,6 +101,11 @@ func Action(c *cli.Context) error {
 		// Print the help text and prompt again
 		if input == "?" {
 			help()
+			continue
+		}
+
+		if len(peers) == 0 {
+			fmt.Println("Invalid input")
 			continue
 		}
 

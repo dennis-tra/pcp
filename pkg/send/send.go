@@ -5,6 +5,7 @@ import (
 	"fmt"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
 	"os"
+	"time"
 
 	"github.com/dennis-tra/pcp/pkg/node"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -31,14 +32,19 @@ func send(pi peer.AddrInfo, f *os.File) error {
 		return err
 	}
 
+	stat, err := f.Stat()
+	if err != nil {
+		return err
+	}
+
 	msg.Payload = &p2p.MessageData_SendRequest{
 		SendRequest: &p2p.SendRequest{
-			FileName: "Testfile",
-			FileSize: 3,
+			FileName: f.Name(),
+			FileSize: stat.Size(),
 		},
 	}
 
-	fmt.Println("Asking for confirmation...")
+	fmt.Print("Asking for confirmation... ")
 	err = n.Send(msg)
 	if err != nil {
 		return err
@@ -49,55 +55,18 @@ func send(pi peer.AddrInfo, f *os.File) error {
 		return err
 	}
 
-	fmt.Println("Peer replied with", resp.Payload.(*p2p.MessageData_SendResponse).SendResponse.Accepted)
+	if !resp.Payload.(*p2p.MessageData_SendResponse).SendResponse.Accepted {
+		fmt.Println("Rejected!")
+		return fmt.Errorf("peer rejected your request")
+	}
 
-	//dat, err := ioutil.ReadAll(stream)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//fmt.Println(dat)
+	fmt.Println("Accepted!")
+	err = n.SendBytes(f)
+	if err != nil {
+		return err
+	}
 
-	//finfo, err := f.Stat()
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//msg := &pb.Message{
-	//	Type: &pb.Message_SendRequest{
-	//		SendRequest: &pb.SendRequest{
-	//			FileName: f.Name(),
-	//			FileSize: finfo.Size(),
-	//		},
-	//	},
-	//}
-	//
-	//msgPayload, err := proto.Marshal(msg)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//time.Sleep(time.Second)
-	//
-	//fmt.Println("Sending ", msgPayload)
-	//_, err = rw.Write(msgPayload)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//err = rw.Flush()
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//time.Sleep(time.Second)
-
-	//fmt.Println("Streaming file content to peer...")
-	//_, err = io.Copy(stream, f)
-	//if err != nil {
-	//	return err
-	//}
-
+	time.Sleep(time.Second)
 	fmt.Println("Successfully sent file!")
 
 	return nil

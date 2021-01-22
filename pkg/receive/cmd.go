@@ -4,12 +4,13 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/dennis-tra/pcp/pkg/node"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
 	"github.com/urfave/cli/v2"
-	"os"
-	"strings"
-	"time"
 )
 
 // Command contains the receive sub-command configuration.
@@ -31,7 +32,7 @@ var Command = &cli.Command{
 	UsageText: `DEST_DIR	The destination directory where the received file
 	should be saved. The file will be named as the sender
 	specifies. If no DEST_DIR is given the file will be
-	saved to $XDG_DATA_HOME - usually ~/.data/. If the
+	saved to $XDG_DATA_HOME - usually ~/.data/. If the file
 	already exists you will be prompted what you want to do.`,
 	Description: `The receive subcommand starts a multicast DNS service. This
 makes it possible for other peers to discover us - it enables
@@ -43,17 +44,18 @@ works well in most office, home, or private infrastructure
 environments.`,
 }
 
-// Action is the function that is called when
-// running pcp receive.
+// Action is the function that is called when running pcp receive.
 func Action(c *cli.Context) error {
 
 	ctx := context.Background()
-
 	n, err := node.InitReceiving(ctx, c.Int64("port"))
 	if err != nil {
 		return err
 	}
 	defer n.Close()
+
+	fmt.Println("Your identity:", n.ID())
+	fmt.Println("Waiting for peers to connect... (cancel with strg+c)")
 
 	n.WaitForConnection()
 
@@ -70,11 +72,11 @@ func Action(c *cli.Context) error {
 			break
 		}
 
-		fmt.Println("Received unsupported message")
+		fmt.Println("Warning: Received unsupported message from peer:", msgData.NodeId)
 	}
 
 	for {
-		fmt.Printf("Peer %s wants to send you the file %s (%d). Accept? [y,n,q,?] ", msgData.NodeId, sendRequest.FileName, sendRequest.FileSize)
+		fmt.Printf("Peer %s wants to send you the file %s (%d Bytes). Accept? [y,n,q,?] ", msgData.NodeId, sendRequest.FileName, sendRequest.FileSize)
 		scanner := bufio.NewScanner(os.Stdin)
 		scanResult := scanner.Scan()
 
@@ -102,6 +104,13 @@ func Action(c *cli.Context) error {
 
 		// Print the help text and prompt again
 		if input == "y" {
+
+			filename := filepath.Base(sendRequest.FileName)
+			_, err := os.Stat(sendRequest.FileName)
+			if os.IsExist(err) {
+				filename += "_2"
+			}
+
 			resp, err := n.NewMessageData()
 			if err != nil {
 				return err
@@ -117,8 +126,16 @@ func Action(c *cli.Context) error {
 			if err != nil {
 				return err
 			}
-			time.Sleep(time.Second)
-			break
+
+			fmt.Println("Saving file to: ", filename)
+			err = n.ReceiveBytes(filename)
+			if err != nil {
+				return err
+			}
+
+			fmt.Println("Successfully received file!")
+
+			return nil
 		}
 
 		if input == "n" {
