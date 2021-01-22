@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -23,6 +24,10 @@ func main() {
 		Commands: []*cli.Command{
 			receive.Command,
 			send.Command,
+		},
+		ExitErrHandler: func(context *cli.Context, err error) {
+			fmt.Println(err.Error())
+			os.Exit(1)
 		},
 	}
 

@@ -4,18 +4,17 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
-	"os/signal"
 	"strconv"
-	"syscall"
+	"strings"
 	"time"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/peer"
-	protocol "github.com/libp2p/go-libp2p-protocol"
 	ma "github.com/multiformats/go-multiaddr"
-	manet "github.com/multiformats/go-multiaddr-net"
+	manet "github.com/multiformats/go-multiaddr/net"
 	"github.com/urfave/cli/v2"
 	"github.com/whyrusleeping/mdns"
 )
@@ -25,35 +24,37 @@ const ServiceTag = "pcp"
 
 // Command .
 var Command = &cli.Command{
-	Name:    "send",
-	Aliases: []string{"s"},
-	Action:  Action,
+	Name:      "send",
+	Usage:     "sends a file to a peer in your local network that is waiting to receive files",
+	ArgsUsage: "FILE",
+	Aliases:   []string{"s"},
+	Action:    Action,
 }
 
-func validateInput(input string, peerCount int) (int, error) {
-	if len(input) == 0 {
-		return 0, fmt.Errorf("")
-	}
-
-	num, err := strconv.Atoi(input)
-	if err != nil {
-		return 0, fmt.Errorf("Invalid input")
-	}
-
-	if num >= peerCount {
-		return 0, fmt.Errorf("Peer index out of range")
-	}
-
-	return num, nil
-}
-
-// Action contains the logic for the send subcommand of the pcp program.
+// Action contains the logic for the send subcommand of the pcp program. It is
+// mainly responsible for the TUI state handling and input parsing.
 func Action(c *cli.Context) error {
+
+	filepath := c.Args().First()
+	if filepath == "" {
+		return fmt.Errorf("please specify the file you want to send")
+	}
+
+	// Try to open the file and check if we have access
+	f, err := os.Open(filepath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
 
 	fmt.Println("Querying peers that are waiting to receive files...")
 	peers, err := QueryPeers()
 	if err != nil {
 		return err
+	}
+
+	if len(peers) == 0 {
+		return fmt.Errorf("no peer found in your local network")
 	}
 
 	fmt.Printf("\nFound the following peer(s):\n")
@@ -63,11 +64,8 @@ func Action(c *cli.Context) error {
 		return err
 	}
 
-	var targetPeer *mdns.ServiceEntry
-
-INPUT_LOOP:
 	for {
-		fmt.Print("\nSelect the peer you want to send the file to [#,r,q,?]: ")
+		fmt.Print("Select the peer you want to send the file to [#,r,q,?]: ")
 
 		scanner := bufio.NewScanner(os.Stdin)
 		scanResult := scanner.Scan()
@@ -76,53 +74,59 @@ INPUT_LOOP:
 			return scanner.Err()
 		}
 
-		switch scanner.Text() {
-		case "r":
-			peers, err = QueryPeers()
-			if err != nil {
-				return err
-			}
+		input := strings.TrimSpace(scanner.Text())
 
-			err = PrintPeers(peers)
-			if err != nil {
-				return err
-			}
-
-		case "q":
-			return nil
-
-		case "?":
-			fmt.Println("Print help")
-
-		default:
-
-			num, err := validateInput(scanner.Text(), len(peers))
-			if err != nil {
-				fmt.Println(err.Error())
-				continue
-			}
-
-			targetPeer = peers[num]
-
-			break INPUT_LOOP
+		// Empty input, user just pressed enter => do nothing and prompt again
+		if input == "" {
+			continue
 		}
+
+		// Refresh the set of peers and prompt again
+		if input == "r" {
+			peers, err = refresh()
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
+		// Quit the process
+		if input == "q" {
+			return nil
+		}
+
+		// Print the help text and prompt again
+		if input == "?" {
+			help()
+			continue
+		}
+
+		// Try to parse the input and
+		num, err := strconv.Atoi(input)
+		if err != nil {
+			fmt.Println("Invalid input")
+			continue
+		} else if num >= len(peers) {
+			fmt.Println("Peer index out of range")
+			continue
+		}
+
+		// The user entered a valid peer index
+		return send(peers[num], f)
 	}
+}
 
-	fmt.Println("sending Data to peer", targetPeer.Info)
+func send(targetPeer *mdns.ServiceEntry, contents io.Reader) error {
 
-	// ci, err := cid.Decode(c.Args().First())
-	// if err != nil {
-	// 	return err
-	// }
+	fmt.Println("Selected peer: ", targetPeer.Info)
 
-	// fmt.Println(ci.String())
-
+	fmt.Print("Establishing connection... ")
 	ctx := context.Background()
 	host, err := libp2p.New(ctx)
 
-	targetPeerID, err := peer.IDB58Decode(targetPeer.Info)
+	targetPeerID, err := peer.Decode(targetPeer.Info)
 	if err != nil {
-		return fmt.Errorf("Error parsing peer ID from mdns entry: %s", err)
+		return fmt.Errorf("error parsing peer ID from mdns entry: %w", err)
 	}
 
 	var addr net.IP
@@ -131,12 +135,12 @@ INPUT_LOOP:
 	} else if targetPeer.AddrV6 != nil {
 		addr = targetPeer.AddrV6
 	} else {
-		return fmt.Errorf("Error parsing multiaddr from mdns entry: no IP address found")
+		return fmt.Errorf("error parsing multiaddr from mdns entry: no IP address found")
 	}
 
 	maddr, err := manet.FromNetAddr(&net.TCPAddr{IP: addr, Port: targetPeer.Port})
 	if err != nil {
-		return fmt.Errorf("Error parsing multiaddr from mdns entry: %s", err)
+		return fmt.Errorf("error parsing multiaddr from mdns entry: %w", err)
 	}
 
 	pi := peer.AddrInfo{
@@ -150,34 +154,60 @@ INPUT_LOOP:
 	}
 
 	// open a stream, this stream will be handled by handleStream other end
-	stream, err := host.NewStream(ctx, targetPeerID, protocol.ID(ServiceTag))
+	stream, err := host.NewStream(ctx, targetPeerID, ServiceTag)
 	if err != nil {
-		return fmt.Errorf("stream open faild: %s", err)
+		return fmt.Errorf("stream open faild: %w", err)
 	}
 
-	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+	fmt.Println("Connected!")
 
-	go writeData(rw)
-	go readData(rw)
-
-	fmt.Println("Connected to:", targetPeerID)
-
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT)
-
-	select {
-	case <-stop:
-		host.Close()
-		os.Exit(0)
+	fmt.Println("Streaming file content to peer...")
+	_, err = io.Copy(stream, contents)
+	if err != nil {
+		return err
 	}
+
+	err = stream.Close()
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Successfully sent file!")
 
 	return nil
 }
 
-// QueryPeers will send a DNS multicast message to find
-// all peers waiting to receive files.
+// refresh asks the local network if there are peers waiting to receive files
+// and then prints these peers if some are found.
+func refresh() ([]*mdns.ServiceEntry, error) {
+	peers, err := QueryPeers()
+	if err != nil {
+		return nil, err
+	}
+
+	err = PrintPeers(peers)
+	if err != nil {
+		return nil, err
+	}
+
+	return peers, nil
+}
+
+// help prints the usage description for the user input in the "select peer" prompt.
+func help() {
+	fmt.Println("Usage description here.")
+}
+
+// QueryPeers will send DNS multicast messages in the local network to
+// find all peers waiting to receive files.
 func QueryPeers() ([]*mdns.ServiceEntry, error) {
 
+	// TODO: Change this to an unbuffered channel. This is currently not
+	// possible because the mdns library does an unblocking send into
+	// their channel and therefore only one entry would be written
+	// and subsequent sends will be dropped, because we don't get
+	// the chance to drown the channel. Adjust the library:
+	// https://github.com/dennis-tra/pcp/projects/1#card-53284716
 	entriesCh := make(chan *mdns.ServiceEntry, 16)
 	query := &mdns.QueryParam{
 		Service:             ServiceTag,
@@ -195,6 +225,9 @@ func QueryPeers() ([]*mdns.ServiceEntry, error) {
 
 	services := []*mdns.ServiceEntry{}
 	for entry := range entriesCh {
+		if _, err := peer.Decode(entry.Info); err != nil {
+			continue
+		}
 		services = append(services, entry)
 	}
 
@@ -205,56 +238,13 @@ func QueryPeers() ([]*mdns.ServiceEntry, error) {
 // It prefixes each entry with the index in the array.
 func PrintPeers(peers []*mdns.ServiceEntry) error {
 	for i, p := range peers {
-		mpeer, err := peer.IDB58Decode(p.Info)
+		mpeer, err := peer.Decode(p.Info)
 		if err != nil {
 			return err
 		}
 
 		fmt.Printf("[%d] %s\n", i, mpeer.Pretty())
 	}
+	fmt.Println()
 	return nil
-}
-
-func readData(rw *bufio.ReadWriter) {
-	for {
-		str, err := rw.ReadString('\n')
-		if err != nil {
-			fmt.Println("Error reading from buffer")
-			panic(err)
-		}
-
-		if str == "" {
-			return
-		}
-		if str != "\n" {
-			// Green console colour: 	\x1b[32m
-			// Reset console colour: 	\x1b[0m
-			fmt.Printf("\x1b[32m%s\x1b[0m> ", str)
-		}
-
-	}
-}
-
-func writeData(rw *bufio.ReadWriter) {
-	stdReader := bufio.NewReader(os.Stdin)
-
-	for {
-		fmt.Print("> ")
-		sendData, err := stdReader.ReadString('\n')
-		if err != nil {
-			fmt.Println("Error reading from stdin")
-			panic(err)
-		}
-
-		_, err = rw.WriteString(fmt.Sprintf("%s\n", sendData))
-		if err != nil {
-			fmt.Println("Error writing to buffer")
-			panic(err)
-		}
-		err = rw.Flush()
-		if err != nil {
-			fmt.Println("Error flushing buffer")
-			panic(err)
-		}
-	}
 }
