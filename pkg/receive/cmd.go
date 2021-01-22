@@ -54,7 +54,7 @@ func Action(c *cli.Context) error {
 	}
 	defer n.Close()
 
-	fmt.Println("Your identity:", n.ID())
+	fmt.Printf("Your identity:\n\n\t%s\n\n", n.ID())
 	fmt.Println("Waiting for peers to connect... (cancel with strg+c)")
 
 	n.WaitForConnection()

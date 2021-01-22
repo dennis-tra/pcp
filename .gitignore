@@ -15,6 +15,7 @@ pcp$
 
 .idea
 mdns
+pcp
 
 ### Go Patch ###
 /vendor/

@@ -23,11 +23,23 @@ message MessageData {
   }
 }
 
+// SendRequest is sent to the receiving peer for acceptance.
+// It contains basic information about the data that is
+// about to be transmitted.
 message SendRequest {
+
+  // The name of the file that is about to be transferred.
+  // This will also be the name that the receiving peer
+  // uses upon save.
   string file_name = 1;
+
+  // The size of the file to be transmitted.
   int64 file_size = 2;
 }
 
+// SendResponse is sent as a reply to the SendRequest message.
+// It just indicates if the receiving peer is willing to
+// accept the file.
 message SendResponse {
   bool accepted = 1;
 }

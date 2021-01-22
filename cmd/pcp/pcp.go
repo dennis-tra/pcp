@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 
@@ -11,14 +10,14 @@ import (
 )
 
 const (
-	// Version of the PCP command line tool
+	// Version of the PCP command line tool.
 	Version = "0.0.1"
 )
 
 func main() {
 	app := &cli.App{
 		Name:                 "pcp",
-		Usage:                "Peer Copy - ",
+		Usage:                "Peer Copy, a peer-to-peer data transfer tool.",
 		Version:              Version,
 		EnableBashCompletion: true,
 		Commands: []*cli.Command{
@@ -26,8 +25,9 @@ func main() {
 			send.Command,
 		},
 		ExitErrHandler: func(context *cli.Context, err error) {
-			fmt.Println(err.Error())
-			os.Exit(1)
+			if err == nil {
+				return
+			}
 		},
 	}
 

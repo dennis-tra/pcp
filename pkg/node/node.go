@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/dennis-tra/pcp/pkg/commons"
 	"github.com/libp2p/go-libp2p/p2p/discovery"
-	"github.com/multiformats/go-multiaddr"
 	"io"
 	"os"
 	"sync"
@@ -68,17 +67,13 @@ func InitSending(ctx context.Context, pi peer.AddrInfo) (*Node, error) {
 
 func InitReceiving(ctx context.Context, port int64) (*Node, error) {
 
-	sourceAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", port))
-	if err != nil {
-		return nil, err
-	}
-
 	priv, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
 	if err != nil {
 		return nil, err
 	}
 
-	h, err := libp2p.New(ctx, libp2p.ListenAddrs(sourceAddr), libp2p.Identity(priv))
+	hostAddr := fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", port)
+	h, err := libp2p.New(ctx, libp2p.ListenAddrStrings(hostAddr), libp2p.Identity(priv))
 	if err != nil {
 		return nil, err
 	}
