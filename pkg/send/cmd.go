@@ -50,8 +50,8 @@ func Action(c *cli.Context) error {
 	}
 	defer f.Close()
 
-	fmt.Println("Querying peers that are waiting to receive files...")
-	peers, err := QueryPeers()
+	fmt.Println("Searching peers that are waiting to receive files...")
+	peers, err := queryPeers()
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func Action(c *cli.Context) error {
 
 		// Refresh the set of peers and prompt again
 		if input == "r" {
-			peers, err = refresh()
+			peers, err = queryPeers()
 			if err != nil {
 				return err
 			}
@@ -123,30 +123,18 @@ func Action(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
+
 		// The user entered a valid peer index
 		return send(addrInfo, f)
 	}
 }
 
-// refresh asks the local network if there are peers waiting to receive files
-// and then prints these peers if some are found.
-func refresh() ([]*mdns.ServiceEntry, error) {
-	peers, err := QueryPeers()
-	if err != nil {
-		return nil, err
-	}
-
-	err = printPeers(peers)
-	if err != nil {
-		return nil, err
-	}
-
-	return peers, nil
-}
-
 // help prints the usage description for the user input in the "select peer" prompt.
 func help() {
-	fmt.Println("Usage description here.")
+	fmt.Println("#: the number of the peer you want to connect to")
+	fmt.Println("r: refresh peer list")
+	fmt.Println("q: quit pcp")
+	fmt.Println("?: this help message")
 }
 
 // printPeers prints the service entries found through mDNS.

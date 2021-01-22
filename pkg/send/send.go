@@ -13,10 +13,6 @@ import (
 
 func send(pi peer.AddrInfo, f *os.File) error {
 
-	fmt.Println("Selected peer: ", pi.ID)
-
-	fmt.Print("Establishing connection... ")
-
 	ctx := context.Background()
 
 	n, err := node.InitSending(ctx, pi)
@@ -24,8 +20,6 @@ func send(pi peer.AddrInfo, f *os.File) error {
 		return err
 	}
 	defer n.Close()
-
-	fmt.Println("Done!")
 
 	msg, err := n.NewMessageData()
 	if err != nil {

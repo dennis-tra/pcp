@@ -55,24 +55,28 @@ func Action(c *cli.Context) error {
 	defer n.Close()
 
 	fmt.Printf("Your identity:\n\n\t%s\n\n", n.ID())
-	fmt.Println("Waiting for peers to connect... (cancel with strg+c)")
-
-	n.WaitForConnection()
 
 	var sendRequest *p2p.SendRequest
 	var msgData *p2p.MessageData
 	for {
+		fmt.Println("Waiting for peers to connect... (cancel with strg+c)")
+
+		n.WaitForConnection()
+
 		msgData, err = n.Receive()
 		if err != nil {
-			return err
+			fmt.Println(err)
+			continue
 		}
 
-		if msgDatSendReq, ok := msgData.Payload.(*p2p.MessageData_SendRequest); ok {
-			sendRequest = msgDatSendReq.SendRequest
-			break
+		msgDatSendReq, ok := msgData.Payload.(*p2p.MessageData_SendRequest)
+		if !ok {
+			fmt.Println("Warning: Received unsupported message from peer:", msgData.NodeId)
+			continue
 		}
 
-		fmt.Println("Warning: Received unsupported message from peer:", msgData.NodeId)
+		sendRequest = msgDatSendReq.SendRequest
+		break
 	}
 
 	for {

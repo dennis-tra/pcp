@@ -12,9 +12,9 @@ import (
 	"github.com/whyrusleeping/mdns"
 )
 
-// QueryPeers will send DNS multicast messages in the local network to
+// queryPeers will send DNS multicast messages in the local network to
 // find all peers waiting to receive files.
-func QueryPeers() ([]*mdns.ServiceEntry, error) {
+func queryPeers() ([]*mdns.ServiceEntry, error) {
 
 	// TODO: Change this to an unbuffered channel. This is currently not
 	// possible because the mdns library does an unblocking send into
