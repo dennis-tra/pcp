@@ -43,7 +43,7 @@ func Action(c *cli.Context) error {
 		return fmt.Errorf("please specify the file you want to send")
 	}
 
-	// Try to open the file and check if we have access
+	// Try to open the file to check if we have access
 	f, err := os.Open(filepath)
 	if err != nil {
 		return err
@@ -125,7 +125,14 @@ func Action(c *cli.Context) error {
 		}
 
 		// The user entered a valid peer index
-		return send(addrInfo, f)
+		accepted, err := send(addrInfo, f)
+		if err != nil {
+			return err
+		} else if !accepted {
+			continue
+		}
+
+		return nil
 	}
 }
 

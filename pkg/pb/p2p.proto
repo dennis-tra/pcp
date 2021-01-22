@@ -35,6 +35,9 @@ message SendRequest {
 
   // The size of the file to be transmitted.
   int64 file_size = 2;
+
+  // The content identifier of the file to send.
+  bytes cid = 3;
 }
 
 // SendResponse is sent as a reply to the SendRequest message.
