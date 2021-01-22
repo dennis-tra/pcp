@@ -16,6 +16,27 @@ Command line peer-to-peer data distribution tool. Peer CoPy
 
 ## Usage
 
+## Development
+
+### Generate Protobuf definitions
+
+First install the protoc compiler:
+
+```shell
+go install google.golang.org/protobuf/cmd/protoc-gen-go
+```
+
+Then run from the root of this repository:
+
+```shell
+protoc \
+  -I=pkg/proto \
+  --go_out=pkg/proto \
+  --go_opt=paths=source_relative \
+  protocol.proto
+```
+
+The proto defintions were generated with `libprotoc 3.14.0`.
 
 ## Related Efforts
 
