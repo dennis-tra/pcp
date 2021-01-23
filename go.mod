@@ -3,6 +3,7 @@ module github.com/dennis-tra/pcp
 go 1.15
 
 require (
+	github.com/adrg/xdg v0.3.0
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang/protobuf v1.4.0
 	github.com/google/gopacket v1.1.18 // indirect

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/dennis-tra/pcp/pkg/initialize"
 	"github.com/dennis-tra/pcp/pkg/receive"
 	"github.com/dennis-tra/pcp/pkg/send"
 	"github.com/urfave/cli/v2"
@@ -15,6 +16,7 @@ const (
 )
 
 func main() {
+
 	app := &cli.App{
 		Name:                 "pcp",
 		Usage:                "Peer Copy, a peer-to-peer data transfer tool.",
@@ -23,11 +25,14 @@ func main() {
 		Commands: []*cli.Command{
 			receive.Command,
 			send.Command,
+			initialize.Command,
 		},
-		ExitErrHandler: func(context *cli.Context, err error) {
-			if err == nil {
-				return
-			}
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "config",
+				Aliases: []string{"c"},
+				Usage:   "Load configuration from `FILE`",
+			},
 		},
 	}
 

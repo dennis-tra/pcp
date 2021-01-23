@@ -4,27 +4,28 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/dennis-tra/pcp/pkg/commons"
-	"github.com/ipfs/go-cid"
-	"github.com/libp2p/go-libp2p/p2p/discovery"
 	"io"
 	"os"
 	"sync"
 	"time"
 
+	"github.com/dennis-tra/pcp/pkg/commons"
+	"github.com/dennis-tra/pcp/pkg/config"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
 	"github.com/golang/protobuf/proto"
+	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/p2p/discovery"
 	"github.com/multiformats/go-varint"
 )
 
 // Node represents the construct to send messages to the
 // receiving peer. Stream is a bufio.ReadWriter because
-// in order to read an urvarint we need an io.ByteReader.
+// in order to read an uvarint we need an io.ByteReader.
 type Node struct {
 	host.Host
 	stream   *bufio.ReadWriter
@@ -32,16 +33,28 @@ type Node struct {
 }
 
 // InitSending creates a new node connected to the given peer.
-// Every subsequent calls to send will transmit messages to
+// Every subsequent call to send will transmit messages to
 // this peer.
 func InitSending(ctx context.Context, pi peer.AddrInfo) (*Node, error) {
 
-	priv, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
+	conf, err := config.LoadConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	h, err := libp2p.New(ctx, libp2p.Identity(priv))
+	if !conf.Identity.IsInitialized() {
+		err = conf.Identity.GenerateKeyPair()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	key, err := conf.Identity.PrivateKey()
+	if err != nil {
+		return nil, err
+	}
+
+	h, err := libp2p.New(ctx, libp2p.Identity(key))
 	if err != nil {
 		return nil, err
 	}
@@ -68,13 +81,25 @@ func InitSending(ctx context.Context, pi peer.AddrInfo) (*Node, error) {
 
 func InitReceiving(ctx context.Context, port int64) (*Node, error) {
 
-	priv, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
+	conf, err := config.LoadConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	if !conf.Identity.IsInitialized() {
+		err = conf.Identity.GenerateKeyPair()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	key, err := conf.Identity.PrivateKey()
 	if err != nil {
 		return nil, err
 	}
 
 	hostAddr := fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", port)
-	h, err := libp2p.New(ctx, libp2p.ListenAddrStrings(hostAddr), libp2p.Identity(priv))
+	h, err := libp2p.New(ctx, libp2p.ListenAddrStrings(hostAddr), libp2p.Identity(key))
 	if err != nil {
 		return nil, err
 	}
