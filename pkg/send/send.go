@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"time"
 
 	"github.com/dennis-tra/pcp/pkg/node"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
@@ -15,7 +14,28 @@ import (
 	mh "github.com/multiformats/go-multihash"
 )
 
-func send(pi peer.AddrInfo, f *os.File) (accepted bool, err error) {
+func calcContentID(filepath string) (cid.Cid, error) {
+
+	f, err := os.Open(filepath)
+	if err != nil {
+		return cid.Cid{}, err
+	}
+	defer f.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, f); err != nil {
+		return cid.Cid{}, err
+	}
+
+	mhash, err := mh.Encode(hasher.Sum(nil), mh.SHA2_256)
+	if err != nil {
+		return cid.Cid{}, err
+	}
+
+	return cid.NewCidV1(cid.Raw, mhash), nil
+}
+
+func send(pi peer.AddrInfo, filepath string) (accepted bool, err error) {
 
 	ctx := context.Background()
 
@@ -25,33 +45,25 @@ func send(pi peer.AddrInfo, f *os.File) (accepted bool, err error) {
 	}
 	defer n.Close()
 
-	msg, err := n.NewMessageData()
+	c, err := calcContentID(filepath)
 	if err != nil {
 		return
 	}
 
-	stat, err := f.Stat()
+	f, err := os.Open(filepath)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	fstat, err := f.Stat()
 	if err != nil {
 		return
 	}
 
-	s := sha256.New()
-	_, err = io.Copy(s, f)
+	msg, err := n.NewSendRequest(f.Name(), fstat.Size(), c)
 	if err != nil {
 		return
-	}
-
-	mm, err := mh.Encode(s.Sum(nil), mh.SHA2_256)
-	if err != nil {
-		return
-	}
-
-	msg.Payload = &p2p.MessageData_SendRequest{
-		SendRequest: &p2p.SendRequest{
-			FileName: f.Name(),
-			FileSize: stat.Size(),
-			Cid:      cid.NewCidV1(cid.Raw, mm).Bytes(),
-		},
 	}
 
 	fmt.Print("Asking for confirmation... ")
@@ -83,7 +95,6 @@ func send(pi peer.AddrInfo, f *os.File) (accepted bool, err error) {
 		return
 	}
 
-	time.Sleep(time.Second)
 	fmt.Println("Successfully sent file!")
 	return
 }

@@ -48,10 +48,21 @@ func Action(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+
+	err = f.Close()
+	if err != nil {
+		return err
+	}
 
 	fmt.Println("Searching peers that are waiting to receive files...")
 	peers, err := queryPeers()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("\nFound the following peer(s):\n")
+
+	err = printPeers(peers)
 	if err != nil {
 		return err
 	}
@@ -60,13 +71,6 @@ func Action(c *cli.Context) error {
 		if len(peers) == 0 {
 			fmt.Print("No peer found in your local network [r,q,?]: ")
 		} else {
-			fmt.Printf("\nFound the following peer(s):\n")
-
-			err = printPeers(peers)
-			if err != nil {
-				return err
-			}
-
 			fmt.Print("Select the peer you want to send the file to [#,r,q,?]: ")
 		}
 
@@ -90,6 +94,17 @@ func Action(c *cli.Context) error {
 			if err != nil {
 				return err
 			}
+
+			if len(peers) > 0 {
+
+				fmt.Printf("\nFound the following peer(s):\n")
+
+				err = printPeers(peers)
+				if err != nil {
+					return err
+				}
+			}
+
 			continue
 		}
 
@@ -125,9 +140,10 @@ func Action(c *cli.Context) error {
 		}
 
 		// The user entered a valid peer index
-		accepted, err := send(addrInfo, f)
+		accepted, err := send(addrInfo, filepath)
 		if err != nil {
-			return err
+			fmt.Println(err)
+			continue
 		} else if !accepted {
 			continue
 		}

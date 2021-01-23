@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/dennis-tra/pcp/pkg/commons"
+	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p/p2p/discovery"
 	"io"
 	"os"
@@ -92,12 +93,16 @@ func InitReceiving(ctx context.Context, port int64) (*Node, error) {
 }
 
 func (n *Node) WaitForConnection() {
+
+	if n.stream != nil {
+		n.stream = nil
+	}
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 
 	n.SetStreamHandler(commons.ServiceTag, func(stream network.Stream) {
-		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-		n.stream = rw
+		n.stream = bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 		wg.Done()
 	})
 
@@ -173,21 +178,13 @@ func (n *Node) Send(msg *p2p.MessageData) error {
 	return nil
 }
 
-//func (n *Node) SendBytes(data io.Reader) error{
-//	_, err := io.Copy(n.stream, data)
-//	return err
-//}
-//
-//func (n *Node) ReceiveBytes() error {
-//	data, err := ioutil.ReadAll(n.stream)
-//}
-
 // Receive blocks until the node has received a message from its peer.
 // The first bytes it reads represent the expected message length encoded
 // as an uvarint.
 func (n *Node) Receive() (*p2p.MessageData, error) {
 	size, err := varint.ReadUvarint(n.stream)
 	if err != nil {
+		fmt.Println("receive:", err)
 		return nil, err
 	}
 
@@ -221,15 +218,17 @@ func (n *Node) SendBytes(data io.Reader) error {
 	return n.stream.Flush()
 }
 
-func (n *Node) ReceiveBytes(filename string) error {
+func (n *Node) ReceiveBytes(filename string, expected int64) error {
 	f, err := os.Create(filename)
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 
-	_, err = io.Copy(f, n.stream)
+	r := io.LimitReader(n.stream, expected)
+	_, err = io.Copy(f, r)
 
-	return err
+	return f.Sync()
 }
 
 func (n *Node) NewMessageData() (*p2p.MessageData, error) {
@@ -245,6 +244,39 @@ func (n *Node) NewMessageData() (*p2p.MessageData, error) {
 		NodePubKey: nodePubKey,
 		Timestamp:  time.Now().Unix(),
 	}, nil
+}
+
+func (n *Node) NewSendResponse(accept bool) (*p2p.MessageData, error) {
+
+	resp, err := n.NewMessageData()
+	if err != nil {
+		return nil, err
+	}
+
+	resp.Payload = &p2p.MessageData_SendResponse{
+		SendResponse: &p2p.SendResponse{
+			Accepted: accept,
+		},
+	}
+
+	return resp, nil
+}
+func (n *Node) NewSendRequest(fileName string, fileSize int64, c cid.Cid) (*p2p.MessageData, error) {
+
+	resp, err := n.NewMessageData()
+	if err != nil {
+		return nil, err
+	}
+
+	resp.Payload = &p2p.MessageData_SendRequest{
+		SendRequest: &p2p.SendRequest{
+			FileName: fileName,
+			FileSize: fileSize,
+			Cid:      c.Bytes(),
+		},
+	}
+
+	return resp, nil
 }
 
 func (n *Node) authenticateMessage(data *p2p.MessageData) (bool, error) {

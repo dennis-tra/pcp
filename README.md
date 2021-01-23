@@ -1,7 +1,7 @@
-# pcp
+# `pcp` - Peer Copy
 [![standard-readme compliant](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg?style=flat-square)](https://github.com/RichardLitt/standard-readme) [![Go Report Card](https://goreportcard.com/badge/github.com/dennis-tra/pcp)](https://goreportcard.com/report/github.com/dennis-tra/pcp)
 
-`p`eer `c`o`p`y - Command line peer-to-peer data transfer tool. 
+Command line peer-to-peer data transfer tool based on [libp2p](https://github.com/libp2p/go-libp2p). 
 
 ## Table of Contents
 
@@ -61,7 +61,14 @@ The proto defintions were generated with `libprotoc 3.14.0`.
 
 ## Related Efforts
 
-- [Name](link) - description
+- [`croc`](https://github.com/schollz/croc) - Easily and securely send things from one computer to another
+- [`dcp`](https://github.com/tom-james-watson/dat-cp) - Remote file copy, powered by the Dat protocol.
+- [`iwant`](https://github.com/nirvik/iWant) - CLI based decentralized peer to peer file sharing
+- [`p2pcopy`](https://github.com/psantosl/p2pcopy) - Small command line application to do p2p file copy behind firewalls without a central server.
+- [`zget`](https://github.com/nils-werner/zget) - Filename based peer to peer file transfer
+- [`sharedrop`](https://github.com/cowbell/sharedrop) - Easy P2P file transfer powered by WebRTC - inspired by Apple AirDrop
+- [`filepizza`](https://github.com/kern/filepizza) - Peer-to-peer file transfers in your browser
+- [`toss`](https://github.com/zerotier/toss) - Dead simple LAN file transfers from the command line
 
 ## Maintainers
 

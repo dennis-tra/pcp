@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"github.com/ipfs/go-cid"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,39 +57,20 @@ func Action(c *cli.Context) error {
 
 	fmt.Printf("Your identity:\n\n\t%s\n\n", n.ID())
 
-	var sendRequest *p2p.SendRequest
-	var msgData *p2p.MessageData
-	for {
-		fmt.Println("Waiting for peers to connect... (cancel with strg+c)")
-
-		n.WaitForConnection()
-
-		msgData, err = n.Receive()
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-
-		msgDatSendReq, ok := msgData.Payload.(*p2p.MessageData_SendRequest)
-		if !ok {
-			fmt.Println("Warning: Received unsupported message from peer:", msgData.NodeId)
-			continue
-		}
-
-		sendRequest = msgDatSendReq.SendRequest
-		break
+	msgData, sendRequest := connectionLoop(n)
+	err = printSendRequest(msgData, sendRequest)
+	if err != nil {
+		return err
 	}
 
 	for {
-		fmt.Printf("Peer %s wants to send you the file %s (%d Bytes). Accept? [y,n,q,?] ", msgData.NodeId, sendRequest.FileName, sendRequest.FileSize)
-		scanner := bufio.NewScanner(os.Stdin)
-		scanResult := scanner.Scan()
 
-		if !scanResult {
+		scanner := bufio.NewScanner(os.Stdin)
+		if !scanner.Scan() {
 			return scanner.Err()
 		}
 
-		input := strings.TrimSpace(scanner.Text())
+		input := strings.ToLower(strings.TrimSpace(scanner.Text()))
 
 		// Empty input, user just pressed enter => do nothing and prompt again
 		if input == "" {
@@ -109,21 +91,16 @@ func Action(c *cli.Context) error {
 		// Print the help text and prompt again
 		if input == "y" {
 
+			// TODO: better handling.
 			filename := filepath.Base(sendRequest.FileName)
 			_, err := os.Stat(sendRequest.FileName)
 			if os.IsExist(err) {
 				filename += "_2"
 			}
 
-			resp, err := n.NewMessageData()
+			resp, err := n.NewSendResponse(true)
 			if err != nil {
 				return err
-			}
-
-			resp.Payload = &p2p.MessageData_SendResponse{
-				SendResponse: &p2p.SendResponse{
-					Accepted: true,
-				},
 			}
 
 			err = n.Send(resp)
@@ -132,7 +109,7 @@ func Action(c *cli.Context) error {
 			}
 
 			fmt.Println("Saving file to: ", filename)
-			err = n.ReceiveBytes(filename)
+			err = n.ReceiveBytes(filename, sendRequest.FileSize)
 			if err != nil {
 				return err
 			}
@@ -143,30 +120,71 @@ func Action(c *cli.Context) error {
 		}
 
 		if input == "n" {
-			resp, err := n.NewMessageData()
+			resp, err := n.NewSendResponse(false)
 			if err != nil {
 				return err
-			}
-
-			resp.Payload = &p2p.MessageData_SendResponse{
-				SendResponse: &p2p.SendResponse{
-					Accepted: false,
-				},
 			}
 
 			err = n.Send(resp)
 			if err != nil {
 				return err
 			}
-			break
+
+			msgData, sendRequest = connectionLoop(n)
+			err = printSendRequest(msgData, sendRequest)
+			if err != nil {
+				return err
+			}
+
+			continue
 		}
 
 		fmt.Println("Invalid input")
 	}
+}
+
+func printSendRequest(msgData *p2p.MessageData, sendRequest *p2p.SendRequest) error {
+
+	c, err := cid.Cast(sendRequest.Cid)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Sending request:")
+	fmt.Println("  Peer:\t", msgData.NodeId)
+	fmt.Println("  Name:\t", sendRequest.FileName)
+	fmt.Println("  Size:\t", sendRequest.FileSize)
+	fmt.Println("  CID:\t", c.String())
+	fmt.Printf("Do you want to receive this file? [y,n,q,?] ")
 
 	return nil
 }
 
+func connectionLoop(n *node.Node) (*p2p.MessageData, *p2p.SendRequest) {
+	for {
+		fmt.Println("Waiting for peers to connect... (cancel with strg+c)")
+
+		n.WaitForConnection()
+
+		msgData, err := n.Receive()
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+
+		msgDatSendReq, ok := msgData.Payload.(*p2p.MessageData_SendRequest)
+		if !ok {
+			fmt.Printf("received unexpected message (%T) from peer: %s\n", msgData.Payload, msgData.NodeId)
+			continue
+		}
+
+		return msgData, msgDatSendReq.SendRequest
+	}
+}
+
 func help() {
-	fmt.Printf("Help text")
+	fmt.Println("y: accept and thus receive the file")
+	fmt.Println("n: reject the request to receive the file")
+	fmt.Println("q: quit pcp")
+	fmt.Println("?: this help message")
 }
