@@ -100,6 +100,12 @@ func (t *TransferProtocol) onTransfer(s network.Stream) {
 		fmt.Println(err)
 		return
 	}
+
+	err = s.Close()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 }
 
 func (t *TransferProtocol) onTransferAck(s network.Stream) {
@@ -122,6 +128,12 @@ func (t *TransferProtocol) onTransferAck(s network.Stream) {
 	t.ackChan <- resp.ReceivedBytes
 	close(t.ackChan)
 	t.ackChan = nil
+
+	err = s.Close()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 }
 
 func (t *TransferProtocol) Transfer(ctx context.Context, peerId peer.ID, payload io.Reader) (chan int64, error) {
