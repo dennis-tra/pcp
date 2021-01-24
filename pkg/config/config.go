@@ -11,6 +11,7 @@ import (
 
 const (
 	Prefix = "pcp"
+	ContextKey = "config"
 )
 
 var (

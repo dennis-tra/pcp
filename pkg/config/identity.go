@@ -18,7 +18,7 @@ type Identity struct {
 // SetPrivateKey takes a crypto.PrivKey and encodes it, so that
 // it can be persisted to disk.
 func (i *Identity) SetPrivateKey(key crypto.PrivKey) error {
-	data, err := key.Raw()
+	data, err := crypto.MarshalPrivateKey(key)
 	if err != nil {
 		return err
 	}

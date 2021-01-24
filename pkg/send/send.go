@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/dennis-tra/pcp/pkg/node"
-	p2p "github.com/dennis-tra/pcp/pkg/pb"
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/peer"
 	mh "github.com/multiformats/go-multihash"
@@ -35,15 +35,12 @@ func calcContentID(filepath string) (cid.Cid, error) {
 	return cid.NewCidV1(cid.Raw, mhash), nil
 }
 
-func send(pi peer.AddrInfo, filepath string) (accepted bool, err error) {
+func (n *Node) send(ctx context.Context, pi peer.AddrInfo, filepath string) (accepted bool, err error) {
 
-	ctx := context.Background()
-
-	n, err := node.InitSending(ctx, pi)
+	err = n.Connect(ctx, pi)
 	if err != nil {
 		return
 	}
-	defer n.Close()
 
 	c, err := calcContentID(filepath)
 	if err != nil {
@@ -67,33 +64,42 @@ func send(pi peer.AddrInfo, filepath string) (accepted bool, err error) {
 	}
 
 	fmt.Print("Asking for confirmation... ")
-	err = n.Send(msg)
+	respChan, err := n.SendRequest(ctx, pi.ID, msg)
 	if err != nil {
 		return
 	}
 
-	resp, err := n.Receive()
-	if err != nil {
+	var sendResponse *node.SendResponseData
+	select {
+	case sendResponse = <-respChan:
+	case <-time.NewTicker(60 * time.Second).C:
+		err = fmt.Errorf("didn't receive response in time")
 		return
 	}
 
-	sendResponse, ok := resp.Payload.(*p2p.MessageData_SendResponse)
-	if !ok {
-		err = fmt.Errorf("could not decode peer response")
-		return
-	}
-
-	accepted = sendResponse.SendResponse.Accepted
+	accepted = sendResponse.Response.Accept
 	if !accepted {
 		fmt.Println("Rejected!")
 		return
 	}
 
 	fmt.Println("Accepted!")
-	err = n.SendBytes(f)
+
+	fmt.Print("Transferring file...")
+	ackChan, err := n.Transfer(ctx, pi.ID, f)
 	if err != nil {
+		fmt.Println("Error!")
 		return
 	}
+	fmt.Println("Done!")
+
+	fmt.Print("Awaiting acknowledgment...")
+	acknowledged := <-ackChan
+	if fstat.Size() != acknowledged {
+		err = fmt.Errorf("copied %d bytes, but acked were %d bytes", fstat.Size(), acknowledged)
+		return
+	}
+	fmt.Println("Received!")
 
 	fmt.Println("Successfully sent file!")
 	return

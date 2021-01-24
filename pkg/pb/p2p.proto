@@ -2,24 +2,31 @@ syntax = "proto3";
 option go_package = "github.com/dennis-tra/pcp/pkg/proto";
 
 // A message object that is shared among all requests.
-message MessageData {
+message Header {
+
+  // A unique request ID to allow idempotency.
+  string request_id = 1;
+
+  // In case of a response this is the request ID of the initiating message.
+  string origin_id = 2;
 
   // Unix time in milliseconds.
-  int64 timestamp = 1;
+  int64 timestamp = 3;
 
   // The ID of the node that created the message (not the peer that may have sent it)
-  string node_id = 2;
+  string node_id = 4;
 
   // Authoring node Secp256k1 public key (32bytes) - protobufs serialized
-  bytes node_pub_key = 3;
+  bytes node_pub_key = 5;
 
   // The signature of the message data.
-  bytes signature = 4;
+  bytes signature = 6;
 
   // The actual message content.
   oneof payload {
     SendRequest send_request = 9;
     SendResponse send_response = 10;
+    TransferAcknowledge transfer_acknowledge = 11;
   }
 }
 
@@ -44,5 +51,10 @@ message SendRequest {
 // It just indicates if the receiving peer is willing to
 // accept the file.
 message SendResponse {
-  bool accepted = 1;
+  bool accept = 1;
+}
+
+
+message TransferAcknowledge {
+  int64 received_bytes = 1;
 }

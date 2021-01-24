@@ -2,14 +2,15 @@ package send
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/dennis-tra/pcp/pkg/config"
 	"github.com/urfave/cli/v2"
-	"github.com/whyrusleeping/mdns"
 )
 
 // Command .
@@ -38,34 +39,34 @@ the desired peer or refresh the list.`,
 // mainly responsible for the TUI state handling and input parsing.
 func Action(c *cli.Context) error {
 
-	filepath := c.Args().First()
-	if filepath == "" {
-		return fmt.Errorf("please specify the file you want to send")
+	conf, err := config.LoadConfig()
+	if err != nil {
+		return err
 	}
+	ctx := context.WithValue(c.Context, config.ContextKey, conf)
 
 	// Try to open the file to check if we have access
-	f, err := os.Open(filepath)
+	filepath := c.Args().First()
+	err = verifyFileAccess(filepath)
 	if err != nil {
 		return err
 	}
 
-	err = f.Close()
+	n, err := InitNode(ctx)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("Searching peers that are waiting to receive files...")
-	peers, err := queryPeers()
+	err = n.StartMdnsService(ctx)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("\nFound the following peer(s):\n")
+	time.Sleep(n.MdnsInterval)
 
-	err = printPeers(peers)
-	if err != nil {
-		return err
-	}
+	peers := n.PeersList()
+	n.PrintPeers(peers)
 
 	for {
 		if len(peers) == 0 {
@@ -90,21 +91,11 @@ func Action(c *cli.Context) error {
 
 		// Refresh the set of peers and prompt again
 		if input == "r" {
-			peers, err = queryPeers()
-			if err != nil {
-				return err
-			}
-
+			peers = n.PeersList()
 			if len(peers) > 0 {
-
 				fmt.Printf("\nFound the following peer(s):\n")
-
-				err = printPeers(peers)
-				if err != nil {
-					return err
-				}
+				n.PrintPeers(peers)
 			}
-
 			continue
 		}
 
@@ -134,13 +125,8 @@ func Action(c *cli.Context) error {
 			continue
 		}
 
-		addrInfo, err := parseServiceEntry(peers[num])
-		if err != nil {
-			return err
-		}
-
 		// The user entered a valid peer index
-		accepted, err := send(addrInfo, filepath)
+		accepted, err := n.send(ctx, peers[num], filepath)
 		if err != nil {
 			fmt.Println(err)
 			continue
@@ -160,17 +146,16 @@ func help() {
 	fmt.Println("?: this help message")
 }
 
-// printPeers prints the service entries found through mDNS.
-// It prefixes each entry with the index in the array.
-func printPeers(peers []*mdns.ServiceEntry) error {
-	for i, p := range peers {
-		mpeer, err := peer.Decode(p.Info)
-		if err != nil {
-			return err
-		}
+func verifyFileAccess(filepath string) error {
 
-		fmt.Printf("[%d] %s\n", i, mpeer.Pretty())
+	if filepath == "" {
+		return fmt.Errorf("please specify the file you want to send")
 	}
-	fmt.Println()
-	return nil
+
+	f, err := os.Open(filepath)
+	if err != nil {
+		return err
+	}
+
+	return f.Close()
 }
