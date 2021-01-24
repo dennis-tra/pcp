@@ -72,7 +72,7 @@ func (n *Node) send(ctx context.Context, pi peer.AddrInfo, filepath string) (acc
 	var sendResponse *node.SendResponseData
 	select {
 	case sendResponse = <-respChan:
-	case <-time.NewTicker(60 * time.Second).C:
+	case <-time.NewTicker(30 * time.Second).C:
 		err = fmt.Errorf("didn't receive response in time")
 		return
 	}

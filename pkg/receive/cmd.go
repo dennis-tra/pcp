@@ -83,6 +83,8 @@ func Action(c *cli.Context) error {
 	}
 
 	for {
+
+		fmt.Printf("Do you want to receive this file? [y,n,q,?] ")
 		scanner := bufio.NewScanner(os.Stdin)
 		if !scanner.Scan() {
 			return scanner.Err()
@@ -122,7 +124,9 @@ func Action(c *cli.Context) error {
 				return err
 			}
 
+			fmt.Println("Ready to receive files... (cancel with strg+c)")
 			req = <-n.ReqChan
+
 			err = printSendRequest(req)
 			if err != nil {
 				return err
@@ -187,7 +191,6 @@ func printSendRequest(data *node.SendRequestData) error {
 	fmt.Println("  Name:\t", data.Request.FileName)
 	fmt.Println("  Size:\t", data.Request.FileSize)
 	fmt.Println("  CID:\t", c.String())
-	fmt.Printf("Do you want to receive this file? [y,n,q,?] ")
 
 	return nil
 }
