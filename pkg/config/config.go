@@ -2,15 +2,14 @@ package config
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
-	"github.com/adrg/xdg"
+	"github.com/dennis-tra/pcp/internal/app"
 )
 
 const (
-	Prefix = "pcp"
+	Prefix     = "pcp"
 	ContextKey = "config"
 )
 
@@ -21,13 +20,18 @@ var (
 	identityFile = filepath.Join(Prefix, "identity.json")
 )
 
+var (
+	appIoutil app.Ioutiler = app.Ioutil{}
+	appXdg    app.Xdger    = app.Xdg{}
+)
+
 // Config contains general user settings and peer identity
 // information. The configuration is split, so the identity
 // information can easier be saved with more restrict
 // access permissions as it contains the private Key.
 type Config struct {
-	Settings Settings
-	Identity Identity
+	Settings *Settings
+	Identity *Identity
 }
 
 // Save saves the peer settings and identity information
@@ -48,34 +52,13 @@ func (c *Config) Save() error {
 }
 
 func LoadConfig() (*Config, error) {
-	path, err := xdg.ConfigFile(settingsFile)
+	settings, err := LoadSettings()
 	if err != nil {
 		return nil, err
 	}
 
-	settings := Settings{Path: path}
-	data, err := ioutil.ReadFile(path)
-	if err == nil {
-		err = json.Unmarshal(data, &settings)
-		if err != nil {
-			return nil, err
-		}
-		settings.Exists = true
-	} else if !os.IsNotExist(err) {
-		return nil, err
-	}
-
-	path, err = xdg.ConfigFile(identityFile)
-
-	identity := Identity{Path: path}
-	data, err = ioutil.ReadFile(path)
-	if err == nil {
-		err = json.Unmarshal(data, &identity)
-		if err != nil {
-			return nil, err
-		}
-		identity.Exists = true
-	} else if !os.IsNotExist(err) {
+	identity, err := LoadIdentity()
+	if err != nil {
 		return nil, err
 	}
 
@@ -89,7 +72,7 @@ func LoadConfig() (*Config, error) {
 
 func save(relPath string, obj interface{}, perm os.FileMode) error {
 
-	path, err := xdg.ConfigFile(relPath)
+	path, err := appXdg.ConfigFile(relPath)
 	if err != nil {
 		return err
 	}
@@ -99,7 +82,7 @@ func save(relPath string, obj interface{}, perm os.FileMode) error {
 		return err
 	}
 
-	err = ioutil.WriteFile(path, data, perm)
+	err = appIoutil.WriteFile(path, data, perm)
 	if err != nil {
 		return err
 	}

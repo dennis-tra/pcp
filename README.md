@@ -1,4 +1,5 @@
 # `pcp` - Peer Copy
+
 [![standard-readme compliant](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg)](https://github.com/RichardLitt/standard-readme)
 [![Go Report Card](https://goreportcard.com/badge/github.com/dennis-tra/pcp)](https://goreportcard.com/report/github.com/dennis-tra/pcp)
 [![Maintainability](https://api.codeclimate.com/v1/badges/de64b09a3731b8a8842b/maintainability)](https://codeclimate.com/github/dennis-tra/pcp/maintainability)
@@ -61,6 +62,19 @@ protoc -I=pkg/pb --go_out=pkg/pb --go_opt=paths=source_relative p2p.proto
 ```
 
 The proto defintions were generated with `libprotoc 3.14.0`.
+
+## Feature Roadmap
+
+- [ ] Two computers on the same network can exchange files
+- [ ] Two computers on the same network can exchange directories
+- [ ] allows any two computers to transfer data (using a relay)
+- [ ] provides end-to-end encryption (using PAKE)
+- [ ] enables easy cross-platform transfers (Windows, Linux, Mac)
+- [ ] allows multiple file transfers
+- [ ] allows resuming transfers that are interrupted
+- [ ] local server or port-forwarding not needed
+- [ ] ipv6-first with ipv4 fallback
+- [ ] can use proxy, like tor
 
 ## Related Efforts
 

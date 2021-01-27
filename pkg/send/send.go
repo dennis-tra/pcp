@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"time"
 
-	"github.com/dennis-tra/pcp/pkg/node"
+	p2p "github.com/dennis-tra/pcp/pkg/pb"
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/peer"
 	mh "github.com/multiformats/go-multihash"
@@ -58,26 +59,21 @@ func (n *Node) send(ctx context.Context, pi peer.AddrInfo, filepath string) (acc
 		return
 	}
 
-	msg, err := n.NewSendRequest(f.Name(), fstat.Size(), c)
+	msg, err := p2p.NewPushRequest(path.Base(f.Name()), fstat.Size(), c)
 	if err != nil {
 		return
 	}
 
 	fmt.Print("Asking for confirmation... ")
-	respChan, err := n.SendRequest(ctx, pi.ID, msg)
+
+	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 10*time.Second)
+	sendResponse, err := n.SendPushRequest(timeoutCtx, pi.ID, msg)
+	timeoutCancel()
 	if err != nil {
 		return
 	}
 
-	var sendResponse *node.SendResponseData
-	select {
-	case sendResponse = <-respChan:
-	case <-time.NewTicker(30 * time.Second).C:
-		err = fmt.Errorf("didn't receive response in time")
-		return
-	}
-
-	accepted = sendResponse.Response.Accept
+	accepted = sendResponse.Accept
 	if !accepted {
 		fmt.Println("Rejected!")
 		return

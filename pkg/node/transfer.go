@@ -6,7 +6,6 @@ import (
 	"io"
 
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
-	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 )
@@ -17,11 +16,11 @@ const transferAck = "/pcp/transferAck/0.0.1"
 
 // TransferProtocol type
 type TransferProtocol struct {
-	node        *Node
-	size        int64
-	writer      io.Writer
-	peerId      peer.ID
-	contentId   *cid.Cid
+	node   *Node
+	size   int64
+	writer io.Writer
+	peerId peer.ID
+	//contentId   *cid.Cid
 	ackChan     chan int64
 	receiveChan chan int64
 }
@@ -36,14 +35,14 @@ func NewTransferProtocol(node *Node) *TransferProtocol {
 }
 
 func (t *TransferProtocol) ExpectsData() bool {
-	return t.size != 0 && t.contentId != nil && t.writer != nil && t.peerId != "" && t.receiveChan != nil
+	return t.size != 0 && t.writer != nil && t.peerId != "" && t.receiveChan != nil // && t.contentId != nil
 }
 
-func (t *TransferProtocol) SetExpectedData(reqData *SendRequestData, writer io.Writer) chan int64 {
-	t.size = reqData.Request.FileSize
+func (t *TransferProtocol) SetExpectedData(peerId peer.ID, reqData *p2p.PushRequest, writer io.Writer) chan int64 {
+	t.size = reqData.FileSize
 	t.writer = writer
-	t.peerId = reqData.PeerId
-	t.contentId = reqData.ContentId
+	t.peerId = peerId
+	//t.contentId = reqData.Cid
 	t.receiveChan = make(chan int64)
 	return t.receiveChan
 }
@@ -52,7 +51,7 @@ func (t *TransferProtocol) ResetExpectedData() {
 	t.size = 0
 	t.writer = nil
 	t.peerId = ""
-	t.contentId = nil
+	//t.contentId = nil
 	t.receiveChan = nil
 }
 
@@ -69,7 +68,7 @@ func (t *TransferProtocol) onTransfer(s network.Stream) {
 
 	// TODO: Limit by file size
 	// TODO: Progress bar
-	fmt.Println("Copying data...")
+	fmt.Print("Copying data...")
 	r := io.LimitReader(s, t.size)
 	received, err := io.Copy(t.writer, r)
 	defer func() {
@@ -78,24 +77,14 @@ func (t *TransferProtocol) onTransfer(s network.Stream) {
 
 	if err != nil {
 		fmt.Println(err)
-		// TODO: Send ack
+		// TODO: Send ack with received bytes to potentially resume transfer later.
 		return
 	}
 
-	header, err := t.node.NewHeader()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	header.Payload = &p2p.Header_TransferAcknowledge{
-		TransferAcknowledge: &p2p.TransferAcknowledge{
-			ReceivedBytes: received,
-		},
-	}
-
-	fmt.Println("Sending acknowledge...")
-	err = t.node.SendProto(context.Background(), s.Conn().RemotePeer(), transferAck, header)
+	fmt.Println("Done!")
+	fmt.Print("Sending acknowledge to peer...")
+	ack := &p2p.TransferAcknowledge{ReceivedBytes: received}
+	_, err = t.node.SendProto(context.Background(), s.Conn().RemotePeer(), ack)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -106,6 +95,7 @@ func (t *TransferProtocol) onTransfer(s network.Stream) {
 		fmt.Println(err)
 		return
 	}
+	fmt.Println("Done!")
 }
 
 func (t *TransferProtocol) onTransferAck(s network.Stream) {
@@ -113,19 +103,14 @@ func (t *TransferProtocol) onTransferAck(s network.Stream) {
 		fmt.Println("Received ack without waiting for an ack.")
 	}
 
-	hdr, err := t.node.readMessage(s)
+	data := &p2p.TransferAcknowledge{}
+	err := t.node.readMessage(s, data)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	resp := hdr.GetTransferAcknowledge()
-	if resp == nil {
-		fmt.Println("unexpected message")
-		return
-	}
-
-	t.ackChan <- resp.ReceivedBytes
+	t.ackChan <- data.ReceivedBytes
 	close(t.ackChan)
 	t.ackChan = nil
 
@@ -151,19 +136,4 @@ func (t *TransferProtocol) Transfer(ctx context.Context, peerId peer.ID, payload
 	}
 
 	return t.ackChan, nil
-}
-
-func (t *TransferProtocol) Acknowledge(ctx context.Context, peerId peer.ID, received int64) error {
-	hdr, err := t.node.NewHeader()
-	if err != nil {
-		return err
-	}
-
-	hdr.Payload = &p2p.Header_TransferAcknowledge{
-		TransferAcknowledge: &p2p.TransferAcknowledge{
-			ReceivedBytes: received,
-		},
-	}
-
-	return t.node.SendProto(ctx, peerId, transferAck, hdr)
 }

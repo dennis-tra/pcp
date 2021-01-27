@@ -8,7 +8,7 @@ message Header {
   string request_id = 1;
 
   // In case of a response this is the request ID of the initiating message.
-  string origin_id = 2;
+  string request_parent_id = 2;
 
   // Unix time in milliseconds.
   int64 timestamp = 3;
@@ -21,40 +21,41 @@ message Header {
 
   // The signature of the message data.
   bytes signature = 6;
-
-  // The actual message content.
-  oneof payload {
-    SendRequest send_request = 9;
-    SendResponse send_response = 10;
-    TransferAcknowledge transfer_acknowledge = 11;
-  }
 }
 
-// SendRequest is sent to the receiving peer for acceptance.
+// PushRequest is sent to the receiving peer for acceptance.
 // It contains basic information about the data that is
 // about to be transmitted.
-message SendRequest {
+message PushRequest {
+
+  Header header = 1;
 
   // The name of the file that is about to be transferred.
   // This will also be the name that the receiving peer
   // uses upon save.
-  string file_name = 1;
+  string file_name = 2;
 
   // The size of the file to be transmitted.
-  int64 file_size = 2;
+  int64 file_size = 3;
 
   // The content identifier of the file to send.
-  bytes cid = 3;
+  bytes cid = 4;
 }
 
-// SendResponse is sent as a reply to the SendRequest message.
+// PushResponse is sent as a reply to the PushRequest message.
 // It just indicates if the receiving peer is willing to
 // accept the file.
-message SendResponse {
-  bool accept = 1;
+message PushResponse {
+
+  Header header = 1;
+
+  bool accept = 2;
 }
 
 
 message TransferAcknowledge {
-  int64 received_bytes = 1;
+
+  Header header = 1;
+
+  int64 received_bytes = 2;
 }

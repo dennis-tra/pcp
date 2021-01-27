@@ -1,6 +1,9 @@
 package config
 
 import (
+	"encoding/json"
+	"os"
+
 	"github.com/libp2p/go-libp2p-core/crypto"
 )
 
@@ -13,6 +16,27 @@ type Identity struct {
 
 	// Whether the identity file exists.
 	Exists bool `json:"-"`
+}
+
+func LoadIdentity() (*Identity, error) {
+	path, err := appXdg.ConfigFile(identityFile)
+	if err != nil {
+		return nil, err
+	}
+
+	identity := &Identity{Path: path}
+	data, err := appIoutil.ReadFile(path)
+	if err == nil {
+		err = json.Unmarshal(data, &identity)
+		if err != nil {
+			return nil, err
+		}
+		identity.Exists = true
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
+
+	return identity, nil
 }
 
 // SetPrivateKey takes a crypto.PrivKey and encodes it, so that

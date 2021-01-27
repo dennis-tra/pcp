@@ -5,6 +5,7 @@ go 1.15
 require (
 	github.com/adrg/xdg v0.3.0
 	github.com/gogo/protobuf v1.3.1
+	github.com/golang/mock v1.4.4
 	github.com/golang/protobuf v1.4.0
 	github.com/google/gopacket v1.1.18 // indirect
 	github.com/google/uuid v1.1.2
@@ -16,6 +17,7 @@ require (
 	github.com/multiformats/go-multiaddr-net v0.2.0
 	github.com/multiformats/go-multihash v0.0.14
 	github.com/multiformats/go-varint v0.0.6
+	github.com/stretchr/testify v1.6.1
 	github.com/urfave/cli/v2 v2.3.0
 	github.com/whyrusleeping/mdns v0.0.0-20190826153040-b9b60ed33aa9
 	go.uber.org/zap v1.16.0 // indirect
