@@ -5,18 +5,45 @@
 [![Maintainability](https://api.codeclimate.com/v1/badges/de64b09a3731b8a8842b/maintainability)](https://codeclimate.com/github/dennis-tra/pcp/maintainability)
 [![Test Coverage](https://api.codeclimate.com/v1/badges/de64b09a3731b8a8842b/test_coverage)](https://codeclimate.com/github/dennis-tra/pcp/test_coverage)
 
-Command line peer-to-peer data transfer tool based on [libp2p](https://github.com/libp2p/go-libp2p). 
+Command line peer-to-peer data transfer tool based on [libp2p](https://github.com/libp2p/go-libp2p).
+
+![Demo animation](./docs/demo-2021-01-27.gif)
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [Project Status & Motivation](#project-status--motivation)
 - [Install](#install)
 - [Usage](#usage)
+- [Development](#development)
+  - [Generate Protobuf definitions](#generate-protobuf-definitions)
+- [Feature Roadmap](#feature-roadmap)
+- [Related Efforts](#related-efforts)
 - [Maintainers](#maintainers)
 - [Contributing](#contributing)
 - [License](#license)
 
+## Project Status & Motivation
+
+The tool is in a very early stage and I'm aware of security, performance and usability issues. For now it works in the limited scope of transfering files in your local network. Don't use it for anything serious. There is already a very good Go implementation named [`croc`](https://github.com/schollz/croc). 
+
+My motivation to build a new tool is to levarage the peer-to-peer networking stack that is provided by [libp2p](https://github.com/libp2p/go-libp2p). In the future `pcp` should also enable two peers in different networks to exchange files via a relay. I'm not sure how croc chooses relay servers but I guess there is just a limited set which puts the power to a limited number of service providers and is therefore a centralization concern (if my assumption is correct). By using libp2ps [experimental autorelay](https://docs.libp2p.io/concepts/circuit-relay/#autorelay) feature I think `pcp` takes another step into a more decentralized world.
+
 ## Install
 
+For now, you need to compile it yourself:
+
+```shell
+git clone https://github.com/dennis-tra/pcp.git
+```
+
+Navigate into the `pcp` folder and run:
+
+```shell
+go install cmd/pcp/pcp.go
+```
+
+Make sure the `$GOPATH/bin` is in your `PATH` variable to access the installed `pcp` executable.
 
 ## Usage
 
@@ -65,7 +92,9 @@ The proto defintions were generated with `libprotoc 3.14.0`.
 
 ## Feature Roadmap
 
-- [ ] Two computers on the same network can exchange files
+Shamelessly copied from `croc`:
+
+- [x] Two computers on the same network can exchange files
 - [ ] Two computers on the same network can exchange directories
 - [ ] allows any two computers to transfer data (using a relay)
 - [ ] provides end-to-end encryption (using PAKE)
@@ -81,9 +110,11 @@ The proto defintions were generated with `libprotoc 3.14.0`.
 - [`croc`](https://github.com/schollz/croc) - Easily and securely send things from one computer to another
 - [`dcp`](https://github.com/tom-james-watson/dat-cp) - Remote file copy, powered by the Dat protocol.
 - [`iwant`](https://github.com/nirvik/iWant) - CLI based decentralized peer to peer file sharing
-- [`p2pcopy`](https://github.com/psantosl/p2pcopy) - Small command line application to do p2p file copy behind firewalls without a central server.
+- [`p2pcopy`](https://github.com/psantosl/p2pcopy) - Small command line application to do p2p file copy behind firewalls
+  without a central server.
 - [`zget`](https://github.com/nils-werner/zget) - Filename based peer to peer file transfer
-- [`sharedrop`](https://github.com/cowbell/sharedrop) - Easy P2P file transfer powered by WebRTC - inspired by Apple AirDrop
+- [`sharedrop`](https://github.com/cowbell/sharedrop) - Easy P2P file transfer powered by WebRTC - inspired by Apple
+  AirDrop
 - [`filepizza`](https://github.com/kern/filepizza) - Peer-to-peer file transfers in your browser
 - [`toss`](https://github.com/zerotier/toss) - Dead simple LAN file transfers from the command line
 
