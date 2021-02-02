@@ -2,9 +2,10 @@ package node
 
 import (
 	"context"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestInit_returnsNode(t *testing.T) {
@@ -65,8 +66,8 @@ func TestInit_returnsNode(t *testing.T) {
 //
 //	hdr := dummyMessage(t, node1)
 //
-//	node2.SetStreamHandler(pushRequest, func(stream network.Stream) {
-//		fmt.Println("EEEEEE")
+//	node2.SetStreamHandler(ProtocolPushRequest, func(stream network.Stream) {
+//		fmt.Fprintln(os.Stderr, "EEEEEE")
 //	})
 //
 //	err = node1.SendProto(context.Background(), node2.ID(), hdr)

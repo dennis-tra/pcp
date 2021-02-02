@@ -1,13 +1,14 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
+	"github.com/urfave/cli/v2"
+
+	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/initialize"
 	"github.com/dennis-tra/pcp/pkg/receive"
 	"github.com/dennis-tra/pcp/pkg/send"
-	"github.com/urfave/cli/v2"
 )
 
 const (
@@ -38,7 +39,7 @@ func main() {
 
 	err := app.Run(os.Args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		log.Infof("error: %v\n", err)
 		os.Exit(1)
 	}
 }

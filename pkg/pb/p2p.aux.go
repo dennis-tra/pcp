@@ -23,14 +23,20 @@ func (x *TransferAcknowledge) SetHeader(hdr *Header) {
 	x.Header = hdr
 }
 
-func NewPushResponse(accept bool) (*PushResponse, error) {
-	return &PushResponse{Accept: accept}, nil
+func NewPushResponse(accept bool) *PushResponse {
+	return &PushResponse{Accept: accept}
 }
 
-func NewPushRequest(fileName string, fileSize int64, c cid.Cid) (*PushRequest, error) {
+func NewPushRequest(fileName string, fileSize int64, c cid.Cid) *PushRequest {
 	return &PushRequest{
 		FileName: fileName,
 		FileSize: fileSize,
 		Cid:      c.Bytes(),
-	}, nil
+	}
+}
+
+func NewTransferAcknowledge(receivedBytes int64) *TransferAcknowledge {
+	return &TransferAcknowledge{
+		ReceivedBytes: receivedBytes,
+	}
 }

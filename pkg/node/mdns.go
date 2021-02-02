@@ -3,14 +3,16 @@ package node
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"sync"
 	"time"
 
-	"github.com/dennis-tra/pcp/internal/app"
-	"github.com/dennis-tra/pcp/pkg/commons"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p/p2p/discovery"
+
+	"github.com/dennis-tra/pcp/internal/app"
+	"github.com/dennis-tra/pcp/pkg/commons"
 )
 
 // The time a discovered peer will stay in the `Peers` map.
@@ -135,7 +137,7 @@ func (m *MdnsProtocol) PeersList() []peer.AddrInfo {
 // to be selected by the user via its index.
 func (m *MdnsProtocol) PrintPeers(peers []peer.AddrInfo) {
 	for i, p := range peers {
-		fmt.Printf("[%d] %s\n", i, p.ID)
+		fmt.Fprintf(os.Stdout, "[%d] %s\n", i, p.ID)
 	}
-	fmt.Println()
+	fmt.Fprintln(os.Stdout, )
 }

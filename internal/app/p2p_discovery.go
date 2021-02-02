@@ -17,3 +17,7 @@ type Discovery struct{}
 func (a Discovery) NewMdnsService(ctx context.Context, peerhost host.Host, interval time.Duration, serviceTag string) (discovery.Service, error) {
 	return discovery.NewMdnsService(ctx, peerhost, interval, serviceTag)
 }
+
+type DiscoveryService interface {
+	discovery.Service
+}

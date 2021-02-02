@@ -2,9 +2,11 @@ package initialize
 
 import (
 	"fmt"
+	"os"
+
+	"github.com/urfave/cli/v2"
 
 	"github.com/dennis-tra/pcp/pkg/config"
-	"github.com/urfave/cli/v2"
 )
 
 // Command contains the initialization logic of pcp.
@@ -27,11 +29,11 @@ func Action(c *cli.Context) error {
 	}
 
 	if conf.Settings.Exists {
-		fmt.Println("Loaded settings.json from: ", conf.Settings.Path)
+		fmt.Fprintln(os.Stderr, "Loaded settings.json from: ", conf.Settings.Path)
 	}
 
 	if conf.Identity.Exists {
-		fmt.Println("Loaded identity.json from: ", conf.Identity.Path)
+		fmt.Fprintln(os.Stderr, "Loaded identity.json from: ", conf.Identity.Path)
 	}
 
 	if !conf.Identity.IsInitialized() {

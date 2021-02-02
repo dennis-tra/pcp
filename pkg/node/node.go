@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"os"
 
-	"github.com/dennis-tra/pcp/pkg/config"
-	p2p "github.com/dennis-tra/pcp/pkg/pb"
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/libp2p/go-libp2p"
@@ -15,7 +14,15 @@ import (
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
+
+	"github.com/dennis-tra/pcp/internal/log"
+	"github.com/dennis-tra/pcp/pkg/config"
+	p2p "github.com/dennis-tra/pcp/pkg/pb"
 )
+
+// authenticateMessages is used in tests to skip
+// message authentication due to bogus keys.
+var authenticateMessages = true
 
 // Node encapsulates the logic for sending and receiving messages.
 type Node struct {
@@ -63,11 +70,11 @@ func Init(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
 func (n *Node) ProtocolFor(msg interface{}) (protocol.ID, error) {
 	switch msg.(type) {
 	case *p2p.TransferAcknowledge:
-		return transferAck, nil
+		return ProtocolTransferAck, nil
 	case *p2p.PushRequest:
-		return pushRequest, nil
+		return ProtocolPushRequest, nil
 	case *p2p.PushResponse:
-		return pushResponse, nil
+		return ProtocolPushResponse, nil
 	default:
 		return "", fmt.Errorf("unsupported message payload type")
 	}
@@ -136,13 +143,23 @@ func (n *Node) SendProtoWithParentId(ctx context.Context, id peer.ID, msg p2p.He
 		return "", err
 	}
 
-	return msg.GetHeader().RequestId, s.Close()
+	if err = s.Close(); err != nil {
+		log.Infoln("error closing stream", err)
+	}
+
+	return msg.GetHeader().RequestId, nil
 }
 
 // authenticateMessage verifies the authenticity of the message payload.
 // It takes the given signature and verifies it against the given public
 // key.
 func (n *Node) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
+
+	// Short circuit in test runs with bogus keys.
+	if !authenticateMessages {
+		return true, nil
+	}
+
 	// store a temp ref to signature and remove it from message msg
 	// sign is a string to allow easy reset to zero-value (empty string)
 	signature := msg.GetHeader().Signature
@@ -191,14 +208,14 @@ func (n *Node) readMessage(s network.Stream, data p2p.HeaderMessage) error {
 	if err != nil {
 		err2 := s.Reset()
 		if err2 != nil {
-			fmt.Println(err2)
+			fmt.Fprintln(os.Stderr, err2)
 		}
 		return err
 	}
 
 	err = s.Close()
 	if err != nil {
-		fmt.Println("Error closing stream:", err)
+		fmt.Fprintln(os.Stderr, "Error closing stream:", err)
 	}
 
 	err = proto.Unmarshal(buf, data)

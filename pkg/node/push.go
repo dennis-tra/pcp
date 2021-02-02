@@ -3,16 +3,18 @@ package node
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 
-	p2p "github.com/dennis-tra/pcp/pkg/pb"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
+
+	p2p "github.com/dennis-tra/pcp/pkg/pb"
 )
 
 // pattern: /protocol-name/request-or-response-message/version
-const pushRequest = "/pcp/pushRequest/0.0.1"
-const pushResponse = "/pcp/pushResponse/0.0.1"
+const ProtocolPushRequest = "/pcp/pushRequest/0.0.1"
+const ProtocolPushResponse = "/pcp/pushResponse/0.0.1"
 
 // PushProtocol type
 type PushProtocol struct {
@@ -32,8 +34,8 @@ func NewPushProtocol(node *Node) *PushProtocol {
 		respChans: sync.Map{},
 		reqChans:  []chan PushRequest{},
 	}
-	node.SetStreamHandler(pushRequest, p.onPushRequest)
-	node.SetStreamHandler(pushResponse, p.onPushResponse)
+	node.SetStreamHandler(ProtocolPushRequest, p.onPushRequest)
+	node.SetStreamHandler(ProtocolPushResponse, p.onPushResponse)
 	return p
 }
 
@@ -51,7 +53,7 @@ func (p *PushProtocol) onPushRequest(s network.Stream) {
 	data := &p2p.PushRequest{}
 	err := p.node.readMessage(s, data)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 		return
 	}
 
@@ -71,13 +73,13 @@ func (p *PushProtocol) onPushResponse(s network.Stream) {
 	data := &p2p.PushResponse{}
 	err := p.node.readMessage(s, data)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 		return
 	}
 
 	respChanObj, found := p.respChans.LoadAndDelete(data.Header.RequestParentId)
 	if !found {
-		fmt.Println("couldn't find respChans channel for origin id", data.Header.RequestParentId)
+		fmt.Fprintln(os.Stderr, "couldn't find respChans channel for origin id", data.Header.RequestParentId)
 		return
 	}
 	respChan := respChanObj.(chan *p2p.PushResponse)

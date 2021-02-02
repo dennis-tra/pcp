@@ -122,6 +122,10 @@ Shamelessly copied from `croc`:
 
 [@dennis-tra](https://github.com/dennis-tra).
 
+## Acknowledgment
+
+- [`progress`](https://github.com/machinebox/progress) - package to print progress
+
 ## Contributing
 
 Feel free to dive in! [Open an issue](https://github.com/dennis-tra/pcp/issues/new) or submit PRs.

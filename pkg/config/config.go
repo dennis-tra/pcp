@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -68,6 +69,15 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return c, nil
+}
+
+func FillContext(ctx context.Context) (context.Context, error) {
+	conf, err := LoadConfig()
+	if err != nil {
+		return ctx, err
+	}
+
+	return context.WithValue(ctx, ContextKey, conf), nil
 }
 
 func save(relPath string, obj interface{}, perm os.FileMode) error {
