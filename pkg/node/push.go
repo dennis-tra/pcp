@@ -2,106 +2,93 @@ package node
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"sync"
 
+	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 
+	"github.com/dennis-tra/pcp/internal/log"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
 )
 
 // pattern: /protocol-name/request-or-response-message/version
-const ProtocolPushRequest = "/pcp/pushRequest/0.0.1"
-const ProtocolPushResponse = "/pcp/pushResponse/0.0.1"
+const ProtocolPushRequest = "/pcp/push/0.0.1"
 
-// PushProtocol type
+// PushProtocol .
 type PushProtocol struct {
-	node      *Node
-	respChans sync.Map
-	reqChans  []chan PushRequest
+	node *Node
+	lk   sync.RWMutex
+	prh  PushRequestHandler
 }
 
-type PushRequest struct {
-	Message *p2p.PushRequest
-	PeerId  peer.ID
+type PushRequestHandler interface {
+	HandlePushRequest(*p2p.PushRequest) (bool, error)
 }
 
 func NewPushProtocol(node *Node) *PushProtocol {
-	p := &PushProtocol{
-		node:      node,
-		respChans: sync.Map{},
-		reqChans:  []chan PushRequest{},
-	}
-	node.SetStreamHandler(ProtocolPushRequest, p.onPushRequest)
-	node.SetStreamHandler(ProtocolPushResponse, p.onPushResponse)
-	return p
+	return &PushProtocol{node: node, lk: sync.RWMutex{}}
 }
 
-func (p *PushProtocol) WaitForPushRequest() (peer.ID, *p2p.PushRequest) {
-	c := make(chan PushRequest, 1)
-	p.reqChans = append(p.reqChans, c)
+func (p *PushProtocol) RegisterRequestHandler(prh PushRequestHandler) {
+	p.lk.Lock()
+	defer p.lk.Unlock()
+	p.prh = prh
+	p.node.SetStreamHandler(ProtocolPushRequest, p.onPushRequest)
+}
 
-	chanMsg := <-c
-
-	return chanMsg.PeerId, chanMsg.Message
+func (p *PushProtocol) UnregisterRequestHandler() {
+	p.lk.Lock()
+	defer p.lk.Unlock()
+	p.node.RemoveStreamHandler(ProtocolPushRequest)
+	p.prh = nil
 }
 
 func (p *PushProtocol) onPushRequest(s network.Stream) {
+	defer s.Close()
 
-	data := &p2p.PushRequest{}
-	err := p.node.readMessage(s, data)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	req := &p2p.PushRequest{}
+	if err := p.node.Read(s, req); err != nil {
+		log.Infoln(err)
 		return
 	}
 
-	for _, c := range p.reqChans {
-		c <- PushRequest{
-			Message: data,
-			PeerId:  s.Conn().RemotePeer(),
-		}
-		close(c)
+	p.lk.RLock()
+	defer p.lk.RUnlock()
+	accept, err := p.prh.HandlePushRequest(req)
+	if err != nil {
+		log.Infoln(err)
+		accept = false
+		// Fall through and tell peer we won't handle the request
 	}
-	p.node.reqChans = []chan PushRequest{}
+
+	if err := p.node.Send(s, p2p.NewPushResponse(accept)); err != nil {
+		log.Infoln(err)
+		return
+	}
+
+	if err = p.node.WaitForEOF(s); err != nil {
+		log.Infoln(err)
+		return
+	}
 }
 
-// remote push response handler
-func (p *PushProtocol) onPushResponse(s network.Stream) {
+func (p *PushProtocol) SendPushRequest(ctx context.Context, peerID peer.ID, filename string, size int64, c cid.Cid) (bool, error) {
 
-	data := &p2p.PushResponse{}
-	err := p.node.readMessage(s, data)
+	s, err := p.node.NewStream(ctx, peerID, ProtocolPushRequest)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return
+		return false, err
+	}
+	defer s.Close()
+
+	if err = p.node.Send(s, p2p.NewPushRequest(filename, size, c)); err != nil {
+		return false, err
 	}
 
-	respChanObj, found := p.respChans.LoadAndDelete(data.Header.RequestParentId)
-	if !found {
-		fmt.Fprintln(os.Stderr, "couldn't find respChans channel for origin id", data.Header.RequestParentId)
-		return
-	}
-	respChan := respChanObj.(chan *p2p.PushResponse)
-
-	respChan <- data
-	close(respChan)
-}
-
-func (p *PushProtocol) SendPushRequest(ctx context.Context, peerId peer.ID, req *p2p.PushRequest) (*p2p.PushResponse, error) {
-	requestId, err := p.node.SendProto(ctx, peerId, req)
-	if err != nil {
-		return nil, err
+	resp := &p2p.PushResponse{}
+	if err = p.node.Read(s, resp); err != nil {
+		return false, err
 	}
 
-	respChan := make(chan *p2p.PushResponse)
-
-	p.respChans.Store(requestId, respChan)
-	select {
-	case <-ctx.Done():
-		p.respChans.Delete(requestId)
-		return nil, fmt.Errorf("context cancelled")
-	case resp := <-respChan:
-		return resp, nil
-	}
+	return resp.Accept, nil
 }

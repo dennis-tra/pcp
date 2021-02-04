@@ -1,9 +1,7 @@
 package initialize
 
 import (
-	"fmt"
-	"os"
-
+	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/urfave/cli/v2"
 
 	"github.com/dennis-tra/pcp/pkg/config"
@@ -29,11 +27,11 @@ func Action(c *cli.Context) error {
 	}
 
 	if conf.Settings.Exists {
-		fmt.Fprintln(os.Stderr, "Loaded settings.json from: ", conf.Settings.Path)
+		log.Infoln("Loaded settings.json from: ", conf.Settings.Path)
 	}
 
 	if conf.Identity.Exists {
-		fmt.Fprintln(os.Stderr, "Loaded identity.json from: ", conf.Identity.Path)
+		log.Infoln("Loaded identity.json from: ", conf.Identity.Path)
 	}
 
 	if !conf.Identity.IsInitialized() {

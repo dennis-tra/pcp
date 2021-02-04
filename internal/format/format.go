@@ -8,14 +8,14 @@ import (
 
 // Bytes attaches a unit to the bytes value and makes it human readable.
 func Bytes(bytes int64) string {
-	if bytes >= 1E12 {
-		return fmt.Sprintf("%dTB", bytes/1E12)
-	} else if bytes >= 1E9 {
-		return fmt.Sprintf("%dGB", bytes/1E9)
-	} else if bytes >= 1E6 {
-		return fmt.Sprintf("%dMB", bytes/1E6)
-	} else if bytes >= 1E3 {
-		return fmt.Sprintf("%dKB", bytes/1E3)
+	if bytes >= 1e12 {
+		return fmt.Sprintf("%dTB", bytes/1e12)
+	} else if bytes >= 1e9 {
+		return fmt.Sprintf("%dGB", bytes/1e9)
+	} else if bytes >= 1e6 {
+		return fmt.Sprintf("%dMB", bytes/1e6)
+	} else if bytes >= 1e3 {
+		return fmt.Sprintf("%dKB", bytes/1e3)
 	} else {
 		return fmt.Sprintf("%dB", bytes)
 	}

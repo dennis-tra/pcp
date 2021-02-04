@@ -1,19 +1,13 @@
 package receive
 
 import (
-	"bufio"
-	"context"
 	"encoding/hex"
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/ipfs/go-cid"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 
-	"github.com/dennis-tra/pcp/internal/format"
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/config"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
@@ -58,12 +52,14 @@ environments.`,
 
 // Action is the function that is called when running pcp receive.
 func Action(c *cli.Context) error {
+	shutdown := make(chan error)
+
 	ctx, err := config.FillContext(c.Context)
 	if err != nil {
 		return errors.Wrap(err, "failed loading configuration")
 	}
 
-	local, err := InitNode(ctx, c.String("host"), c.Int64("port"))
+	local, err := InitNode(ctx, c.String("host"), c.Int64("port"), shutdown)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("failed to initialize node"))
 	}
@@ -75,68 +71,13 @@ func Action(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	defer local.StopMdnsService()
 
-	for {
-		log.Infoln("Ready to receive files... (cancel with strg+c)")
-		peerId, pushRequest := local.WaitForPushRequest()
-		log.Infof("Sending request: %s (%s)\n", pushRequest.FileName, format.Bytes(pushRequest.FileSize))
+	local.RegisterRequestHandler(local)
 
-		quit, err := handlePushRequest(ctx, local, peerId, pushRequest)
-		if quit {
-			return err
-		}
+	log.Infoln("Ready to receive files... (cancel with ctrl+c)")
 
-		if err != nil {
-			log.Infoln(err)
-		}
-	}
-}
-
-func handlePushRequest(ctx context.Context, local *Node, peerId peer.ID, pushRequest *p2p.PushRequest) (bool, error) {
-	for {
-		log.Infoln("Do you want to receive this file? [y,n,i,q,?] ")
-		scanner := bufio.NewScanner(os.Stdin)
-		if !scanner.Scan() {
-			return true, errors.Wrap(scanner.Err(), "failed reading from stdin")
-		}
-
-		// sanitize user input
-		input := strings.ToLower(strings.TrimSpace(scanner.Text()))
-
-		// Empty input, user just pressed enter => do nothing and prompt again
-		if input == "" {
-			continue
-		}
-
-		// Quit the process
-		if input == "q" {
-			return true, nil
-		}
-
-		// Print the help text and prompt again
-		if input == "?" {
-			help()
-			continue
-		}
-
-		// Print information about the send request
-		if input == "i" {
-			printInformation(pushRequest)
-			continue
-		}
-
-		// Accept the file transfer
-		if input == "y" {
-			return true, local.Accept(ctx, peerId, pushRequest)
-		}
-
-		// Reject the file transfer
-		if input == "n" {
-			return false, local.Reject(ctx, peerId, pushRequest)
-		}
-
-		log.Infoln("Invalid input")
-	}
+	return <-shutdown
 }
 
 func printInformation(data *p2p.PushRequest) {
@@ -150,8 +91,8 @@ func printInformation(data *p2p.PushRequest) {
 
 	log.Infoln("Sending request information:")
 	log.Infoln("\tPeer:\t", data.Header.NodeId)
-	log.Infoln("\tName:\t", data.FileName)
-	log.Infoln("\tSize:\t", data.FileSize)
+	log.Infoln("\tName:\t", data.Filename)
+	log.Infoln("\tSize:\t", data.Size)
 	log.Infoln("\tCID:\t", cStr)
 	log.Infoln("\tSign:\t", hex.EncodeToString(data.Header.Signature))
 	log.Infoln("\tPubKey:\t", hex.EncodeToString(data.Header.GetNodePubKey()))

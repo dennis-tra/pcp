@@ -8,7 +8,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/libp2p/go-libp2p-core/peer"
-	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -112,7 +111,7 @@ func TestMdnsProtocol_HandlePeerFound_deletesPeerAfterGCTime(t *testing.T) {
 
 	gcDurationTmp := gcDuration
 	gcDuration = 0 * time.Millisecond
-	peerId := peer.ID("peer-id")
+	peerID := peer.ID("peer-id")
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -130,12 +129,12 @@ func TestMdnsProtocol_HandlePeerFound_deletesPeerAfterGCTime(t *testing.T) {
 
 	appTime = mTime
 
-	pi := peer.AddrInfo{ID: peerId}
+	pi := peer.AddrInfo{ID: peerID}
 	p.HandlePeerFound(pi)
 
 	wg.Wait()
 
-	_, found := p.Peers.Load(peerId)
+	_, found := p.Peers.Load(peerID)
 	assert.False(t, found)
 
 	gcDuration = gcDurationTmp
@@ -150,7 +149,7 @@ func TestMdnsProtocol_HandlePeerFound_deletesPeerAfterGCTimeWithIntermediateRese
 
 	gcDurationTmp := gcDuration
 	gcDuration = 100 * time.Millisecond
-	peerId := peer.ID("peer-id")
+	peerID := peer.ID("peer-id")
 
 	mTime := mock.NewMockTimer(ctrl)
 	mTime.EXPECT().
@@ -159,15 +158,15 @@ func TestMdnsProtocol_HandlePeerFound_deletesPeerAfterGCTimeWithIntermediateRese
 		DoAndReturn(time.AfterFunc)
 	appTime = mTime
 
-	pi := peer.AddrInfo{ID: peerId}
+	pi := peer.AddrInfo{ID: peerID}
 	p.HandlePeerFound(pi)
 	time.Sleep(50 * time.Millisecond)
 	p.HandlePeerFound(pi)
 	time.Sleep(75 * time.Millisecond)
-	_, found := p.Peers.Load(peerId)
+	_, found := p.Peers.Load(peerID)
 	assert.True(t, found)
 	time.Sleep(50 * time.Millisecond)
-	_, found = p.Peers.Load(peerId)
+	_, found = p.Peers.Load(peerID)
 	assert.False(t, found)
 
 	gcDuration = gcDurationTmp
@@ -192,31 +191,31 @@ func TestMdnsProtocol_PeerList_returnsListOfPeers(t *testing.T) {
 	assert.Equal(t, p3, list[2])
 }
 
-func ExampleMdnsProtocol_PrintPeers_doesNotError() {
-
-	ctx := context.Background()
-	net := mocknet.New(ctx)
-	h, _ := net.GenPeer()
-
-	n := &Node{Host: h}
-	p := NewMdnsProtocol(n)
-
-	id1, _ := peer.Decode("QmUfTE3fCY8DvSAG5XGkmVvuqyihxujH52mbm8RCFJGMwD")
-	id2, _ := peer.Decode("12D3KooWFDN3sDfvn9dPvFZG4P1hMg21PTmUt56zCtX7VWRZkLV8")
-	id3, _ := peer.Decode("QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ")
-
-	p1 := peer.AddrInfo{ID: id1}
-	p2 := peer.AddrInfo{ID: id2}
-	p3 := peer.AddrInfo{ID: id3}
-
-	p.HandlePeerFound(p1)
-	p.HandlePeerFound(p3)
-	p.HandlePeerFound(p2)
-
-	p.PrintPeers(p.PeersList())
-
-	// Output:
-	// [0] 12D3KooWFDN3sDfvn9dPvFZG4P1hMg21PTmUt56zCtX7VWRZkLV8
-	// [1] QmUfTE3fCY8DvSAG5XGkmVvuqyihxujH52mbm8RCFJGMwD
-	// [2] QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ
-}
+//func ExampleMdnsProtocol_PrintPeers_doesNotError() {
+//
+//	ctx := context.Background()
+//	net := mocknet.New(ctx)
+//	h, _ := net.GenPeer()
+//
+//	n := &Node{Host: h}
+//	p := NewMdnsProtocol(n)
+//
+//	id1, _ := peer.Decode("QmUfTE3fCY8DvSAG5XGkmVvuqyihxujH52mbm8RCFJGMwD")
+//	id2, _ := peer.Decode("12D3KooWFDN3sDfvn9dPvFZG4P1hMg21PTmUt56zCtX7VWRZkLV8")
+//	id3, _ := peer.Decode("QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ")
+//
+//	p1 := peer.AddrInfo{ID: id1}
+//	p2 := peer.AddrInfo{ID: id2}
+//	p3 := peer.AddrInfo{ID: id3}
+//
+//	p.HandlePeerFound(p1)
+//	p.HandlePeerFound(p3)
+//	p.HandlePeerFound(p2)
+//
+//	p.PrintPeers(p.PeersList())
+//
+//	// Output:
+//	// [0] 12D3KooWFDN3sDfvn9dPvFZG4P1hMg21PTmUt56zCtX7VWRZkLV8
+//	// [1] QmUfTE3fCY8DvSAG5XGkmVvuqyihxujH52mbm8RCFJGMwD
+//	// [2] QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ
+//}

@@ -2,8 +2,6 @@ package node
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"sort"
 	"sync"
 	"time"
@@ -12,6 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/discovery"
 
 	"github.com/dennis-tra/pcp/internal/app"
+	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/commons"
 )
 
@@ -137,7 +136,7 @@ func (m *MdnsProtocol) PeersList() []peer.AddrInfo {
 // to be selected by the user via its index.
 func (m *MdnsProtocol) PrintPeers(peers []peer.AddrInfo) {
 	for i, p := range peers {
-		fmt.Fprintf(os.Stdout, "[%d] %s\n", i, p.ID)
+		log.Infof("[%d] %s\n", i, p.ID)
 	}
-	fmt.Fprintln(os.Stdout, )
+	log.Infoln()
 }

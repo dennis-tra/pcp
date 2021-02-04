@@ -117,27 +117,25 @@ func NewTicker(ctx context.Context, counter Counter, size int64, d time.Duration
 		for {
 			select {
 			case <-ctx.Done():
-				// context has finished - exit
-				return
 			case <-time.After(d):
-				progress := Progress{
-					n:    float64(counter.N()),
-					size: float64(size),
-					err:  counter.Err(),
+			}
+			progress := Progress{
+				n:    float64(counter.N()),
+				size: float64(size),
+				err:  counter.Err(),
+			}
+			ratio := progress.n / progress.size
+			past := float64(time.Since(started))
+			if progress.n > 0.0 {
+				total := time.Duration(past / ratio)
+				if total < 168*time.Hour {
+					// don't send estimates that are beyond a week
+					progress.estimated = started.Add(total)
 				}
-				ratio := progress.n / progress.size
-				past := float64(time.Since(started))
-				if progress.n > 0.0 {
-					total := time.Duration(past / ratio)
-					if total < 168*time.Hour {
-						// don't send estimates that are beyond a week
-						progress.estimated = started.Add(total)
-					}
-				}
-				ch <- progress
-				if progress.Complete() {
-					return
-				}
+			}
+			ch <- progress
+			if progress.Complete() {
+				return
 			}
 		}
 	}()

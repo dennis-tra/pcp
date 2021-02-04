@@ -7,20 +7,17 @@ message Header {
   // A unique request ID to allow idempotency.
   string request_id = 1;
 
-  // In case of a response this is the request ID of the initiating message.
-  string request_parent_id = 2;
-
   // Unix time in milliseconds.
-  int64 timestamp = 3;
+  int64 timestamp = 2;
 
   // The ID of the node that created the message (not the peer that may have sent it)
-  string node_id = 4;
+  string node_id = 3;
 
   // Authoring node Secp256k1 public key (32bytes) - protobufs serialized
-  bytes node_pub_key = 5;
+  bytes node_pub_key = 4;
 
   // The signature of the message data.
-  bytes signature = 6;
+  bytes signature = 5;
 }
 
 // PushRequest is sent to the receiving peer for acceptance.
@@ -33,10 +30,10 @@ message PushRequest {
   // The name of the file that is about to be transferred.
   // This will also be the name that the receiving peer
   // uses upon save.
-  string file_name = 2;
+  string filename = 2;
 
   // The size of the file to be transmitted.
-  int64 file_size = 3;
+  int64 size = 3;
 
   // The content identifier of the file to send.
   bytes cid = 4;
@@ -50,13 +47,4 @@ message PushResponse {
   Header header = 1;
 
   bool accept = 2;
-}
-
-
-message TransferAcknowledge {
-
-  Header header = 1;
-
-  int64 received_bytes = 2;
-
 }
