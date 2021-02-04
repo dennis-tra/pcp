@@ -2,16 +2,16 @@ package send
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path"
+	"sync"
 
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/node"
-	p2p "github.com/dennis-tra/pcp/pkg/pb"
+	"github.com/dennis-tra/pcp/pkg/progress"
 )
 
 type Node struct {
@@ -28,70 +28,54 @@ func InitNode(ctx context.Context) (*Node, error) {
 	return &Node{n}, nil
 }
 
-func (n *Node) Close() error {
-	err := n.Host.Close()
-	if err != nil {
-		log.Infoln(err)
-	}
+func (n *Node) Transfer(ctx context.Context, pi peer.AddrInfo, filepath string) (bool, error) {
 
-	err = n.StopMdnsService()
-	if err != nil {
-		log.Infoln(err)
-	}
-
-	return nil
-}
-
-func (n *Node) Transfer(ctx context.Context, pi peer.AddrInfo, filepath string) (accepted bool, err error) {
-
-	err = n.Connect(ctx, pi)
-	if err != nil {
-		return
+	if err := n.Connect(ctx, pi); err != nil {
+		return false, err
 	}
 
 	c, err := calcContentID(filepath)
 	if err != nil {
-		return
+		return false, err
 	}
 
 	f, err := os.Open(filepath)
 	if err != nil {
-		return
+		return false, err
 	}
 	defer f.Close()
 
 	fstat, err := f.Stat()
 	if err != nil {
-		return
+		return false, err
 	}
 
-	msg := p2p.NewPushRequest(path.Base(f.Name()), fstat.Size(), c)
 	log.Infof("Asking for confirmation... ")
 
-	sendResponse, err := n.SendPushRequest(ctx, pi.ID, msg)
+	accepted, err := n.SendPushRequest(ctx, pi.ID, path.Base(f.Name()), fstat.Size(), c)
 	if err != nil {
-		return
+		return false, err
 	}
 
-	accepted = sendResponse.Accept
 	if !accepted {
 		log.Infoln("Rejected!")
-		return
+		return accepted, nil
 	}
-
 	log.Infoln("Accepted!")
 
-	acknowledged, err := n.Node.Transfer(ctx, pi.ID, f, msg.FileName, msg.FileSize)
-	if err != nil {
-		err = errors.Wrap(err, "could not transfer file to peer")
-		return
-	}
+	pr := progress.NewReader(f)
 
-	if fstat.Size() != acknowledged {
-		err = fmt.Errorf("copied %d bytes, but acknowledged were %d bytes", fstat.Size(), acknowledged)
-		return
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go node.IndicateProgress(ctx, pr, path.Base(f.Name()), fstat.Size(), &wg)
+	defer func() { cancel(); wg.Wait() }()
+
+	if _, err = n.Node.Transfer(ctx, pi.ID, pr); err != nil {
+		return accepted, errors.Wrap(err, "could not transfer file to peer")
 	}
 
 	log.Infoln("Successfully sent file!")
-	return
+	return accepted, nil
 }

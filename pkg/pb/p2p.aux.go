@@ -3,11 +3,13 @@ package proto
 import (
 	"github.com/golang/protobuf/proto"
 	"github.com/ipfs/go-cid"
+	"github.com/libp2p/go-libp2p-core/peer"
 )
 
 type HeaderMessage interface {
 	GetHeader() *Header
 	SetHeader(*Header)
+	PeerID() (peer.ID, error)
 	proto.Message
 }
 
@@ -19,24 +21,22 @@ func (x *PushResponse) SetHeader(hdr *Header) {
 	x.Header = hdr
 }
 
-func (x *TransferAcknowledge) SetHeader(hdr *Header) {
-	x.Header = hdr
+func (x *PushRequest) PeerID() (peer.ID, error) {
+	return peer.Decode(x.GetHeader().NodeId)
+}
+
+func (x *PushResponse) PeerID() (peer.ID, error) {
+	return peer.Decode(x.GetHeader().NodeId)
 }
 
 func NewPushResponse(accept bool) *PushResponse {
 	return &PushResponse{Accept: accept}
 }
 
-func NewPushRequest(fileName string, fileSize int64, c cid.Cid) *PushRequest {
+func NewPushRequest(filename string, size int64, c cid.Cid) *PushRequest {
 	return &PushRequest{
-		FileName: fileName,
-		FileSize: fileSize,
+		Filename: filename,
+		Size:     size,
 		Cid:      c.Bytes(),
-	}
-}
-
-func NewTransferAcknowledge(receivedBytes int64) *TransferAcknowledge {
-	return &TransferAcknowledge{
-		ReceivedBytes: receivedBytes,
 	}
 }

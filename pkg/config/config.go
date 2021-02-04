@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -78,6 +79,19 @@ func FillContext(ctx context.Context) (context.Context, error) {
 	}
 
 	return context.WithValue(ctx, ContextKey, conf), nil
+}
+
+func FromContext(ctx context.Context) (*Config, error) {
+	obj := ctx.Value(ContextKey)
+	if obj == nil {
+		return nil, fmt.Errorf("config not found in context")
+	}
+	config, ok := obj.(*Config)
+	if !ok {
+		return nil, fmt.Errorf("config not found in context")
+	}
+
+	return config, nil
 }
 
 func save(relPath string, obj interface{}, perm os.FileMode) error {

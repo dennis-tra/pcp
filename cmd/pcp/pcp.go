@@ -21,7 +21,13 @@ var (
 func main() {
 
 	app := &cli.App{
-		Name:                 "pcp",
+		Name: "pcp",
+		Authors: []*cli.Author{
+			{
+				Name:  "Dennis Trautwein",
+				Email: "pcp@dtrautwein.eu",
+			},
+		},
 		Usage:                "Peer Copy, a peer-to-peer data transfer tool.",
 		Version:              fmt.Sprintf("%s+%s", Version, Build[:7]),
 		EnableBashCompletion: true,

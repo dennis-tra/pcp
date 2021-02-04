@@ -22,6 +22,7 @@ require (
 	github.com/stretchr/testify v1.6.1
 	github.com/urfave/cli/v2 v2.3.0
 	github.com/whyrusleeping/mdns v0.0.0-20190826153040-b9b60ed33aa9
+	go.uber.org/atomic v1.6.0
 	go.uber.org/zap v1.16.0 // indirect
 	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c // indirect
 	golang.org/x/term v0.0.0-20201210144234-2321bbc49cbf // indirect
