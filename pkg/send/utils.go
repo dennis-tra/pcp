@@ -2,7 +2,6 @@ package send
 
 import (
 	"crypto/sha256"
-	"fmt"
 	"io"
 	"os"
 
@@ -29,18 +28,4 @@ func calcContentID(filepath string) (cid.Cid, error) {
 	}
 
 	return cid.NewCidV1(cid.Raw, mhash), nil
-}
-
-func verifyFileAccess(filepath string) error {
-
-	if filepath == "" {
-		return fmt.Errorf("please specify the file you want to transfer")
-	}
-
-	f, err := os.Open(filepath)
-	if err != nil {
-		return err
-	}
-
-	return f.Close()
 }

@@ -16,7 +16,6 @@ out/**
 *.out
 
 .idea
-mdns
 pcp
 
 ### Go Patch ###

@@ -7,7 +7,6 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/dennis-tra/pcp/internal/log"
-	"github.com/dennis-tra/pcp/pkg/initialize"
 	"github.com/dennis-tra/pcp/pkg/receive"
 	"github.com/dennis-tra/pcp/pkg/send"
 )
@@ -34,7 +33,7 @@ func main() {
 		Commands: []*cli.Command{
 			receive.Command,
 			send.Command,
-			initialize.Command,
+			//initialize.Command,
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{

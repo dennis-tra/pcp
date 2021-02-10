@@ -29,6 +29,10 @@ The tool is in a very early stage and I'm aware of security, performance and usa
 
 My motivation to build a new tool is to levarage the peer-to-peer networking stack that is provided by [libp2p](https://github.com/libp2p/go-libp2p). In the future `pcp` should also enable two peers in different networks to exchange files via a relay. I'm not sure how croc chooses relay servers but I guess there is just a limited set which puts the power to a limited number of service providers and is therefore a centralization concern (if my assumption is correct). By using libp2ps [experimental autorelay](https://docs.libp2p.io/concepts/circuit-relay/#autorelay) feature I think `pcp` takes another step into a more decentralized world.
 
+## Advantages over `croc`
+
+1. The libp2p `identify` discovery mechanism serves the same role as STUN, but without the need for a set of “STUN servers”.
+2. The libp2p `Circuit Relay` protocol allows peers to communicate indirectly via a helpful intermediary peer. Replaces dedicated TURN servers.
 ## Install
 
 For now, you need to compile it yourself:

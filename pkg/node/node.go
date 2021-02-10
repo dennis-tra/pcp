@@ -3,6 +3,10 @@ package node
 import (
 	"context"
 	"fmt"
+	"github.com/dennis-tra/pcp/internal/log"
+	"github.com/libp2p/go-libp2p-core/routing"
+	kaddht "github.com/libp2p/go-libp2p-kad-dht"
+	"go.uber.org/atomic"
 	"io"
 	"io/ioutil"
 	"time"
@@ -20,16 +24,16 @@ import (
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
 )
 
-// authenticateMessages is used in tests to skip
-// message authentication due to bogus keys.
-var authenticateMessages = true
-
 // Node encapsulates the logic for sending and receiving messages.
 type Node struct {
 	host.Host
-	*MdnsProtocol
-	*PushProtocol
-	*TransferProtocol
+
+	// DHT is an accessor that is needed in the DHT discoverer/advertiser.
+	DHT *kaddht.IpfsDHT
+
+	// Busy represents that the node can't respond to queries that require user interaction.
+	// If the node is busy all these requests are answered with a rejection.
+	Busy *atomic.Bool
 }
 
 // Init creates a new, fully initialized node with the given options.
@@ -47,20 +51,27 @@ func Init(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
 		}
 	}
 
+	node := &Node{
+		Busy: atomic.NewBool(false),
+	}
+
 	key, err := conf.Identity.PrivateKey()
 	if err != nil {
 		return nil, err
 	}
-	opts = append(opts, libp2p.Identity(key))
-	h, err := libp2p.New(ctx, opts...)
+
+	opts = append(opts,
+		libp2p.Identity(key),
+		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
+			node.DHT, err = kaddht.New(ctx, h)
+			return node.DHT, err
+		}),
+	)
+
+	node.Host, err = libp2p.New(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
-
-	node := &Node{Host: h}
-	node.MdnsProtocol = NewMdnsProtocol(node)
-	node.PushProtocol = NewPushProtocol(node)
-	node.TransferProtocol = NewTransferProtocol(node)
 
 	return node, nil
 }
@@ -68,7 +79,11 @@ func Init(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
 // Send prepares the message msg to be sent over the network stream s.
 // Send closes the stream for writing but leaves it open for reading.
 func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
-	defer s.CloseWrite()
+	defer func() {
+		if err := s.CloseWrite(); err != nil {
+			log.Warningln("Error closing writer part of stream after sending", err)
+		}
+	}()
 
 	// Get own public key.
 	pub, err := n.Host.Peerstore().PubKey(n.Host.ID()).Bytes()
@@ -80,7 +95,7 @@ func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
 		RequestId:  uuid.New().String(),
 		NodeId:     peer.Encode(n.Host.ID()),
 		NodePubKey: pub,
-		Timestamp:  appTime.Now().Unix(),
+		Timestamp:  time.Now().Unix(),
 	}
 	msg.SetHeader(hdr)
 
@@ -118,11 +133,6 @@ func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
 // It takes the given signature and verifies it against the given public
 // key.
 func (n *Node) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
-
-	// Short circuit in test runs with bogus keys.
-	if !authenticateMessages {
-		return true, nil
-	}
 
 	// store a temp ref to signature and remove it from message msg
 	// sign is a string to allow easy reset to zero-value (empty string)

@@ -59,23 +59,13 @@ func Action(c *cli.Context) error {
 		return errors.Wrap(err, "failed loading configuration")
 	}
 
-	local, err := InitNode(ctx, c.String("host"), c.Int64("port"), shutdown)
+	local, err := InitNode(ctx)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("failed to initialize node"))
 	}
 	defer local.Close()
 
-	log.Infof("Your identity:\n\n\t%s\n\n", local.Host.ID())
-
-	err = local.StartMdnsService(ctx)
-	if err != nil {
-		return err
-	}
-	defer local.StopMdnsService()
-
-	local.RegisterRequestHandler(local)
-
-	log.Infoln("Ready to receive files... (cancel with ctrl+c)")
+	local.Discover(ctx, "bafkreic3hi4gf7xozzd6u6mbchbt3soghwuugcogijni2rnu2pjin7lih4")
 
 	return <-shutdown
 }
