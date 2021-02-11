@@ -6,6 +6,7 @@ import (
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/libp2p/go-libp2p-core/routing"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/tyler-smith/go-bip39/wordlists"
 	"go.uber.org/atomic"
 	"io"
 	"io/ioutil"
@@ -74,6 +75,60 @@ func Init(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
 	}
 
 	return node, nil
+}
+
+// TransferCode returns the word combination that's to be transmitted
+// to your peer. As we use the bitcoin mnemonic word list of 2048 words
+// we can encode the first 32 bytes in 4 words which results in 2^256
+// combinations. We use these words as input to the password authenticated
+// key exchange protocol. After the peer has received the encrypted data
+// he/she can check the signature and also verify it against the words
+// received as these are the first bytes of the public key. This ensures
+// we received the data from the correct node who is in possession of the
+// private key associate with the excerpt of the public key.
+func (n *Node) TransferCode() ([]string, error) {
+
+	pubKey, err := n.Peerstore().PubKey(n.ID()).Bytes()
+	if err != nil {
+		return nil, err
+	}
+
+	length := 4
+	words := make([]string, length)
+	for i := 0; i < length; i++ {
+		sum := 0
+		for j := 0; j < 8; j++ {
+			sum += int(pubKey[j+i*8+i])
+		}
+		words[i] = wordlists.English[sum]
+	}
+
+	return words, nil
+}
+
+// ChannelID returns the identifier which is used to construct the
+// advertise-address. In the DHT we put the concatenation of our
+// protocol prefix (/pcp), the current time in unix format rounded
+// to the minute and the channel ID to minimize collisions. For
+// peers that want to look up the peer.
+func (n *Node) ChannelID() (int, error) {
+
+	pubKey, err := n.Peerstore().PubKey(n.ID()).Bytes()
+	if err != nil {
+		return 0, err
+	}
+
+	sum := 0
+	for j := 0; j < 8; j++ {
+		sum += int(pubKey[j])
+	}
+	return sum, nil
+}
+
+// AdvertiseIdentifier returns the string, that we use to advertise
+// via mDNS and the DHT. See ChannelID above for more information.
+func (n *Node) AdvertiseIdentifier(t time.Time, chanID int) string {
+	return fmt.Sprintf("/pcp/%d/%d", t.Truncate(24*time.Minute).Unix(), chanID)
 }
 
 // Send prepares the message msg to be sent over the network stream s.

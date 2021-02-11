@@ -3,6 +3,10 @@ package receive
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/dennis-tra/pcp/pkg/term"
+	"github.com/tyler-smith/go-bip39/wordlists"
+	"strings"
+	"time"
 
 	"github.com/ipfs/go-cid"
 	"github.com/pkg/errors"
@@ -15,31 +19,12 @@ import (
 
 // Command contains the receive sub-command configuration.
 var Command = &cli.Command{
-	Name:    "receive",
-	Usage:   "waits until a peer attempts to connect",
-	Aliases: []string{"r"},
-	Action:  Action,
-	Flags: []cli.Flag{
-		&cli.Int64Flag{
-			Name:    "port",
-			EnvVars: []string{"PCP_PORT"},
-			Aliases: []string{"p"},
-			Usage:   "The port at which you are reachable for other peers in the network.",
-			Value:   44044,
-		},
-		&cli.StringFlag{
-			Name:    "host",
-			EnvVars: []string{"PCP_HOST"},
-			Usage:   "The host at which you are reachable for other peers in the network.",
-			Value:   "0.0.0.0",
-		},
-	},
-	ArgsUsage: "[DEST_DIR]",
-	UsageText: `DEST_DIR	The destination directory where the received file
-	should be saved. The file will be named as the sender
-	specifies. If no DEST_DIR is given the file will be
-	saved to $XDG_DATA_HOME - usually ~/.data/. If the file
-	already exists you will be prompted what you want to do.`,
+	Name:      "receive",
+	Usage:     "searches for the given code for peers in the local network and DHT",
+	Aliases:   []string{"r"},
+	Action:    Action,
+	ArgsUsage: "[WORD-CODE]",
+	UsageText: `WORD-CODE	`,
 	Description: `The receive subcommand starts a multicast DNS service. This
 makes it possible for other peers to discover us - it enables
 peer-to-peer discovery. It is important to note that many
@@ -52,7 +37,6 @@ environments.`,
 
 // Action is the function that is called when running pcp receive.
 func Action(c *cli.Context) error {
-	shutdown := make(chan error)
 
 	ctx, err := config.FillContext(c.Context)
 	if err != nil {
@@ -65,9 +49,32 @@ func Action(c *cli.Context) error {
 	}
 	defer local.Close()
 
-	local.Discover(ctx, "bafkreic3hi4gf7xozzd6u6mbchbt3soghwuugcogijni2rnu2pjin7lih4")
+	words := strings.Split(c.Args().First(), "-")
+	if len(words) != 4 {
+		return fmt.Errorf("list of words must be exactly 4")
+	}
 
-	return <-shutdown
+	chanID, err := intForWord(words[0])
+	if err != nil {
+		return err
+	}
+
+	// Search for identifier
+	local.Discover(ctx, local.AdvertiseIdentifier(time.Now(), chanID))
+
+	// Wait for the user to stop the tool
+	term.Wait(ctx)
+
+	return nil
+}
+
+func intForWord(word string) (int, error) {
+	for i, w := range wordlists.English {
+		if w == word {
+			return i, nil
+		}
+	}
+	return 0, fmt.Errorf("word not found in list")
 }
 
 func printInformation(data *p2p.PushRequest) {

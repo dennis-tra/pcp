@@ -2,11 +2,14 @@ package dht
 
 import (
 	"context"
-	"github.com/dennis-tra/pcp/internal/log"
-	"github.com/dennis-tra/pcp/pkg/discovery"
+
 	"github.com/ipfs/go-cid"
+	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
 	mh "github.com/multiformats/go-multihash"
 
+	"github.com/dennis-tra/pcp/internal/log"
+	"github.com/dennis-tra/pcp/pkg/discovery"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 )
 
@@ -26,8 +29,6 @@ func NewDiscoverer(node *pcpnode.Node) *Discoverer {
 
 func (d *Discoverer) Discover(ctx context.Context, code string, handler discovery.PeerHandler) error {
 
-	log.Infoln("Discover ", code)
-
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -35,7 +36,7 @@ func (d *Discoverer) Discover(ctx context.Context, code string, handler discover
 		return err
 	}
 
-	h, err := mh.Sum([]byte("/pcp/"+code), mh.SHA2_256, -1)
+	h, err := mh.Sum([]byte(code), mh.SHA2_256, -1)
 	if err != nil {
 		return err
 	}
@@ -50,6 +51,20 @@ func (d *Discoverer) Discover(ctx context.Context, code string, handler discover
 		go func() {
 			log.Infoln("Finding providers for: ", cid.NewCidV1(cid.Raw, h))
 			for pi := range d.DHT.FindProvidersAsync(ctx, cid.NewCidV1(cid.Raw, h), 100) {
+
+				// Filter out addresses that are local - only allow public ones.
+				routable := []ma.Multiaddr{}
+				for _, addr := range pi.Addrs {
+					if manet.IsPublicAddr(addr) {
+						routable = append(routable, addr)
+					}
+				}
+
+				if len(routable) == 0 {
+					continue
+				}
+
+				pi.Addrs = routable
 				go handler.HandlePeer(pi)
 			}
 			log.Infoln("Finding providers for: ", cid.NewCidV1(cid.Raw, h), " Done!")

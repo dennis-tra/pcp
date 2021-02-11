@@ -3,11 +3,11 @@ package receive
 import (
 	"context"
 	"github.com/dennis-tra/pcp/internal/log"
-
 	"github.com/dennis-tra/pcp/pkg/dht"
 	pcpdiscovery "github.com/dennis-tra/pcp/pkg/discovery"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"io/ioutil"
 )
 
 type Node struct {
@@ -33,9 +33,10 @@ func InitNode(ctx context.Context) (*Node, error) {
 	return n, nil
 }
 
-func (n *Node) Discover(ctx context.Context, identifier string) {
+func (n *Node) Discover(ctx context.Context, code string) {
+	log.Debugln("Discovering:", code)
 	for _, discoverer := range n.discoverers {
-		go discoverer.Discover(ctx, identifier, n)
+		go discoverer.Discover(ctx, code, n)
 	}
 }
 
@@ -49,6 +50,43 @@ func (n *Node) Shutdown(err error) {
 
 func (n *Node) HandlePeer(info peer.AddrInfo) {
 	log.Infoln("Found peer:", info)
+
+	err := n.Connect(context.Background(), info)
+	if err != nil {
+		log.Errorln(err)
+		return
+	}
+	s, err := n.NewStream(context.Background(), info.ID, "/pcp")
+	if err != nil {
+		log.Errorln(err)
+		return
+	}
+
+	_, err = s.Write([]byte("Hi!"))
+	if err != nil {
+		log.Errorln(err)
+		return
+	}
+
+	if err = s.CloseWrite(); err != nil {
+		log.Errorln(err)
+		return
+	}
+
+	_, err = ioutil.ReadAll(s)
+	if err != nil {
+		log.Errorln(err)
+		return
+	}
+
+	if err = s.CloseRead(); err != nil {
+		log.Errorln(err)
+		return
+	}
+}
+
+func (n *Node) Negotiate(info peer.AddrInfo) {
+
 }
 
 //func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {

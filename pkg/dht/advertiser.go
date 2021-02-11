@@ -24,7 +24,7 @@ func (a *Advertiser) Advertise(ctx context.Context, code string) error {
 		return err
 	}
 
-	h, err := mh.Sum([]byte("/pcp/"+code), mh.SHA2_256, -1)
+	h, err := mh.Sum([]byte(code), mh.SHA2_256, -1)
 	if err != nil {
 		return err
 	}

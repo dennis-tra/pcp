@@ -2,7 +2,6 @@ package mdns
 
 import (
 	"context"
-	"github.com/dennis-tra/pcp/pkg/discovery"
 	"net"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/whyrusleeping/mdns"
 
 	"github.com/dennis-tra/pcp/internal/log"
+	"github.com/dennis-tra/pcp/pkg/discovery"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 )
 
@@ -90,6 +90,19 @@ func (d *Discoverer) drainEntriesChan(entries chan *mdns.ServiceEntry, handler d
 			continue
 		}
 
+		// Filter out addresses that are public - only allow private ones.
+		routable := []ma.Multiaddr{}
+		for _, addr := range pi.Addrs {
+			if manet.IsPrivateAddr(addr) {
+				routable = append(routable, addr)
+			}
+		}
+
+		if len(routable) == 0 {
+			continue
+		}
+
+		pi.Addrs = routable
 		go handler.HandlePeer(pi)
 	}
 }

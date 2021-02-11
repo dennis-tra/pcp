@@ -3,6 +3,7 @@ package send
 import (
 	"context"
 	"github.com/dennis-tra/pcp/internal/log"
+	"io/ioutil"
 
 	"github.com/dennis-tra/pcp/pkg/dht"
 	pcpdiscovery "github.com/dennis-tra/pcp/pkg/discovery"
@@ -34,7 +35,7 @@ func InitNode(ctx context.Context) (*Node, error) {
 	}
 
 	node := &Node{Node: h, advertisers: advertisers}
-	node.SetStreamHandler("/pcp/provide-request", node.onProvideRequest)
+	node.SetStreamHandler("/pcp", node.onProvideRequest)
 
 	return node, nil
 }
@@ -42,6 +43,7 @@ func InitNode(ctx context.Context) (*Node, error) {
 // Advertise asynchronously advertises the given code through the means of all
 // registered advertisers. Currently these are multicast DNS and DHT.
 func (n *Node) Advertise(ctx context.Context, code string) {
+	log.Debugln("Advertising:", code)
 	for _, advertiser := range n.advertisers {
 		go func(ad pcpdiscovery.Advertiser) {
 			if err := ad.Advertise(ctx, code); err != nil {
@@ -66,7 +68,30 @@ func (n *Node) Close() {
 }
 
 func (n *Node) onProvideRequest(s network.Stream) {
+	dat, err := ioutil.ReadAll(s)
+	if err != nil {
+		log.Errorln(err)
+		return
+	}
 
+	log.Infoln("received", string(dat))
+
+	if err = s.CloseRead(); err != nil {
+		log.Errorln(err)
+		return
+	}
+
+	log.Infoln("Send Hi Back!")
+	_, err = s.Write([]byte("Hi Back!"))
+	if err != nil {
+		log.Errorln(err)
+		return
+	}
+
+	if err = s.CloseWrite(); err != nil {
+		log.Errorln(err)
+		return
+	}
 }
 
 //func (n *Node) Transfer(ctx context.Context, pi peer.AddrInfo, filepath string) (bool, error) {

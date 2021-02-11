@@ -30,7 +30,6 @@ func (p *protocol) Bootstrap(ctx context.Context) error {
 
 	var err error
 	p.init.Do(func() {
-		log.Info("Bootstrap DHT...")
 
 		bootstrapPeers := []string{
 			"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
@@ -42,12 +41,14 @@ func (p *protocol) Bootstrap(ctx context.Context) error {
 		for _, bp := range bootstrapPeers {
 			ma, err := multiaddr.NewMultiaddr(bp)
 			if err != nil {
-				return
+				log.Errorln(err)
+				continue
 			}
 
 			peerInfo, err := peer.AddrInfoFromP2pAddr(ma)
 			if err != nil {
-				return
+				log.Errorln(err)
+				continue
 			}
 
 			wg.Add(1)
@@ -60,8 +61,6 @@ func (p *protocol) Bootstrap(ctx context.Context) error {
 		}
 
 		wg.Wait()
-
-		log.Infoln("Bootstrap DHT Done!")
 	})
 
 	return err

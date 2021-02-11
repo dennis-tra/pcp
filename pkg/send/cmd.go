@@ -3,6 +3,8 @@ package send
 import (
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -51,13 +53,23 @@ func Action(c *cli.Context) error {
 	}
 	defer local.Close()
 
-	// Print code
-	code := local.ID().String()
-	log.Infoln("Code is: ", code)
-	log.Infoln("On the other machine run:\tpcp receive", code)
+	// Get Transfer code
+	code, err := local.TransferCode()
+	if err != nil {
+		return err
+	}
+
+	log.Infoln("Code is: ", strings.Join(code, "-"))
+	log.Infoln("On the other machine run:\n\tpcp receive", strings.Join(code, "-"))
+
+	// Get channel ID
+	chanID, err := local.ChannelID()
+	if err != nil {
+		return err
+	}
 
 	// Broadcast the code to be found by peers.
-	local.Advertise(ctx, code)
+	local.Advertise(ctx, local.AdvertiseIdentifier(time.Now(), chanID))
 
 	// Wait for the user to stop the tool
 	term.Wait(ctx)
