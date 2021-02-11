@@ -36,13 +36,10 @@ type Node struct {
 	code    []string // transfer integers from the other peer
 	stateLk sync.RWMutex
 	state   nodeState
-
-	shutdown chan struct{}
 }
 
 func InitNode(ctx context.Context, code []string) (*Node, error) {
 
-	log.Debugln("Starting local node to receive data for", code)
 	node, err := pcpnode.Init(ctx)
 	if err != nil {
 		return nil, err
@@ -103,13 +100,13 @@ func (n *Node) StopDiscovering() {
 	wg.Wait()
 }
 
-func (n *Node) Shutdown(err error) {
-	log.Debugln("Shutting down receive node")
-	for _, discoverer := range n.discoverers {
-		discoverer.Stop()
-	}
-	//n.shutdown <- err
-	//close(n.shutdown)
+func (n *Node) Shutdown() {
+	n.StopDiscovering()
+
+	n.UnregisterPushRequestHandler()
+	n.UnregisterTransferHandler()
+
+	n.Node.Shutdown()
 }
 
 // HandlePeer is called async from the discoverers. It's okay to have long running tasks here.
@@ -147,10 +144,10 @@ func (n *Node) HandlePeer(info peer.AddrInfo) {
 		}
 	}
 
-	log.Debugln("Connecting to peer", info.ID)
 	err = n.Connect(ctx, info)
 	if err != nil {
-		log.Errorln(err)
+		// stale entry in DHT?
+		// log.Debugln(err)
 		return
 	}
 
@@ -216,7 +213,7 @@ func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {
 
 		// Reject the file transfer
 		if input == "n" {
-			go n.Shutdown(nil)
+			go n.Shutdown()
 			return false, nil
 		}
 
@@ -229,7 +226,7 @@ func (n *Node) TransferFinishHandler(size int64) chan int64 {
 	go func() {
 		var received int64
 		select {
-		case <-n.shutdown:
+		case <-n.Done():
 			return
 		case received = <-done:
 		}
@@ -240,7 +237,7 @@ func (n *Node) TransferFinishHandler(size int64) chan int64 {
 			log.Infoln("WARNING: Only received %d of %d bytes!", received, size)
 		}
 
-		n.shutdown <- nil
+		n.Shutdown()
 	}()
 	return done
 }

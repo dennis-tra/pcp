@@ -49,11 +49,12 @@ func Action(c *cli.Context) error {
 		return fmt.Errorf("list of words must be exactly 4")
 	}
 
+	log.Debugln("Looking for peer... (this can take up to a minute)")
 	local, err := InitNode(ctx, tcode)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("failed to initialize node"))
 	}
-	defer local.Close()
+	defer local.Shutdown()
 
 	chanID, err := words.ToInt(tcode[0])
 	if err != nil {
@@ -64,9 +65,12 @@ func Action(c *cli.Context) error {
 	local.Discover(ctx, local.AdvertiseIdentifier(time.Now(), chanID))
 
 	// Wait for the user to stop the tool
-	term.Wait(ctx)
-
-	return nil
+	select {
+	case <-term.Wait(ctx):
+		return nil
+	case <-local.Done():
+		return nil
+	}
 }
 
 func printInformation(data *p2p.PushRequest) {

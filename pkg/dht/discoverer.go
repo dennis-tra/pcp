@@ -2,8 +2,6 @@ package dht
 
 import (
 	"context"
-	"github.com/dennis-tra/pcp/internal/log"
-
 	"github.com/ipfs/go-cid"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
@@ -49,7 +47,6 @@ func (d *Discoverer) Discover(ctx context.Context, code string, handler discover
 
 		queryDone := make(chan struct{})
 		go func() {
-			log.Infoln("Finding Providers async for", code)
 			for pi := range d.DHT.FindProvidersAsync(ctx, cid.NewCidV1(cid.Raw, h), 100) {
 				// Filter out addresses that are local - only allow public ones.
 				routable := []ma.Multiaddr{}

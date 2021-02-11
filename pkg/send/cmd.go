@@ -55,7 +55,7 @@ func Action(c *cli.Context) error {
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("failed to initialize node"))
 	}
-	defer local.Close()
+	defer local.Shutdown()
 
 	log.Infoln("Code is: ", strings.Join(local.TransferCode, "-"))
 	log.Infoln("On the other machine run:\n\tpcp receive", strings.Join(local.TransferCode, "-"))
@@ -64,7 +64,10 @@ func Action(c *cli.Context) error {
 	local.Advertise(ctx, local.AdvertiseIdentifier(time.Now(), local.ChannelID))
 
 	// Wait for the user to stop the tool
-	term.Wait(ctx)
+	select {
+	case <-term.Wait(ctx):
+	case <-local.Done():
+	}
 
 	return nil
 }

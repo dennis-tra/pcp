@@ -50,9 +50,8 @@ func (a *Advertiser) Advertise(ctx context.Context, code string) error {
 			pctx, cancel := context.WithTimeout(cancelCtx, 60*time.Second)
 			defer cancel()
 
-			log.Infoln("Advertising async for", code)
 			err = a.DHT.Provide(pctx, cid.NewCidV1(cid.Raw, h), true)
-			if err != nil && err != context.Canceled {
+			if err != nil && err != context.Canceled && err != context.DeadlineExceeded {
 				log.Warningln("Error providing", err)
 			}
 

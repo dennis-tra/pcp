@@ -77,6 +77,14 @@ func InitNode(ctx context.Context, filepath string) (*Node, error) {
 	return node, nil
 }
 
+func (n *Node) Shutdown() {
+	n.StopAdvertising()
+
+	n.UnregisterKeyExchangeHandler()
+
+	n.Node.Shutdown()
+}
+
 // Advertise asynchronously advertises the given code through the means of all
 // registered advertisers. Currently these are multicast DNS and DHT.
 func (n *Node) Advertise(ctx context.Context, code string) {
@@ -102,21 +110,17 @@ func (n *Node) StopAdvertising() {
 	wg.Wait()
 }
 
-// Close stops all advertisers from broadcasting that we are providing
-// the file we want to send and closes the active node.
-func (n *Node) Close() {
-	n.StopAdvertising()
-
-	if err := n.Node.Close(); err != nil {
-		log.Warningln("Error closing node", err)
-	}
-}
-
-func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) error {
+func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
 	// TODO: Prevent calling this twice
 	n.UnregisterKeyExchangeHandler()
 	n.StopAdvertising()
-	return n.Transfer(context.Background(), peerID)
+
+	err := n.Transfer(context.Background(), peerID)
+	if err != nil {
+		log.Warningln("Error transferring file", err)
+	}
+
+	n.Shutdown()
 }
 
 func (n *Node) Transfer(ctx context.Context, peerID peer.ID) error {

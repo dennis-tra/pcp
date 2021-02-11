@@ -35,7 +35,7 @@ type PakeServerProtocol struct {
 }
 
 type KeyExchangeHandler interface {
-	HandleSuccessfulKeyExchange(peerID peer.ID) error
+	HandleSuccessfulKeyExchange(peerID peer.ID)
 }
 
 func NewPakeServerProtocol(node *Node, pw []byte) *PakeServerProtocol {
@@ -59,7 +59,6 @@ func (p *PakeServerProtocol) UnregisterKeyExchangeHandler() {
 func (p *PakeServerProtocol) onKeyExchange(s network.Stream) {
 	defer s.Close()
 
-	log.Infoln()
 	log.Infof("\rExchanging Keys...")
 
 	// pick an elliptic curve
@@ -151,19 +150,12 @@ func (p *PakeServerProtocol) onKeyExchange(s network.Stream) {
 	log.Infoln("Done!")
 
 	p.lk.RLock()
-	f := p.keh.HandleSuccessfulKeyExchange
-	p.lk.RUnlock()
-
-	if f == nil {
+	defer p.lk.RUnlock()
+	if p.keh == nil {
 		return
 	}
 
-	if err = f(s.Conn().RemotePeer()); err != nil {
-		log.Warningln(err)
-		return
-	} else {
-		log.Infoln("Successfully sent file")
-	}
+	go p.keh.HandleSuccessfulKeyExchange(s.Conn().RemotePeer())
 }
 
 // PakeClientProtocol .
@@ -176,7 +168,6 @@ func NewPakeClientProtocol(node *Node, pw []byte) *PakeClientProtocol {
 }
 
 func (p *PakeClientProtocol) StartKeyExchange(ctx context.Context, peerID peer.ID) ([]byte, error) {
-	log.Infoln()
 	log.Infof("\rExchanging Keys...")
 	s, err := p.node.NewStream(ctx, peerID, ProtocolPake)
 	if err != nil {

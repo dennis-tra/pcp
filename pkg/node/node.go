@@ -30,13 +30,15 @@ import (
 type Node struct {
 	host.Host
 	*PushProtocol
-	*PakeServerProtocol
 	*TransferProtocol
 
 	authenticatedPeers sync.Map
 
 	// DHT is an accessor that is needed in the DHT discoverer/advertiser.
 	DHT *kaddht.IpfsDHT
+
+	//
+	done chan struct{}
 }
 
 // Init creates a new, fully initialized node with the given options.
@@ -56,6 +58,7 @@ func Init(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
 
 	node := &Node{
 		authenticatedPeers: sync.Map{},
+		done:               make(chan struct{}),
 	}
 	node.PushProtocol = NewPushProtocol(node)
 	node.TransferProtocol = NewTransferProtocol(node)
@@ -88,6 +91,22 @@ func (n *Node) AddAuthenticatedPeer(peerID peer.ID) {
 func (n *Node) IsAuthenticated(peerID peer.ID) bool {
 	_, found := n.authenticatedPeers.Load(peerID)
 	return found
+}
+
+func (n *Node) Shutdown() {
+	if err := n.Host.Close(); err != nil {
+		log.Warningln("error closing node", err)
+	}
+
+	select {
+	case n.done <- struct{}{}:
+	default:
+	}
+}
+
+func (n *Node) Done() chan struct{} {
+	// TODO: make it impossible to close this chan from extern
+	return n.done
 }
 
 // AdvertiseIdentifier returns the string, that we use to advertise
@@ -198,7 +217,6 @@ func (n *Node) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
 // it into the protobuf object. It also verifies the authenticity of the message.
 // Read closes the stream for reading but leaves it open for writing.
 func (n *Node) Read(s network.Stream, data p2p.HeaderMessage) error {
-	log.Debugln("Reading bytes:", data)
 
 	defer s.CloseRead()
 	buf, err := ioutil.ReadAll(s)
