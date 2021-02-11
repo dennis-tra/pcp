@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 
 	"github.com/dennis-tra/pcp/internal/log"
@@ -16,17 +15,15 @@ import (
 )
 
 type TransferHandler struct {
-	peerID   peer.ID
 	filename string
 	size     int64
 	cid      []byte
 	done     chan int64
 }
 
-func NewTransferHandler(peerID peer.ID, filename string, size int64, cid []byte, done chan int64) (*TransferHandler, error) {
+func NewTransferHandler(filename string, size int64, cid []byte, done chan int64) (*TransferHandler, error) {
 
 	th := &TransferHandler{
-		peerID:   peerID,
 		filename: filename,
 		size:     size,
 		cid:      cid,
@@ -81,8 +78,4 @@ func (th *TransferHandler) HandleTransfer(src io.Reader) {
 
 func (th *TransferHandler) GetLimit() int64 {
 	return th.size
-}
-
-func (th *TransferHandler) GetPeerID() peer.ID {
-	return th.peerID
 }

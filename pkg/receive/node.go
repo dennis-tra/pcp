@@ -1,8 +1,9 @@
 package receive
 
 import (
+	"bufio"
 	"context"
-	"encoding/hex"
+	"github.com/dennis-tra/pcp/internal/format"
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/dht"
 	pcpdiscovery "github.com/dennis-tra/pcp/pkg/discovery"
@@ -10,6 +11,9 @@ import (
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
 	"github.com/dennis-tra/pcp/pkg/words"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/pkg/errors"
+	"os"
+	"strings"
 	"sync"
 )
 
@@ -32,6 +36,8 @@ type Node struct {
 	code    []string // transfer integers from the other peer
 	stateLk sync.RWMutex
 	state   nodeState
+
+	shutdown chan struct{}
 }
 
 func InitNode(ctx context.Context, code []string) (*Node, error) {
@@ -61,10 +67,6 @@ func InitNode(ctx context.Context, code []string) (*Node, error) {
 	n.RegisterPushRequestHandler(n)
 
 	return n, nil
-}
-
-func (n *Node) HandlePushRequest(*p2p.PushRequest) (bool, error) {
-	return true, nil
 }
 
 func (n *Node) setState(state nodeState) nodeState {
@@ -153,113 +155,92 @@ func (n *Node) HandlePeer(info peer.AddrInfo) {
 	}
 
 	// Negotiate PAKE
-	key, err := n.StartKeyExchange(ctx, info.ID)
+	_, err = n.StartKeyExchange(ctx, info.ID)
 	if err != nil {
 		log.Errorln(err)
 		return
 	}
 
-	log.Infoln("Key Exchanged ", hex.EncodeToString(key))
-
 	// We're authenticated so can initiate a transfer
 	if n.getState() == connected {
-		log.Debugln("Connected and authenticated with a different node but are already connected with another.")
+		log.Debugln("already connected and authenticated with another node")
 		return
 	}
 	n.setState(connected)
 
 	// Stop the discovering process as we have found the valid peer
 	n.StopDiscovering()
-
-	// Ask the user for acceptance
 }
 
-//func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {
-//	if n.busy.Load() {
-//		return false, nil
-//	}
-//	n.busy.Store(true)
-//
-//	log.Infof("Sending request: %s (%s)\n", pr.Filename, format.Bytes(pr.Size))
-//	for {
-//		log.Infof("Do you want to receive this file? [y,n,i,q,?] ")
-//		scanner := bufio.NewScanner(os.Stdin)
-//		if !scanner.Scan() {
-//			return true, errors.Wrap(scanner.Err(), "failed reading from stdin")
-//		}
-//
-//		// sanitize user input
-//		input := strings.ToLower(strings.TrimSpace(scanner.Text()))
-//
-//		// Empty input, user just pressed enter => do nothing and prompt again
-//		if input == "" {
-//			continue
-//		}
-//
-//		// Quit the process
-//		if input == "q" {
-//			go n.Shutdown(nil)
-//			return false, nil
-//		}
-//
-//		// Print the help text and prompt again
-//		if input == "?" {
-//			help()
-//			continue
-//		}
-//
-//		// Print information about the send request
-//		if input == "i" {
-//			printInformation(pr)
-//			continue
-//		}
-//
-//		// Accept the file transfer
-//		if input == "y" {
-//
-//			peerID, err := pr.PeerID()
-//			if err != nil {
-//				return true, err
-//			}
-//
-//			done := n.TransferFinishHandler(pr.Size)
-//			th, err := NewTransferHandler(peerID, pr.Filename, pr.Size, pr.Cid, done)
-//			if err != nil {
-//				return true, err
-//			}
-//			n.RegisterTransferHandler(th)
-//
-//			return true, nil
-//		}
-//
-//		// Reject the file transfer
-//		if input == "n" {
-//			n.busy.Store(false)
-//			log.Infoln("Ready to receive files... (cancel with ctrl+c)")
-//			return false, nil
-//		}
-//
-//		log.Infoln("Invalid input")
-//	}
-//}
-//
-//func (n *Node) TransferFinishHandler(size int64) chan int64 {
-//	done := make(chan int64)
-//	go func() {
-//		var received int64
-//		select {
-//		case received = <-done:
-//		case <-n.shutdown:
-//			return
-//		}
-//
-//		if received == size {
-//			log.Infoln("Successfully received file!")
-//		} else {
-//			log.Infoln("WARNING: Only received %d of %d bytes!", received, size)
-//		}
-//
-//		n.shutdown <- nil
-//	}()
-//	return done
-//}
+func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {
+
+	log.Infof("File: %s (%s)\n", pr.Filename, format.Bytes(pr.Size))
+	for {
+		log.Infof("Do you want to receive this file? [y,n,i,?] ")
+		scanner := bufio.NewScanner(os.Stdin)
+		if !scanner.Scan() {
+			return true, errors.Wrap(scanner.Err(), "failed reading from stdin")
+		}
+
+		// sanitize user input
+		input := strings.ToLower(strings.TrimSpace(scanner.Text()))
+
+		// Empty input, user just pressed enter => do nothing and prompt again
+		if input == "" {
+			continue
+		}
+
+		// Print the help text and prompt again
+		if input == "?" {
+			help()
+			continue
+		}
+
+		// Print information about the send request
+		if input == "i" {
+			printInformation(pr)
+			continue
+		}
+
+		// Accept the file transfer
+		if input == "y" {
+			done := n.TransferFinishHandler(pr.Size)
+			th, err := NewTransferHandler(pr.Filename, pr.Size, pr.Cid, done)
+			if err != nil {
+				return true, err
+			}
+			n.RegisterTransferHandler(th)
+
+			return true, nil
+		}
+
+		// Reject the file transfer
+		if input == "n" {
+			go n.Shutdown(nil)
+			return false, nil
+		}
+
+		log.Infoln("Invalid input")
+	}
+}
+
+func (n *Node) TransferFinishHandler(size int64) chan int64 {
+	done := make(chan int64)
+	go func() {
+		var received int64
+		select {
+		case <-n.shutdown:
+			return
+		case received = <-done:
+		}
+
+		if received == size {
+			log.Infoln("Successfully received file!")
+		} else {
+			log.Infoln("WARNING: Only received %d of %d bytes!", received, size)
+		}
+
+		n.shutdown <- nil
+	}()
+	return done
+}

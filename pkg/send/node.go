@@ -2,15 +2,20 @@ package send
 
 import (
 	"context"
-	"encoding/hex"
+	"fmt"
+	"github.com/dennis-tra/pcp/pkg/progress"
+	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/pkg/errors"
+	"os"
+	"path"
+	"sync"
+
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/dht"
 	pcpdiscovery "github.com/dennis-tra/pcp/pkg/discovery"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 	"github.com/dennis-tra/pcp/pkg/words"
-	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"sync"
 )
 
 // Node encapsulates the logic of advertising and transmitting
@@ -21,6 +26,7 @@ type Node struct {
 	advertisers []pcpdiscovery.Advertiser
 
 	authPeers sync.Map
+	filepath  string
 
 	TransferCode []string
 	ChannelID    int16
@@ -28,7 +34,7 @@ type Node struct {
 
 // InitNode returns a fully configured node ready to start
 // advertising that we want to send a specific file.
-func InitNode(ctx context.Context) (*Node, error) {
+func InitNode(ctx context.Context, filepath string) (*Node, error) {
 
 	var err error
 	h, err := pcpnode.Init(ctx, libp2p.EnableAutoRelay())
@@ -41,7 +47,7 @@ func InitNode(ctx context.Context) (*Node, error) {
 		//mdns.NewAdvertiser(h),
 	}
 
-	node := &Node{Node: h, advertisers: advertisers, authPeers: sync.Map{}}
+	node := &Node{Node: h, advertisers: advertisers, authPeers: sync.Map{}, filepath: filepath}
 
 	pubKey, err := node.Peerstore().PubKey(node.ID()).Bytes()
 	if err != nil {
@@ -99,77 +105,64 @@ func (n *Node) StopAdvertising() {
 // Close stops all advertisers from broadcasting that we are providing
 // the file we want to send and closes the active node.
 func (n *Node) Close() {
-	for _, advertiser := range n.advertisers {
-		if err := advertiser.Stop(); err != nil {
-			log.Warningln("Error stopping advertiser:", err)
-		}
-	}
+	n.StopAdvertising()
 
 	if err := n.Node.Close(); err != nil {
 		log.Warningln("Error closing node", err)
 	}
 }
 
-func (n *Node) HandleKeyExchange(peerID peer.ID, key []byte) error {
-	log.Infoln("Key Exchange ", hex.EncodeToString(key))
-
+func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) error {
+	// TODO: Prevent calling this twice
+	n.UnregisterKeyExchangeHandler()
 	n.StopAdvertising()
-
-	n.authPeers.Store(peerID, key)
-
-	//n.PushProtocol.SendPushRequest()
-
-	return nil
+	return n.Transfer(context.Background(), peerID)
 }
 
-//func (n *Node) Transfer(ctx context.Context, pi peer.AddrInfo, filepath string) (bool, error) {
-//
-//	if err := n.Connect(ctx, pi); err != nil {
-//		return false, err
-//	}
-//
-//	c, err := calcContentID(filepath)
-//	if err != nil {
-//		return false, err
-//	}
-//
-//	f, err := os.Open(filepath)
-//	if err != nil {
-//		return false, err
-//	}
-//	defer f.Close()
-//
-//	fstat, err := f.Stat()
-//	if err != nil {
-//		return false, err
-//	}
-//
-//	log.Infof("Asking for confirmation... ")
-//
-//	accepted, err := n.SendPushRequest(ctx, pi.ID, path.Base(f.Name()), fstat.Size(), c)
-//	if err != nil {
-//		return false, err
-//	}
-//
-//	if !accepted {
-//		log.Infoln("Rejected!")
-//		return accepted, nil
-//	}
-//	log.Infoln("Accepted!")
-//
-//	pr := progress.NewReader(f)
-//
-//	var wg sync.WaitGroup
-//	wg.Add(1)
-//
-//	ctx, cancel := context.WithCancel(context.Background())
-//	go pcpnode.IndicateProgress(ctx, pr, path.Base(f.Name()), fstat.Size(), &wg)
-//	defer func() { cancel(); wg.Wait() }()
-//
-//	if _, err = n.Node.Transfer(ctx, pi.ID, pr); err != nil {
-//		return accepted, errors.Wrap(err, "could not transfer file to peer")
-//	}
-//
-//	log.Infoln("Successfully sent file!")
-//	return accepted, nil
-//}
+func (n *Node) Transfer(ctx context.Context, peerID peer.ID) error {
+
+	c, err := calcContentID(n.filepath)
+	if err != nil {
+		return err
+	}
+
+	f, err := os.Open(n.filepath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	fstat, err := f.Stat()
+	if err != nil {
+		return err
+	}
+
+	log.Infof("Asking for confirmation... ")
+
+	accepted, err := n.SendPushRequest(ctx, peerID, path.Base(f.Name()), fstat.Size(), c)
+	if err != nil {
+		return err
+	}
+
+	if !accepted {
+		log.Infoln("Rejected!")
+		return fmt.Errorf("rejected file transfer")
+	}
+	log.Infoln("Accepted!")
+
+	pr := progress.NewReader(f)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go pcpnode.IndicateProgress(ctx, pr, path.Base(f.Name()), fstat.Size(), &wg)
+	defer func() { cancel(); wg.Wait() }()
+
+	if _, err = n.Node.Transfer(ctx, peerID, pr); err != nil {
+		return errors.Wrap(err, "could not transfer file to peer")
+	}
+
+	log.Infoln("Successfully sent file!")
+	return nil
+}

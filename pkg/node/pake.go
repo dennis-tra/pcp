@@ -35,7 +35,7 @@ type PakeServerProtocol struct {
 }
 
 type KeyExchangeHandler interface {
-	HandleKeyExchange(peerID peer.ID, key []byte) error
+	HandleSuccessfulKeyExchange(peerID peer.ID) error
 }
 
 func NewPakeServerProtocol(node *Node, pw []byte) *PakeServerProtocol {
@@ -125,6 +125,8 @@ func (p *PakeServerProtocol) onKeyExchange(s network.Stream) {
 		return
 	}
 
+	p.node.AddAuthenticatedPeer(s.Conn().RemotePeer())
+
 	// We're done reading data from P
 	if err = s.CloseRead(); err != nil {
 		log.Warningln("error closing pake write", err)
@@ -149,10 +151,18 @@ func (p *PakeServerProtocol) onKeyExchange(s network.Stream) {
 	log.Infoln("Done!")
 
 	p.lk.RLock()
-	defer p.lk.RUnlock()
-	if err = p.keh.HandleKeyExchange(s.Conn().RemotePeer(), key); err != nil {
+	f := p.keh.HandleSuccessfulKeyExchange
+	p.lk.RUnlock()
+
+	if f == nil {
+		return
+	}
+
+	if err = f(s.Conn().RemotePeer()); err != nil {
 		log.Warningln(err)
 		return
+	} else {
+		log.Infoln("Successfully sent file")
 	}
 }
 
@@ -215,6 +225,8 @@ func (p *PakeClientProtocol) StartKeyExchange(ctx context.Context, peerID peer.I
 	if err := p.ReceiveVerifyProof(s, key); err != nil {
 		return nil, err
 	}
+
+	p.node.AddAuthenticatedPeer(s.Conn().RemotePeer())
 
 	// Send Q encryption proof
 	if err := p.SendProof(s, key); err != nil {

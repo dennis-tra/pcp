@@ -30,7 +30,6 @@ type TransferProtocol struct {
 type TransferHandler interface {
 	HandleTransfer(r io.Reader)
 	GetLimit() int64
-	GetPeerID() peer.ID
 }
 
 func (t *TransferProtocol) RegisterTransferHandler(th TransferHandler) {
@@ -55,6 +54,12 @@ func NewTransferProtocol(node *Node) *TransferProtocol {
 
 // onTransfer is called when the peer initiates a file transfer.
 func (t *TransferProtocol) onTransfer(s network.Stream) {
+
+	if !t.node.IsAuthenticated(s.Conn().RemotePeer()) {
+		log.Infoln("Received push request from unauthenticated peer")
+		return
+	}
+
 	t.lk.RLock()
 	defer func() {
 		if err := s.Close(); err != nil {
@@ -62,11 +67,6 @@ func (t *TransferProtocol) onTransfer(s network.Stream) {
 		}
 		t.lk.RUnlock()
 	}()
-
-	if t.th.GetPeerID() != s.Conn().RemotePeer() {
-		log.Infof("Transfer initiated from unexpected peer %q instead of %q\n", s.Conn().RemotePeer(), t.th.GetPeerID())
-		return
-	}
 
 	// Only read as much as we expect to avoid stuffing.
 	lr := io.LimitReader(s, t.th.GetLimit())

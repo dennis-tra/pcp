@@ -51,7 +51,7 @@ func Action(c *cli.Context) error {
 	}
 
 	// Initialize node
-	local, err := InitNode(ctx)
+	local, err := InitNode(ctx, filepath)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("failed to initialize node"))
 	}

@@ -88,9 +88,8 @@ func printInformation(data *p2p.PushRequest) {
 }
 
 func help() {
-	log.Infoln("y: accept and thus accept the file")
-	log.Infoln("n: reject the request to accept the file")
+	log.Infoln("y: accept the file transfer")
+	log.Infoln("n: reject the file transfer")
 	log.Infoln("i: show information about the sender and file to be received")
-	log.Infoln("q: quit pcp")
 	log.Infoln("?: this help message")
 }

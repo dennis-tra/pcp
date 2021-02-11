@@ -4,14 +4,11 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"go.uber.org/atomic"
 	"io"
 	"io/ioutil"
+	"sync"
 	"time"
 
-	"github.com/dennis-tra/pcp/internal/log"
-	"github.com/dennis-tra/pcp/pkg/config"
-	p2p "github.com/dennis-tra/pcp/pkg/pb"
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/libp2p/go-libp2p"
@@ -23,6 +20,10 @@ import (
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/multiformats/go-varint"
 	"github.com/pkg/errors"
+
+	"github.com/dennis-tra/pcp/internal/log"
+	"github.com/dennis-tra/pcp/pkg/config"
+	p2p "github.com/dennis-tra/pcp/pkg/pb"
 )
 
 // Node encapsulates the logic for sending and receiving messages.
@@ -30,13 +31,12 @@ type Node struct {
 	host.Host
 	*PushProtocol
 	*PakeServerProtocol
+	*TransferProtocol
+
+	authenticatedPeers sync.Map
 
 	// DHT is an accessor that is needed in the DHT discoverer/advertiser.
 	DHT *kaddht.IpfsDHT
-
-	// Busy represents that the node can't respond to queries that require user interaction.
-	// If the node is busy all these requests are answered with a rejection.
-	Busy *atomic.Bool
 }
 
 // Init creates a new, fully initialized node with the given options.
@@ -55,9 +55,10 @@ func Init(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
 	}
 
 	node := &Node{
-		Busy: atomic.NewBool(false),
+		authenticatedPeers: sync.Map{},
 	}
 	node.PushProtocol = NewPushProtocol(node)
+	node.TransferProtocol = NewTransferProtocol(node)
 
 	key, err := conf.Identity.PrivateKey()
 	if err != nil {
@@ -78,6 +79,15 @@ func Init(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
 	}
 
 	return node, nil
+}
+
+func (n *Node) AddAuthenticatedPeer(peerID peer.ID) {
+	n.authenticatedPeers.Store(peerID, struct{}{})
+}
+
+func (n *Node) IsAuthenticated(peerID peer.ID) bool {
+	_, found := n.authenticatedPeers.Load(peerID)
+	return found
 }
 
 // AdvertiseIdentifier returns the string, that we use to advertise
