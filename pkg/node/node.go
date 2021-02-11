@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"go.uber.org/atomic"
 	"io"
 	"io/ioutil"
 	"sync"
@@ -39,6 +40,8 @@ type Node struct {
 
 	//
 	done chan struct{}
+
+	stopped *atomic.Bool
 }
 
 // Init creates a new, fully initialized node with the given options.
@@ -59,6 +62,7 @@ func Init(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
 	node := &Node{
 		authenticatedPeers: sync.Map{},
 		done:               make(chan struct{}),
+		stopped:            atomic.NewBool(false),
 	}
 	node.PushProtocol = NewPushProtocol(node)
 	node.TransferProtocol = NewTransferProtocol(node)
@@ -93,15 +97,26 @@ func (n *Node) IsAuthenticated(peerID peer.ID) bool {
 	return found
 }
 
+func (n *Node) Ctx() context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-n.done
+		cancel()
+	}()
+	return ctx
+}
+
 func (n *Node) Shutdown() {
+	if n.stopped.Load() {
+		return
+	}
+	n.stopped.Store(true)
+
 	if err := n.Host.Close(); err != nil {
 		log.Warningln("error closing node", err)
 	}
 
-	select {
-	case n.done <- struct{}{}:
-	default:
-	}
+	close(n.done)
 }
 
 func (n *Node) Done() chan struct{} {

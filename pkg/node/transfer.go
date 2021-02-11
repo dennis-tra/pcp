@@ -96,6 +96,7 @@ func (t *TransferProtocol) Transfer(ctx context.Context, peerID peer.ID, payload
 }
 
 func IndicateProgress(ctx context.Context, bCounter progress.Counter, filename string, size int64, wg *sync.WaitGroup) {
+
 	ticker := progress.NewTicker(ctx, bCounter, size, 500*time.Millisecond)
 	tWidth := commons.TerminalWidth()
 

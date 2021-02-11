@@ -71,6 +71,7 @@ func (p *PakeServerProtocol) onKeyExchange(s network.Stream) {
 		return
 	}
 
+	log.Infof("\rReading bytes from peer...")
 	// Read init data from P
 	dat, err := p.node.ReadBytes(s)
 	if err != nil {
@@ -78,18 +79,21 @@ func (p *PakeServerProtocol) onKeyExchange(s network.Stream) {
 		return
 	}
 
+	log.Infof("\rUpdate internal state...")
 	// Use init data from P
 	if err = Q.Update(dat); err != nil {
 		log.Warningln(err)
 		return
 	}
 
+	log.Infof("\rSend calculated data...")
 	// Send P calculated Data
 	if _, err = p.node.WriteBytes(s, Q.Bytes()); err != nil {
 		log.Warningln(err)
 		return
 	}
 
+	log.Infof("\rRead calculated data...")
 	// Read calculated data from P
 	dat, err = p.node.ReadBytes(s)
 	if err != nil {
@@ -97,6 +101,7 @@ func (p *PakeServerProtocol) onKeyExchange(s network.Stream) {
 		return
 	}
 
+	log.Infof("\rUpdate internal state...")
 	// Use calculated data from P
 	if err = Q.Update(dat); err != nil {
 		log.Warningln(err)
@@ -110,7 +115,7 @@ func (p *PakeServerProtocol) onKeyExchange(s network.Stream) {
 		return
 	}
 
-	log.Infof("\rAuthenticating Peer...")
+	log.Infof("\rAuthenticating Peer... Send Proof")
 
 	// Send P encryption proof
 	if err := p.SendProof(s, key); err != nil {
@@ -118,6 +123,7 @@ func (p *PakeServerProtocol) onKeyExchange(s network.Stream) {
 		return
 	}
 
+	log.Infof("\rAuthenticating Peer... Receive Proof")
 	// Read and verify encryption proof from P
 	if err := p.ReceiveVerifyProof(s, key); err != nil {
 		log.Warningln(err)

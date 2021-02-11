@@ -3,14 +3,12 @@ package receive
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/dennis-tra/pcp/pkg/term"
 	"github.com/dennis-tra/pcp/pkg/words"
-	"strings"
-	"time"
-
 	"github.com/ipfs/go-cid"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
+	"strings"
+	"time"
 
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/config"
@@ -49,7 +47,7 @@ func Action(c *cli.Context) error {
 		return fmt.Errorf("list of words must be exactly 4")
 	}
 
-	log.Debugln("Looking for peer... (this can take up to a minute)")
+	log.Debugf("Looking for peer %s... (this can take up to a minute)\n", c.Args().First())
 	local, err := InitNode(ctx, tcode)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("failed to initialize node"))
@@ -64,13 +62,13 @@ func Action(c *cli.Context) error {
 	// Search for identifier
 	local.Discover(ctx, local.AdvertiseIdentifier(time.Now(), chanID))
 
-	// Wait for the user to stop the tool
+	// Wait for the node to stop
 	select {
-	case <-term.Wait(ctx):
-		return nil
+	case <-ctx.Done():
 	case <-local.Done():
-		return nil
 	}
+
+	return nil
 }
 
 func printInformation(data *p2p.PushRequest) {

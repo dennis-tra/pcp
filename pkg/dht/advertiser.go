@@ -2,11 +2,13 @@ package dht
 
 import (
 	"context"
-	"github.com/dennis-tra/pcp/internal/log"
-	"github.com/ipfs/go-cid"
-	mh "github.com/multiformats/go-multihash"
+	manet "github.com/multiformats/go-multiaddr/net"
 	"time"
 
+	"github.com/ipfs/go-cid"
+	mh "github.com/multiformats/go-multihash"
+
+	"github.com/dennis-tra/pcp/internal/log"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 )
 
@@ -17,11 +19,7 @@ type Advertiser struct {
 }
 
 func NewAdvertiser(node *pcpnode.Node) *Advertiser {
-	return &Advertiser{
-		protocol: newProtocol(node),
-		shutdown: make(chan struct{}),
-		done:     make(chan struct{}),
-	}
+	return &Advertiser{protocol: newProtocol(node)}
 }
 
 func (a *Advertiser) Advertise(ctx context.Context, code string) error {
@@ -41,13 +39,33 @@ func (a *Advertiser) Advertise(ctx context.Context, code string) error {
 
 	for {
 		queryDone := make(chan struct{})
-		cancelCtx, cancel := context.WithCancel(ctx)
-
+		cctx, cancel := context.WithCancel(ctx)
 		go func() {
+
+		CheckForPublicAddr:
+			hasPublicAddr := false
+			for _, addr := range a.Addrs() {
+				if manet.IsPublicAddr(addr) {
+					hasPublicAddr = true
+					break
+				}
+			}
+
+			if !hasPublicAddr {
+				select {
+				case <-ctx.Done():
+					close(queryDone)
+					return
+				case <-time.After(500 * time.Millisecond):
+					goto CheckForPublicAddr
+				}
+			}
+			log.Infoln("Got a public address -> advertising it!")
+
 			// this context requires a timeout; it determines how long the DHT looks for
 			// closest peers to the key/CID before it goes on to provide the record to them.
 			// Not setting a timeout here will make the DHT wander forever.
-			pctx, cancel := context.WithTimeout(cancelCtx, 60*time.Second)
+			pctx, cancel := context.WithTimeout(cctx, 60*time.Second)
 			defer cancel()
 
 			err = a.DHT.Provide(pctx, cid.NewCidV1(cid.Raw, h), true)
@@ -55,19 +73,22 @@ func (a *Advertiser) Advertise(ctx context.Context, code string) error {
 				log.Warningln("Error providing", err)
 			}
 
+			log.Infoln("Done advertising it!")
+
 			close(queryDone)
 		}()
 
 		select {
 		case <-queryDone:
+			cancel()
 			continue
 		case <-ctx.Done():
-			cancel()
-			return nil
 		case <-a.shutdown:
-			cancel()
-			return nil
 		}
+
+		cancel()
+		<-queryDone
+		return nil
 	}
 }
 

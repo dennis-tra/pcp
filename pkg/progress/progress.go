@@ -117,6 +117,7 @@ func NewTicker(ctx context.Context, counter Counter, size int64, d time.Duration
 		for {
 			select {
 			case <-ctx.Done():
+				return
 			case <-time.After(d):
 			}
 			progress := Progress{

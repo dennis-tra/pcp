@@ -15,7 +15,6 @@ import (
 
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/config"
-	"github.com/dennis-tra/pcp/pkg/term"
 )
 
 // Command holds the `send` subcommand configuration.
@@ -64,8 +63,9 @@ func Action(c *cli.Context) error {
 	local.Advertise(ctx, local.AdvertiseIdentifier(time.Now(), local.ChannelID))
 
 	// Wait for the user to stop the tool
+	// Wait for the node to stop
 	select {
-	case <-term.Wait(ctx):
+	case <-ctx.Done():
 	case <-local.Done():
 	}
 

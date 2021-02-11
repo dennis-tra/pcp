@@ -2,13 +2,13 @@ package dht
 
 import (
 	"context"
+	"github.com/dennis-tra/pcp/internal/log"
+	"github.com/dennis-tra/pcp/pkg/discovery"
+	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 	"github.com/ipfs/go-cid"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 	mh "github.com/multiformats/go-multihash"
-
-	"github.com/dennis-tra/pcp/pkg/discovery"
-	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 )
 
 type Discoverer struct {
@@ -18,17 +18,10 @@ type Discoverer struct {
 }
 
 func NewDiscoverer(node *pcpnode.Node) *Discoverer {
-	return &Discoverer{
-		protocol: newProtocol(node),
-		shutdown: make(chan struct{}),
-		done:     make(chan struct{}),
-	}
+	return &Discoverer{protocol: newProtocol(node)}
 }
 
 func (d *Discoverer) Discover(ctx context.Context, code string, handler discovery.PeerHandler) error {
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	if err := d.Bootstrap(ctx); err != nil {
 		return err
@@ -44,10 +37,11 @@ func (d *Discoverer) Discover(ctx context.Context, code string, handler discover
 	defer close(d.done)
 
 	for {
-
 		queryDone := make(chan struct{})
+		cctx, cancel := context.WithCancel(ctx)
 		go func() {
-			for pi := range d.DHT.FindProvidersAsync(ctx, cid.NewCidV1(cid.Raw, h), 100) {
+			for pi := range d.DHT.FindProvidersAsync(cctx, cid.NewCidV1(cid.Raw, h), 100) {
+
 				// Filter out addresses that are local - only allow public ones.
 				routable := []ma.Multiaddr{}
 				for _, addr := range pi.Addrs {
@@ -57,6 +51,7 @@ func (d *Discoverer) Discover(ctx context.Context, code string, handler discover
 				}
 
 				if len(routable) == 0 {
+					log.Infoln("Found peer that is not publicly accessible: ", pi.ID)
 					continue
 				}
 
@@ -68,12 +63,15 @@ func (d *Discoverer) Discover(ctx context.Context, code string, handler discover
 
 		select {
 		case <-queryDone:
+			cancel()
 			continue
-		case <-ctx.Done():
-			return nil
 		case <-d.shutdown:
-			return nil
+		case <-ctx.Done():
 		}
+
+		cancel()
+		<-queryDone
+		return nil
 	}
 }
 

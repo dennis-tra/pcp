@@ -3,19 +3,18 @@ package send
 import (
 	"context"
 	"fmt"
+	"github.com/dennis-tra/pcp/internal/log"
+	"github.com/dennis-tra/pcp/pkg/dht"
+	pcpdiscovery "github.com/dennis-tra/pcp/pkg/discovery"
+	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 	"github.com/dennis-tra/pcp/pkg/progress"
+	"github.com/dennis-tra/pcp/pkg/words"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"os"
 	"path"
 	"sync"
-
-	"github.com/dennis-tra/pcp/internal/log"
-	"github.com/dennis-tra/pcp/pkg/dht"
-	pcpdiscovery "github.com/dennis-tra/pcp/pkg/discovery"
-	pcpnode "github.com/dennis-tra/pcp/pkg/node"
-	"github.com/dennis-tra/pcp/pkg/words"
 )
 
 // Node encapsulates the logic of advertising and transmitting
@@ -96,6 +95,7 @@ func (n *Node) Advertise(ctx context.Context, code string) {
 		}(advertiser)
 	}
 }
+
 func (n *Node) StopAdvertising() {
 	var wg sync.WaitGroup
 	for _, advertiser := range n.advertisers {
@@ -115,7 +115,7 @@ func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
 	n.UnregisterKeyExchangeHandler()
 	n.StopAdvertising()
 
-	err := n.Transfer(context.Background(), peerID)
+	err := n.Transfer(peerID)
 	if err != nil {
 		log.Warningln("Error transferring file", err)
 	}
@@ -123,7 +123,7 @@ func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
 	n.Shutdown()
 }
 
-func (n *Node) Transfer(ctx context.Context, peerID peer.ID) error {
+func (n *Node) Transfer(peerID peer.ID) error {
 
 	c, err := calcContentID(n.filepath)
 	if err != nil {
@@ -143,7 +143,7 @@ func (n *Node) Transfer(ctx context.Context, peerID peer.ID) error {
 
 	log.Infof("Asking for confirmation... ")
 
-	accepted, err := n.SendPushRequest(ctx, peerID, path.Base(f.Name()), fstat.Size(), c)
+	accepted, err := n.SendPushRequest(n.Ctx(), peerID, path.Base(f.Name()), fstat.Size(), c)
 	if err != nil {
 		return err
 	}
@@ -159,7 +159,7 @@ func (n *Node) Transfer(ctx context.Context, peerID peer.ID) error {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(n.Ctx())
 	go pcpnode.IndicateProgress(ctx, pr, path.Base(f.Name()), fstat.Size(), &wg)
 	defer func() { cancel(); wg.Wait() }()
 

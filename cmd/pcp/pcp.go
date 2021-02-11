@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/urfave/cli/v2"
 
@@ -44,7 +47,17 @@ func main() {
 		},
 	}
 
-	err := app.Run(os.Args)
+	sigs := make(chan os.Signal, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
+	go func() {
+		<-sigs
+		signal.Stop(sigs)
+		cancel()
+	}()
+
+	err := app.RunContext(ctx, os.Args)
 	if err != nil {
 		log.Infof("error: %v\n", err)
 		os.Exit(1)

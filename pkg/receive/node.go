@@ -3,6 +3,13 @@ package receive
 import (
 	"bufio"
 	"context"
+	"os"
+	"strings"
+	"sync"
+
+	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/pkg/errors"
+
 	"github.com/dennis-tra/pcp/internal/format"
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/dht"
@@ -10,11 +17,6 @@ import (
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
 	"github.com/dennis-tra/pcp/pkg/words"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/pkg/errors"
-	"os"
-	"strings"
-	"sync"
 )
 
 type nodeState uint8
@@ -123,7 +125,6 @@ func (n *Node) HandlePeer(info peer.AddrInfo) {
 		return
 	}
 
-	ctx := context.Background()
 	pubKey, err := n.Peerstore().PubKey(info.ID).Bytes()
 	if err != nil {
 		log.Errorln(err)
@@ -144,7 +145,7 @@ func (n *Node) HandlePeer(info peer.AddrInfo) {
 		}
 	}
 
-	err = n.Connect(ctx, info)
+	err = n.Connect(n.Ctx(), info)
 	if err != nil {
 		// stale entry in DHT?
 		// log.Debugln(err)
@@ -152,7 +153,7 @@ func (n *Node) HandlePeer(info peer.AddrInfo) {
 	}
 
 	// Negotiate PAKE
-	_, err = n.StartKeyExchange(ctx, info.ID)
+	_, err = n.StartKeyExchange(n.Ctx(), info.ID)
 	if err != nil {
 		log.Errorln(err)
 		return
@@ -234,7 +235,7 @@ func (n *Node) TransferFinishHandler(size int64) chan int64 {
 		if received == size {
 			log.Infoln("Successfully received file!")
 		} else {
-			log.Infoln("WARNING: Only received %d of %d bytes!", received, size)
+			log.Infof("WARNING: Only received %d of %d bytes!\n", received, size)
 		}
 
 		n.Shutdown()
