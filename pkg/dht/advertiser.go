@@ -12,10 +12,16 @@ import (
 
 type Advertiser struct {
 	*protocol
+	shutdown chan struct{}
+	done     chan struct{}
 }
 
 func NewAdvertiser(node *pcpnode.Node) *Advertiser {
-	return &Advertiser{newProtocol(node)}
+	return &Advertiser{
+		protocol: newProtocol(node),
+		shutdown: make(chan struct{}),
+		done:     make(chan struct{}),
+	}
 }
 
 func (a *Advertiser) Advertise(ctx context.Context, code string) error {
@@ -29,22 +35,52 @@ func (a *Advertiser) Advertise(ctx context.Context, code string) error {
 		return err
 	}
 
-	// this context requires a timeout; it determines how long the DHT looks for
-	// closest peers to the key/CID before it goes on to provide the record to them.
-	// Not setting a timeout here will make the DHT wander forever.
-	pctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
+	a.shutdown = make(chan struct{})
+	a.done = make(chan struct{})
+	defer close(a.done)
 
-	log.Debugln("Advertise: ", cid.NewCidV1(cid.Raw, h).String())
-	err = a.DHT.Provide(pctx, cid.NewCidV1(cid.Raw, h), true)
-	log.Debugln("Advertise Done!")
-	if err != nil {
-		return err
+	for {
+		queryDone := make(chan struct{})
+		cancelCtx, cancel := context.WithCancel(ctx)
+
+		go func() {
+			// this context requires a timeout; it determines how long the DHT looks for
+			// closest peers to the key/CID before it goes on to provide the record to them.
+			// Not setting a timeout here will make the DHT wander forever.
+			pctx, cancel := context.WithTimeout(cancelCtx, 60*time.Second)
+			defer cancel()
+
+			err = a.DHT.Provide(pctx, cid.NewCidV1(cid.Raw, h), true)
+			if err != nil && err != context.Canceled {
+				log.Warningln("Error providing", err)
+			}
+
+			close(queryDone)
+		}()
+
+		select {
+		case <-queryDone:
+			continue
+		case <-ctx.Done():
+			cancel()
+			return nil
+		case <-a.shutdown:
+			cancel()
+			return nil
+		}
 	}
-
-	return nil
 }
 
 func (a *Advertiser) Stop() error {
+	if a.shutdown == nil {
+		return nil
+	}
+
+	close(a.shutdown)
+	<-a.done
+
+	a.shutdown = nil
+	a.done = nil
+
 	return nil
 }

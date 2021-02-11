@@ -1,11 +1,15 @@
 package send
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/ipfs/go-cid"
+	mh "github.com/multiformats/go-multihash"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 
@@ -53,23 +57,11 @@ func Action(c *cli.Context) error {
 	}
 	defer local.Close()
 
-	// Get Transfer code
-	code, err := local.TransferCode()
-	if err != nil {
-		return err
-	}
-
-	log.Infoln("Code is: ", strings.Join(code, "-"))
-	log.Infoln("On the other machine run:\n\tpcp receive", strings.Join(code, "-"))
-
-	// Get channel ID
-	chanID, err := local.ChannelID()
-	if err != nil {
-		return err
-	}
+	log.Infoln("Code is: ", strings.Join(local.TransferCode, "-"))
+	log.Infoln("On the other machine run:\n\tpcp receive", strings.Join(local.TransferCode, "-"))
 
 	// Broadcast the code to be found by peers.
-	local.Advertise(ctx, local.AdvertiseIdentifier(time.Now(), chanID))
+	local.Advertise(ctx, local.AdvertiseIdentifier(time.Now(), local.ChannelID))
 
 	// Wait for the user to stop the tool
 	term.Wait(ctx)
@@ -99,4 +91,25 @@ func help() {
 	log.Infoln("r: refresh peer list")
 	log.Infoln("q: quit pcp")
 	log.Infoln("?: this help message")
+}
+
+func calcContentID(filepath string) (cid.Cid, error) {
+
+	f, err := os.Open(filepath)
+	if err != nil {
+		return cid.Cid{}, err
+	}
+	defer f.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, f); err != nil {
+		return cid.Cid{}, err
+	}
+
+	mhash, err := mh.Encode(hasher.Sum(nil), mh.SHA2_256)
+	if err != nil {
+		return cid.Cid{}, err
+	}
+
+	return cid.NewCidV1(cid.Raw, mhash), nil
 }

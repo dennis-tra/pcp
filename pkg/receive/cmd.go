@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/dennis-tra/pcp/pkg/term"
-	"github.com/tyler-smith/go-bip39/wordlists"
+	"github.com/dennis-tra/pcp/pkg/words"
 	"strings"
 	"time"
 
@@ -43,18 +43,19 @@ func Action(c *cli.Context) error {
 		return errors.Wrap(err, "failed loading configuration")
 	}
 
-	local, err := InitNode(ctx)
+	// TODO: make words count configurable
+	tcode := strings.Split(c.Args().First(), "-") // transfer code
+	if len(tcode) != 4 {
+		return fmt.Errorf("list of words must be exactly 4")
+	}
+
+	local, err := InitNode(ctx, tcode)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("failed to initialize node"))
 	}
 	defer local.Close()
 
-	words := strings.Split(c.Args().First(), "-")
-	if len(words) != 4 {
-		return fmt.Errorf("list of words must be exactly 4")
-	}
-
-	chanID, err := intForWord(words[0])
+	chanID, err := words.ToInt(tcode[0])
 	if err != nil {
 		return err
 	}
@@ -66,15 +67,6 @@ func Action(c *cli.Context) error {
 	term.Wait(ctx)
 
 	return nil
-}
-
-func intForWord(word string) (int, error) {
-	for i, w := range wordlists.English {
-		if w == word {
-			return i, nil
-		}
-	}
-	return 0, fmt.Errorf("word not found in list")
 }
 
 func printInformation(data *p2p.PushRequest) {

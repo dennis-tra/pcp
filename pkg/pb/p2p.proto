@@ -20,10 +20,10 @@ message Header {
   bytes signature = 5;
 }
 
-// PushRequest is sent to the receiving peer for acceptance.
+// PullRequest is sent to the receiving peer for acceptance.
 // It contains basic information about the data that is
 // about to be transmitted.
-message PushRequest {
+message PullRequest {
 
   Header header = 1;
 
@@ -39,10 +39,10 @@ message PushRequest {
   bytes cid = 4;
 }
 
-// PushResponse is sent as a reply to the PushRequest message.
+// PullResponse is sent as a reply to the PullRequest message.
 // It just indicates if the receiving peer is willing to
 // accept the file.
-message PushResponse {
+message PullResponse {
 
   Header header = 1;
 

@@ -2,45 +2,107 @@ package receive
 
 import (
 	"context"
+	"encoding/hex"
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/dht"
 	pcpdiscovery "github.com/dennis-tra/pcp/pkg/discovery"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
+	p2p "github.com/dennis-tra/pcp/pkg/pb"
+	"github.com/dennis-tra/pcp/pkg/words"
 	"github.com/libp2p/go-libp2p-core/peer"
-	"io/ioutil"
+	"sync"
+)
+
+type nodeState uint8
+
+const (
+	idle = iota
+	discovering
+	connected
 )
 
 type Node struct {
 	*pcpnode.Node
+	*pcpnode.PakeClientProtocol
+
 	discoverers []pcpdiscovery.Discoverer
+
+	discoveredPeers sync.Map
+
+	code    []string // transfer integers from the other peer
+	stateLk sync.RWMutex
+	state   nodeState
 }
 
-func InitNode(ctx context.Context) (*Node, error) {
+func InitNode(ctx context.Context, code []string) (*Node, error) {
 
+	log.Debugln("Starting local node to receive data for", code)
 	node, err := pcpnode.Init(ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	pw, err := words.ToBytes(code)
+	if err != nil {
+		return nil, err
+	}
+
 	n := &Node{
-		Node: node,
+		Node:            node,
+		code:            code,
+		discoveredPeers: sync.Map{},
 		discoverers: []pcpdiscovery.Discoverer{
 			dht.NewDiscoverer(node),
 			//mdns.NewDiscoverer(node),
 		},
+		PakeClientProtocol: pcpnode.NewPakeClientProtocol(node, pw),
 	}
+
+	n.RegisterPushRequestHandler(n)
 
 	return n, nil
 }
 
+func (n *Node) HandlePushRequest(*p2p.PushRequest) (bool, error) {
+	return true, nil
+}
+
+func (n *Node) setState(state nodeState) nodeState {
+	n.stateLk.Lock()
+	defer n.stateLk.Unlock()
+	n.state = state
+	return n.state
+}
+
+func (n *Node) getState() nodeState {
+	n.stateLk.RLock()
+	defer n.stateLk.RUnlock()
+	return n.state
+}
+
 func (n *Node) Discover(ctx context.Context, code string) {
-	log.Debugln("Discovering:", code)
+	n.setState(discovering)
 	for _, discoverer := range n.discoverers {
 		go discoverer.Discover(ctx, code, n)
 	}
 }
 
+func (n *Node) StopDiscovering() {
+	var wg sync.WaitGroup
+	for _, discoverer := range n.discoverers {
+		wg.Add(1)
+		go func(d pcpdiscovery.Discoverer) {
+			if err := d.Stop(); err != nil {
+				log.Warningln(err)
+			}
+			wg.Done()
+		}(discoverer)
+	}
+	wg.Wait()
+}
+
 func (n *Node) Shutdown(err error) {
+	log.Debugln("Shutting down receive node")
 	for _, discoverer := range n.discoverers {
 		discoverer.Stop()
 	}
@@ -48,45 +110,68 @@ func (n *Node) Shutdown(err error) {
 	//close(n.shutdown)
 }
 
+// HandlePeer is called async from the discoverers. It's okay to have long running tasks here.
 func (n *Node) HandlePeer(info peer.AddrInfo) {
-	log.Infoln("Found peer:", info)
-
-	err := n.Connect(context.Background(), info)
-	if err != nil {
-		log.Errorln(err)
-		return
-	}
-	s, err := n.NewStream(context.Background(), info.ID, "/pcp")
-	if err != nil {
-		log.Errorln(err)
+	if n.getState() != discovering {
+		log.Debugln("Received a peer from the discoverer although we're not discovering")
 		return
 	}
 
-	_, err = s.Write([]byte("Hi!"))
-	if err != nil {
-		log.Errorln(err)
+	// Check if we have already seen the peer and exit early to not connect again.
+	// TODO: Check if the multi addresses have changed
+	_, loaded := n.discoveredPeers.LoadOrStore(info.ID, info)
+	if loaded {
 		return
 	}
 
-	if err = s.CloseWrite(); err != nil {
-		log.Errorln(err)
-		return
-	}
-
-	_, err = ioutil.ReadAll(s)
+	ctx := context.Background()
+	pubKey, err := n.Peerstore().PubKey(info.ID).Bytes()
 	if err != nil {
 		log.Errorln(err)
 		return
 	}
 
-	if err = s.CloseRead(); err != nil {
+	// Check if the public key matches given words
+	code, err := words.FromBytes(pubKey)
+	if err != nil {
 		log.Errorln(err)
 		return
 	}
-}
 
-func (n *Node) Negotiate(info peer.AddrInfo) {
+	for i := range code {
+		if n.code[i] != code[i] {
+			log.Debugln("Pub Key of found peer does not match given word list")
+			return
+		}
+	}
 
+	log.Debugln("Connecting to peer", info.ID)
+	err = n.Connect(ctx, info)
+	if err != nil {
+		log.Errorln(err)
+		return
+	}
+
+	// Negotiate PAKE
+	key, err := n.StartKeyExchange(ctx, info.ID)
+	if err != nil {
+		log.Errorln(err)
+		return
+	}
+
+	log.Infoln("Key Exchanged ", hex.EncodeToString(key))
+
+	// We're authenticated so can initiate a transfer
+	if n.getState() == connected {
+		log.Debugln("Connected and authenticated with a different node but are already connected with another.")
+		return
+	}
+	n.setState(connected)
+
+	// Stop the discovering process as we have found the valid peer
+	n.StopDiscovering()
+
+	// Ask the user for acceptance
 }
 
 //func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {

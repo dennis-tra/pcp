@@ -13,8 +13,11 @@ require (
 	github.com/libp2p/go-libp2p-kad-dht v0.11.1
 	github.com/multiformats/go-multiaddr v0.3.1
 	github.com/multiformats/go-multihash v0.0.14
+	github.com/multiformats/go-varint v0.0.6
 	github.com/pkg/errors v0.9.1
+	github.com/schollz/pake v1.1.1
 	github.com/stretchr/testify v1.6.1
+	github.com/tscholl2/siec v0.0.0-20191122224205-8da93652b094 // indirect
 	github.com/tyler-smith/go-bip32 v1.0.0 // indirect
 	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/urfave/cli/v2 v2.3.0
