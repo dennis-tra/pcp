@@ -16,7 +16,7 @@ func NewDiscoverer(node *pcpnode.Node) *Discoverer {
 	return &Discoverer{protocol: newProtocol(node)}
 }
 
-func (d *Discoverer) Discover(code string, handler func(info peer.AddrInfo)) error {
+func (d *Discoverer) Discover(code string, handler pcpnode.PeerHandler) error {
 	if err := d.ServiceStarted(); err != nil {
 		return err
 	}
@@ -39,8 +39,14 @@ func (d *Discoverer) Discover(code string, handler func(info peer.AddrInfo)) err
 		) {
 			pi.Addrs = onlyPublic(pi.Addrs)
 			if isRoutable(pi) {
-				go handler(pi)
+				go handler.HandlePeer(pi)
 			}
+		}
+
+		select {
+		case <-d.SigShutdown():
+			return nil
+		default:
 		}
 	}
 }

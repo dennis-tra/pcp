@@ -41,7 +41,7 @@ type Node struct {
 }
 
 type Discoverer interface {
-	Discover(identifier string, handler func(info peer.AddrInfo)) error
+	Discover(identifier string, handler pcpnode.PeerHandler) error
 	Shutdown()
 }
 
@@ -89,7 +89,7 @@ func (n *Node) Discover(code string) {
 
 	for _, discoverer := range n.discoverers {
 		go func(d Discoverer) {
-			if err := d.Discover(code, n.HandlePeer); err != nil {
+			if err := d.Discover(code, n); err != nil {
 				log.Warningln(err)
 			}
 		}(discoverer)
@@ -135,6 +135,13 @@ func (n *Node) HandlePeer(info peer.AddrInfo) {
 		return
 	}
 
+	err := n.Connect(n.ServiceContext(), info)
+	if err != nil {
+		// stale entry in DHT?
+		// log.Debugln(err)
+		return
+	}
+
 	pubKey, err := n.Peerstore().PubKey(info.ID).Bytes()
 	if err != nil {
 		log.Errorln(err)
@@ -153,13 +160,6 @@ func (n *Node) HandlePeer(info peer.AddrInfo) {
 			log.Debugln("Pub Key of found peer does not match given word list")
 			return
 		}
-	}
-
-	err = n.Connect(n.ServiceContext(), info)
-	if err != nil {
-		// stale entry in DHT?
-		// log.Debugln(err)
-		return
 	}
 
 	// Negotiate PAKE

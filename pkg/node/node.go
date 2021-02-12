@@ -39,6 +39,10 @@ type Node struct {
 	DHT *kaddht.IpfsDHT
 }
 
+type PeerHandler interface {
+	HandlePeer(info peer.AddrInfo)
+}
+
 // New creates a new, fully initialized node with the given options.
 func New(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
 
@@ -46,8 +50,13 @@ func New(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
 	node.PushProtocol = NewPushProtocol(node)
 	node.TransferProtocol = NewTransferProtocol(node)
 
-	var err error
+	key, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
+	if err != nil {
+		return nil, err
+	}
+
 	opts = append(opts,
+		libp2p.Identity(key),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
 			node.DHT, err = kaddht.New(ctx, h)
 			return node.DHT, err
@@ -250,6 +259,18 @@ func (n *Node) ReadBytes(r io.Reader) ([]byte, error) {
 	}
 
 	return buf, nil
+}
+
+func (n *Node) ResetOnShutdown(s network.Stream) context.CancelFunc {
+	cancel := make(chan struct{})
+	go func() {
+		select {
+		case <-n.SigShutdown():
+			s.Reset()
+		case <-cancel:
+		}
+	}()
+	return func() { close(cancel) }
 }
 
 // WaitForEOF waits for an EOF signal on the stream. This indicates that the peer

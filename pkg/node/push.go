@@ -46,6 +46,7 @@ func (p *PushProtocol) UnregisterPushRequestHandler() {
 
 func (p *PushProtocol) onPushRequest(s network.Stream) {
 	defer s.Close()
+	defer p.node.ResetOnShutdown(s)()
 
 	if !p.node.IsAuthenticated(s.Conn().RemotePeer()) {
 		log.Infoln("Received push request from unauthenticated peer")

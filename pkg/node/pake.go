@@ -58,6 +58,7 @@ func (p *PakeServerProtocol) UnregisterKeyExchangeHandler() {
 
 func (p *PakeServerProtocol) onKeyExchange(s network.Stream) {
 	defer s.Close()
+	defer p.node.ResetOnShutdown(s)()
 
 	log.Infof("\rExchanging Keys...")
 

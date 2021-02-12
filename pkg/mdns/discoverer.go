@@ -22,14 +22,11 @@ func NewDiscoverer(node *pcpnode.Node) *Discoverer {
 	return &Discoverer{newProtocol(node)}
 }
 
-func (d *Discoverer) Discover(identifier string, handler func(info peer.AddrInfo)) error {
+func (d *Discoverer) Discover(code string, handler pcpnode.PeerHandler) error {
 	if err := d.ServiceStarted(); err != nil {
 		return err
 	}
 	defer d.ServiceStopped()
-
-	ticker := time.NewTicker(d.interval)
-	defer ticker.Stop()
 
 	for {
 		entriesCh := make(chan *mdns.ServiceEntry, 16)
@@ -38,7 +35,7 @@ func (d *Discoverer) Discover(identifier string, handler func(info peer.AddrInfo
 		qp := &mdns.QueryParam{
 			Domain:  "local",
 			Entries: entriesCh,
-			Service: identifier, // keep in sync with advertiser
+			Service: code, // keep in sync with advertiser
 			Timeout: time.Second * 5,
 		}
 
@@ -49,10 +46,9 @@ func (d *Discoverer) Discover(identifier string, handler func(info peer.AddrInfo
 		close(entriesCh)
 
 		select {
-		case <-ticker.C:
-			continue
 		case <-d.SigShutdown():
 			return nil
+		default:
 		}
 	}
 }
@@ -61,7 +57,7 @@ func (d *Discoverer) Shutdown() {
 	d.Service.Shutdown()
 }
 
-func (d *Discoverer) drainEntriesChan(entries chan *mdns.ServiceEntry, handler func(info peer.AddrInfo)) {
+func (d *Discoverer) drainEntriesChan(entries chan *mdns.ServiceEntry, handler pcpnode.PeerHandler) {
 	for entry := range entries {
 
 		pi, err := parseServiceEntry(entry)
@@ -78,7 +74,7 @@ func (d *Discoverer) drainEntriesChan(entries chan *mdns.ServiceEntry, handler f
 			continue
 		}
 
-		go handler(pi)
+		go handler.HandlePeer(pi)
 	}
 }
 

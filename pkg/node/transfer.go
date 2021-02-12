@@ -55,6 +55,7 @@ func NewTransferProtocol(node *Node) *TransferProtocol {
 
 // onTransfer is called when the peer initiates a file transfer.
 func (t *TransferProtocol) onTransfer(s network.Stream) {
+	defer t.node.ResetOnShutdown(s)()
 
 	if !t.node.IsAuthenticated(s.Conn().RemotePeer()) {
 		log.Infoln("Received push request from unauthenticated peer")

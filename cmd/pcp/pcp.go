@@ -53,7 +53,7 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	go func() {
 		<-sigs
-		log.Infoln("Shutting down...")
+		log.Infoln("Stopping...")
 		signal.Stop(sigs)
 		cancel()
 	}()
