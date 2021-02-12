@@ -51,12 +51,12 @@ func (a *Advertiser) Stop() error {
 		return nil
 	}
 
-	a.service = nil
-
 	err := a.service.Close()
 	if err != nil {
 		return err
 	}
+
+	a.service = nil
 
 	return nil
 }

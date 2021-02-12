@@ -3,18 +3,21 @@ package send
 import (
 	"context"
 	"fmt"
-	"github.com/dennis-tra/pcp/internal/log"
-	"github.com/dennis-tra/pcp/pkg/dht"
-	pcpdiscovery "github.com/dennis-tra/pcp/pkg/discovery"
-	pcpnode "github.com/dennis-tra/pcp/pkg/node"
-	"github.com/dennis-tra/pcp/pkg/progress"
-	"github.com/dennis-tra/pcp/pkg/words"
-	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/pkg/errors"
 	"os"
 	"path"
 	"sync"
+
+	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/pkg/errors"
+
+	"github.com/dennis-tra/pcp/internal/log"
+	"github.com/dennis-tra/pcp/pkg/dht"
+	pcpdiscovery "github.com/dennis-tra/pcp/pkg/discovery"
+	"github.com/dennis-tra/pcp/pkg/mdns"
+	pcpnode "github.com/dennis-tra/pcp/pkg/node"
+	"github.com/dennis-tra/pcp/pkg/progress"
+	"github.com/dennis-tra/pcp/pkg/words"
 )
 
 // Node encapsulates the logic of advertising and transmitting
@@ -43,7 +46,7 @@ func InitNode(ctx context.Context, filepath string) (*Node, error) {
 
 	advertisers := []pcpdiscovery.Advertiser{
 		dht.NewAdvertiser(h),
-		//mdns.NewAdvertiser(h),
+		mdns.NewAdvertiser(h),
 	}
 
 	node := &Node{Node: h, advertisers: advertisers, authPeers: sync.Map{}, filepath: filepath}

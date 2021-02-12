@@ -60,7 +60,6 @@ func (a *Advertiser) Advertise(ctx context.Context, code string) error {
 					goto CheckForPublicAddr
 				}
 			}
-			log.Infoln("Got a public address -> advertising it!")
 
 			// this context requires a timeout; it determines how long the DHT looks for
 			// closest peers to the key/CID before it goes on to provide the record to them.
@@ -70,10 +69,8 @@ func (a *Advertiser) Advertise(ctx context.Context, code string) error {
 
 			err = a.DHT.Provide(pctx, cid.NewCidV1(cid.Raw, h), true)
 			if err != nil && err != context.Canceled && err != context.DeadlineExceeded {
-				log.Warningln("Error providing", err)
+				log.Warningln("Error: ", err)
 			}
-
-			log.Infoln("Done advertising it!")
 
 			close(queryDone)
 		}()

@@ -56,11 +56,11 @@ func Action(c *cli.Context) error {
 	}
 	defer local.Shutdown()
 
-	log.Infoln("Code is: ", strings.Join(local.TransferCode, "-"))
-	log.Infoln("On the other machine run:\n\tpcp receive", strings.Join(local.TransferCode, "-"))
-
 	// Broadcast the code to be found by peers.
-	local.Advertise(ctx, local.AdvertiseIdentifier(time.Now(), local.ChannelID))
+	dhtKey := local.AdvertiseIdentifier(time.Now(), local.ChannelID)
+	log.Infoln("Code is: ", strings.Join(local.TransferCode, "-"), "(", dhtKey, ")")
+	log.Infoln("On the other machine run:\n\tpcp receive", strings.Join(local.TransferCode, "-"))
+	local.Advertise(ctx, dhtKey)
 
 	// Wait for the user to stop the tool
 	// Wait for the node to stop

@@ -14,6 +14,7 @@ import (
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/dht"
 	pcpdiscovery "github.com/dennis-tra/pcp/pkg/discovery"
+	"github.com/dennis-tra/pcp/pkg/mdns"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
 	"github.com/dennis-tra/pcp/pkg/words"
@@ -58,7 +59,7 @@ func InitNode(ctx context.Context, code []string) (*Node, error) {
 		discoveredPeers: sync.Map{},
 		discoverers: []pcpdiscovery.Discoverer{
 			dht.NewDiscoverer(node),
-			//mdns.NewDiscoverer(node),
+			mdns.NewDiscoverer(node),
 		},
 		PakeClientProtocol: pcpnode.NewPakeClientProtocol(node, pw),
 	}

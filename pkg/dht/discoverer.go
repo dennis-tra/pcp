@@ -55,6 +55,7 @@ func (d *Discoverer) Discover(ctx context.Context, code string, handler discover
 					continue
 				}
 
+				log.Infoln("Found peer: ", pi.ID)
 				pi.Addrs = routable
 				go handler.HandlePeer(pi)
 			}

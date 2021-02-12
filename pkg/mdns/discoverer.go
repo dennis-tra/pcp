@@ -29,6 +29,7 @@ func NewDiscoverer(node *pcpnode.Node) *Discoverer {
 }
 
 func (d *Discoverer) Stop() error {
+	// TODO: race condition if stop is called twice shortly after one another
 	if d.shutdown == nil {
 		return nil
 	}

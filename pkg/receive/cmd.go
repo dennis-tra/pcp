@@ -47,7 +47,6 @@ func Action(c *cli.Context) error {
 		return fmt.Errorf("list of words must be exactly 4")
 	}
 
-	log.Debugf("Looking for peer %s... (this can take up to a minute)\n", c.Args().First())
 	local, err := InitNode(ctx, tcode)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("failed to initialize node"))
@@ -60,7 +59,9 @@ func Action(c *cli.Context) error {
 	}
 
 	// Search for identifier
-	local.Discover(ctx, local.AdvertiseIdentifier(time.Now(), chanID))
+	dhtKey := local.AdvertiseIdentifier(time.Now(), chanID)
+	log.Infof("Looking for peer %s... (%s)\n", c.Args().First(), dhtKey)
+	local.Discover(ctx, dhtKey)
 
 	// Wait for the node to stop
 	select {
