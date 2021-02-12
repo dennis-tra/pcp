@@ -5,7 +5,6 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 
-	"github.com/dennis-tra/pcp/pkg/discovery"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 )
 
@@ -17,7 +16,7 @@ func NewDiscoverer(node *pcpnode.Node) *Discoverer {
 	return &Discoverer{protocol: newProtocol(node)}
 }
 
-func (d *Discoverer) Discover(code string, handler discovery.PeerHandler) error {
+func (d *Discoverer) Discover(code string, handler func(info peer.AddrInfo)) error {
 	if err := d.ServiceStarted(); err != nil {
 		return err
 	}
@@ -40,7 +39,7 @@ func (d *Discoverer) Discover(code string, handler discovery.PeerHandler) error 
 		) {
 			pi.Addrs = onlyPublic(pi.Addrs)
 			if isRoutable(pi) {
-				go handler.HandlePeer(pi)
+				go handler(pi)
 			}
 		}
 	}

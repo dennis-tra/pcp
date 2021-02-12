@@ -81,9 +81,6 @@ func (n *Node) HasPublicAddr() bool {
 }
 
 func (n *Node) Shutdown() {
-
-	n.Service.Shutdown()
-
 	if err := n.Host.Close(); err != nil {
 		log.Warningln("error closing node", err)
 	}

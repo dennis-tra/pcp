@@ -11,7 +11,6 @@ import (
 	"github.com/whyrusleeping/mdns"
 
 	"github.com/dennis-tra/pcp/internal/log"
-	"github.com/dennis-tra/pcp/pkg/discovery"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 )
 
@@ -23,7 +22,7 @@ func NewDiscoverer(node *pcpnode.Node) *Discoverer {
 	return &Discoverer{newProtocol(node)}
 }
 
-func (d *Discoverer) Discover(identifier string, handler discovery.PeerHandler) error {
+func (d *Discoverer) Discover(identifier string, handler func(info peer.AddrInfo)) error {
 	if err := d.ServiceStarted(); err != nil {
 		return err
 	}
@@ -62,7 +61,7 @@ func (d *Discoverer) Shutdown() {
 	d.Service.Shutdown()
 }
 
-func (d *Discoverer) drainEntriesChan(entries chan *mdns.ServiceEntry, handler discovery.PeerHandler) {
+func (d *Discoverer) drainEntriesChan(entries chan *mdns.ServiceEntry, handler func(info peer.AddrInfo)) {
 	for entry := range entries {
 
 		pi, err := parseServiceEntry(entry)
@@ -79,7 +78,7 @@ func (d *Discoverer) drainEntriesChan(entries chan *mdns.ServiceEntry, handler d
 			continue
 		}
 
-		go handler.HandlePeer(pi)
+		go handler(pi)
 	}
 }
 

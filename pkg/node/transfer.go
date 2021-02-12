@@ -2,7 +2,9 @@ package node
 
 import (
 	"context"
+	"golang.org/x/term"
 	"io"
+	"os"
 	"sync"
 	"time"
 
@@ -11,7 +13,6 @@ import (
 
 	"github.com/dennis-tra/pcp/internal/format"
 	"github.com/dennis-tra/pcp/internal/log"
-	"github.com/dennis-tra/pcp/pkg/commons"
 	"github.com/dennis-tra/pcp/pkg/progress"
 )
 
@@ -98,7 +99,10 @@ func (t *TransferProtocol) Transfer(ctx context.Context, peerID peer.ID, payload
 func IndicateProgress(ctx context.Context, bCounter progress.Counter, filename string, size int64, wg *sync.WaitGroup) {
 
 	ticker := progress.NewTicker(ctx, bCounter, size, 500*time.Millisecond)
-	tWidth := commons.TerminalWidth()
+	tWidth, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		tWidth = 80
+	}
 
 	iCounter := 0 // iteration counter
 	start := time.Now()

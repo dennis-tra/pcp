@@ -13,7 +13,6 @@ import (
 
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/dht"
-	pcpdiscovery "github.com/dennis-tra/pcp/pkg/discovery"
 	"github.com/dennis-tra/pcp/pkg/mdns"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 	"github.com/dennis-tra/pcp/pkg/progress"
@@ -25,13 +24,18 @@ import (
 type Node struct {
 	*pcpnode.Node
 	*pcpnode.PakeServerProtocol
-	advertisers []pcpdiscovery.Advertiser
+	advertisers []Advertiser
 
 	authPeers sync.Map
 	filepath  string
 
 	TransferCode []string
 	ChannelID    int16
+}
+
+type Advertiser interface {
+	Advertise(code string) error
+	Shutdown()
 }
 
 // InitNode returns a fully configured node ready to start
@@ -43,7 +47,7 @@ func InitNode(ctx context.Context, filepath string) (*Node, error) {
 		return nil, err
 	}
 
-	node := &Node{Node: h, advertisers: []pcpdiscovery.Advertiser{}, authPeers: sync.Map{}, filepath: filepath}
+	node := &Node{Node: h, advertisers: []Advertiser{}, authPeers: sync.Map{}, filepath: filepath}
 
 	pubKey, err := node.Peerstore().PubKey(node.ID()).Bytes()
 	if err != nil {
@@ -83,13 +87,13 @@ func (n *Node) Shutdown() {
 // registered advertisers. Currently these are multicast DNS and DHT.
 func (n *Node) Advertise(code string) {
 
-	n.advertisers = []pcpdiscovery.Advertiser{
+	n.advertisers = []Advertiser{
 		dht.NewAdvertiser(n.Node),
 		mdns.NewAdvertiser(n.Node),
 	}
 
 	for _, advertiser := range n.advertisers {
-		go func(a pcpdiscovery.Advertiser) {
+		go func(a Advertiser) {
 			if err := a.Advertise(code); err != nil {
 				log.Warningln(err)
 			}
@@ -101,7 +105,7 @@ func (n *Node) StopAdvertising() {
 	var wg sync.WaitGroup
 	for _, advertiser := range n.advertisers {
 		wg.Add(1)
-		go func(a pcpdiscovery.Advertiser) {
+		go func(a Advertiser) {
 			a.Shutdown()
 			wg.Done()
 		}(advertiser)

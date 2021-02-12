@@ -13,7 +13,6 @@ import (
 	"github.com/dennis-tra/pcp/internal/format"
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/dht"
-	pcpdiscovery "github.com/dennis-tra/pcp/pkg/discovery"
 	"github.com/dennis-tra/pcp/pkg/mdns"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
@@ -32,13 +31,18 @@ type Node struct {
 	*pcpnode.Node
 	*pcpnode.PakeClientProtocol
 
-	discoverers     []pcpdiscovery.Discoverer
+	discoverers     []Discoverer
 	discoveredPeers sync.Map
 
 	code []string
 
 	stateLk sync.RWMutex
 	state   nodeState
+}
+
+type Discoverer interface {
+	Discover(identifier string, handler func(info peer.AddrInfo)) error
+	Shutdown()
 }
 
 func InitNode(ctx context.Context, code []string) (*Node, error) {
@@ -59,7 +63,7 @@ func InitNode(ctx context.Context, code []string) (*Node, error) {
 		state:              idle,
 		stateLk:            sync.RWMutex{},
 		discoveredPeers:    sync.Map{},
-		discoverers:        []pcpdiscovery.Discoverer{},
+		discoverers:        []Discoverer{},
 		PakeClientProtocol: pcpnode.NewPakeClientProtocol(h, pw),
 	}
 
@@ -78,14 +82,14 @@ func (n *Node) Shutdown() {
 func (n *Node) Discover(code string) {
 	n.setState(discovering)
 
-	n.discoverers = []pcpdiscovery.Discoverer{
+	n.discoverers = []Discoverer{
 		dht.NewDiscoverer(n.Node),
 		mdns.NewDiscoverer(n.Node),
 	}
 
 	for _, discoverer := range n.discoverers {
-		go func(d pcpdiscovery.Discoverer) {
-			if err := d.Discover(code, n); err != nil {
+		go func(d Discoverer) {
+			if err := d.Discover(code, n.HandlePeer); err != nil {
 				log.Warningln(err)
 			}
 		}(discoverer)
@@ -96,7 +100,7 @@ func (n *Node) StopDiscovering() {
 	var wg sync.WaitGroup
 	for _, discoverer := range n.discoverers {
 		wg.Add(1)
-		go func(d pcpdiscovery.Discoverer) {
+		go func(d Discoverer) {
 			d.Shutdown()
 			wg.Done()
 		}(discoverer)
