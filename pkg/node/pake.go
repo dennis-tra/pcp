@@ -186,28 +186,33 @@ func (p *PakeClientProtocol) StartKeyExchange(ctx context.Context, peerID peer.I
 	curve := elliptic.P521()
 
 	// initialize sender p ("0" indicates sender)
+	log.Infof("\rInit Pake...")
 	P, err := pake.Init(p.pw, 0, curve)
 	if err != nil {
 		return nil, err
 	}
 
 	// Send Q init data
+	log.Infof("\rSend init data...")
 	if _, err := p.node.WriteBytes(s, P.Bytes()); err != nil {
 		return nil, err
 	}
 
 	// Read calculated data from Q
+	log.Infof("\rRead calculated data from Q...")
 	dat, err := p.node.ReadBytes(s)
 	if err != nil {
 		return nil, err
 	}
 
 	// Use calculated data from Q
+	log.Infof("\rUse calculated data from Q...")
 	if err = P.Update(dat); err != nil {
 		return nil, err
 	}
 
 	// Send Q calculated data
+	log.Infof("\rSend Q calculated data...")
 	if _, err := p.node.WriteBytes(s, P.Bytes()); err != nil {
 		return nil, err
 	}
