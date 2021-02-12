@@ -17,14 +17,11 @@ require (
 	github.com/multiformats/go-multihash v0.0.14
 	github.com/multiformats/go-varint v0.0.6
 	github.com/pkg/errors v0.9.1
-	github.com/schollz/pake v1.1.1
+	github.com/schollz/pake/v2 v2.0.6
 	github.com/stretchr/testify v1.6.1
-	github.com/tscholl2/siec v0.0.0-20191122224205-8da93652b094 // indirect
-	github.com/tyler-smith/go-bip32 v1.0.0 // indirect
 	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/urfave/cli/v2 v2.3.0
 	github.com/whyrusleeping/mdns v0.0.0-20190826153040-b9b60ed33aa9
-	go.uber.org/atomic v1.6.0
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
 	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c // indirect
 	golang.org/x/term v0.0.0-20201117132131-f5c789dd3221
