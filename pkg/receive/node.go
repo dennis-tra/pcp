@@ -32,18 +32,18 @@ type Node struct {
 	*pcpnode.Node
 	*pcpnode.PakeClientProtocol
 
-	discoverers []pcpdiscovery.Discoverer
-
+	discoverers     []pcpdiscovery.Discoverer
 	discoveredPeers sync.Map
 
-	code    []string // transfer integers from the other peer
+	code []string
+
 	stateLk sync.RWMutex
 	state   nodeState
 }
 
 func InitNode(ctx context.Context, code []string) (*Node, error) {
 
-	node, err := pcpnode.Init(ctx)
+	h, err := pcpnode.New(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -54,19 +54,54 @@ func InitNode(ctx context.Context, code []string) (*Node, error) {
 	}
 
 	n := &Node{
-		Node:            node,
-		code:            code,
-		discoveredPeers: sync.Map{},
-		discoverers: []pcpdiscovery.Discoverer{
-			dht.NewDiscoverer(node),
-			mdns.NewDiscoverer(node),
-		},
-		PakeClientProtocol: pcpnode.NewPakeClientProtocol(node, pw),
+		Node:               h,
+		code:               code,
+		state:              idle,
+		stateLk:            sync.RWMutex{},
+		discoveredPeers:    sync.Map{},
+		discoverers:        []pcpdiscovery.Discoverer{},
+		PakeClientProtocol: pcpnode.NewPakeClientProtocol(h, pw),
 	}
 
 	n.RegisterPushRequestHandler(n)
 
 	return n, nil
+}
+
+func (n *Node) Shutdown() {
+	n.StopDiscovering()
+	n.UnregisterPushRequestHandler()
+	n.UnregisterTransferHandler()
+	n.Node.Shutdown()
+}
+
+func (n *Node) Discover(code string) {
+	n.setState(discovering)
+
+	n.discoverers = []pcpdiscovery.Discoverer{
+		dht.NewDiscoverer(n.Node),
+		mdns.NewDiscoverer(n.Node),
+	}
+
+	for _, discoverer := range n.discoverers {
+		go func(d pcpdiscovery.Discoverer) {
+			if err := d.Discover(code, n); err != nil {
+				log.Warningln(err)
+			}
+		}(discoverer)
+	}
+}
+
+func (n *Node) StopDiscovering() {
+	var wg sync.WaitGroup
+	for _, discoverer := range n.discoverers {
+		wg.Add(1)
+		go func(d pcpdiscovery.Discoverer) {
+			d.Shutdown()
+			wg.Done()
+		}(discoverer)
+	}
+	wg.Wait()
 }
 
 func (n *Node) setState(state nodeState) nodeState {
@@ -80,36 +115,6 @@ func (n *Node) getState() nodeState {
 	n.stateLk.RLock()
 	defer n.stateLk.RUnlock()
 	return n.state
-}
-
-func (n *Node) Discover(ctx context.Context, code string) {
-	n.setState(discovering)
-	for _, discoverer := range n.discoverers {
-		go discoverer.Discover(ctx, code, n)
-	}
-}
-
-func (n *Node) StopDiscovering() {
-	var wg sync.WaitGroup
-	for _, discoverer := range n.discoverers {
-		wg.Add(1)
-		go func(d pcpdiscovery.Discoverer) {
-			if err := d.Stop(); err != nil {
-				log.Warningln(err)
-			}
-			wg.Done()
-		}(discoverer)
-	}
-	wg.Wait()
-}
-
-func (n *Node) Shutdown() {
-	n.StopDiscovering()
-
-	n.UnregisterPushRequestHandler()
-	n.UnregisterTransferHandler()
-
-	n.Node.Shutdown()
 }
 
 // HandlePeer is called async from the discoverers. It's okay to have long running tasks here.
@@ -146,7 +151,7 @@ func (n *Node) HandlePeer(info peer.AddrInfo) {
 		}
 	}
 
-	err = n.Connect(n.Ctx(), info)
+	err = n.Connect(n.ServiceContext(), info)
 	if err != nil {
 		// stale entry in DHT?
 		// log.Debugln(err)
@@ -154,7 +159,7 @@ func (n *Node) HandlePeer(info peer.AddrInfo) {
 	}
 
 	// Negotiate PAKE
-	_, err = n.StartKeyExchange(n.Ctx(), info.ID)
+	_, err = n.StartKeyExchange(n.ServiceContext(), info.ID)
 	if err != nil {
 		log.Errorln(err)
 		return
@@ -228,7 +233,7 @@ func (n *Node) TransferFinishHandler(size int64) chan int64 {
 	go func() {
 		var received int64
 		select {
-		case <-n.Done():
+		case <-n.SigShutdown():
 			return
 		case received = <-done:
 		}

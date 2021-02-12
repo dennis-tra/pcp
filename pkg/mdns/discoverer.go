@@ -1,7 +1,6 @@
 package mdns
 
 import (
-	"context"
 	"net"
 	"time"
 
@@ -18,38 +17,20 @@ import (
 
 type Discoverer struct {
 	*protocol
-	shutdown chan struct{}
-	done     chan struct{}
 }
 
 func NewDiscoverer(node *pcpnode.Node) *Discoverer {
-	return &Discoverer{
-		protocol: newProtocol(node),
-	}
+	return &Discoverer{newProtocol(node)}
 }
 
-func (d *Discoverer) Stop() error {
-	// TODO: race condition if stop is called twice shortly after one another
-	if d.shutdown == nil {
-		return nil
+func (d *Discoverer) Discover(identifier string, handler discovery.PeerHandler) error {
+	if err := d.ServiceStarted(); err != nil {
+		return err
 	}
+	defer d.ServiceStopped()
 
-	close(d.shutdown)
-	<-d.done
-
-	d.shutdown = nil
-	d.done = nil
-
-	return nil
-}
-
-func (d *Discoverer) Discover(ctx context.Context, identifier string, handler discovery.PeerHandler) error {
 	ticker := time.NewTicker(d.interval)
 	defer ticker.Stop()
-
-	d.shutdown = make(chan struct{})
-	d.done = make(chan struct{})
-	defer close(d.done)
 
 	for {
 		entriesCh := make(chan *mdns.ServiceEntry, 16)
@@ -58,25 +39,27 @@ func (d *Discoverer) Discover(ctx context.Context, identifier string, handler di
 		qp := &mdns.QueryParam{
 			Domain:  "local",
 			Entries: entriesCh,
-			Service: ServicePrefix + "/" + identifier, // keep in sync with advertiser
+			Service: identifier, // keep in sync with advertiser
 			Timeout: time.Second * 5,
 		}
 
 		err := mdns.Query(qp)
 		if err != nil {
-			log.Warningln("mdns lookup error", "error", err)
+			log.Warningln("mdns lookup error", err)
 		}
 		close(entriesCh)
 
 		select {
-		case <-ctx.Done():
-			return nil
 		case <-ticker.C:
 			continue
-		case <-d.shutdown:
+		case <-d.SigShutdown():
 			return nil
 		}
 	}
+}
+
+func (d *Discoverer) Shutdown() {
+	d.Service.Shutdown()
 }
 
 func (d *Discoverer) drainEntriesChan(entries chan *mdns.ServiceEntry, handler discovery.PeerHandler) {
@@ -91,19 +74,11 @@ func (d *Discoverer) drainEntriesChan(entries chan *mdns.ServiceEntry, handler d
 			continue
 		}
 
-		// Filter out addresses that are public - only allow private ones.
-		routable := []ma.Multiaddr{}
-		for _, addr := range pi.Addrs {
-			if manet.IsPrivateAddr(addr) {
-				routable = append(routable, addr)
-			}
-		}
-
-		if len(routable) == 0 {
+		pi.Addrs = onlyPrivate(pi.Addrs)
+		if !isRoutable(pi) {
 			continue
 		}
 
-		pi.Addrs = routable
 		go handler.HandlePeer(pi)
 	}
 }
@@ -134,68 +109,17 @@ func parseServiceEntry(entry *mdns.ServiceEntry) (peer.AddrInfo, error) {
 	}, nil
 }
 
-//// The time a discovered peer will stay in the `peers` map.
-//// If it doesn't get re-discovered within this time it gets
-//// removed from the list.
-//var gcDuration = 5 * time.Second
+func isRoutable(pi peer.AddrInfo) bool {
+	return len(pi.Addrs) > 0
+}
 
-//func (m *Discoverer) StopMonitoring() error {
-//
-//	m.peers.Range(func(key, value interface{}) bool {
-//		value.(PeerInfo).timer.Stop()
-//		return true
-//	})
-//
-//	m.peers = &sync.Map{}
-//	close(m.shutdown)
-//
-//	return nil
-//}
-
-//type PeerInfo struct {
-//	pi    peer.AddrInfo
-//	timer *time.Timer
-//}
-//
-//// HandlePeerFound stores every newly found peer in a map.
-//// Every map entry gets a timer assigned that removes the
-//// entry after a garbage collection timeout if the peer
-//// is not seen again in the meantime. If we see the peer
-//// again we reset the time to start again from that point
-//// in time.
-//func (m *Discoverer) HandlePeerFound(pi peer.AddrInfo) {
-//	savedPeer, ok := m.peers.Load(pi.ID)
-//	if ok {
-//		savedPeer.(PeerInfo).timer.Reset(gcDuration)
-//	} else {
-//		t := appTime.AfterFunc(gcDuration, func() {
-//			m.peers.Delete(pi.ID)
-//		})
-//		m.peers.Store(pi.ID, PeerInfo{pi, t})
-//	}
-//}
-//
-//// PeersList returns a sorted list of address information
-//// structs. Sorting order is based on the peer ID.
-//func (m *Discoverer) PeersList() []peer.AddrInfo {
-//	peers := []peer.AddrInfo{}
-//	m.peers.Range(func(key, value interface{}) bool {
-//		peers = append(peers, value.(PeerInfo).pi)
-//		return true
-//	})
-//
-//	sort.Slice(peers, func(i, j int) bool {
-//		return peers[i].ID < peers[j].ID
-//	})
-//
-//	return peers
-//}
-//
-//// PrintPeers dumps the given list of peers to the screen
-//// to be selected by the user via its index.
-//func (m *Discoverer) PrintPeers(peers []peer.AddrInfo) {
-//	for i, p := range peers {
-//		log.Infof("[%d] %s\n", i, p.ID)
-//	}
-//	log.Infoln()
-//}
+// Filter out addresses that are public - only allow private ones.
+func onlyPrivate(addrs []ma.Multiaddr) []ma.Multiaddr {
+	routable := []ma.Multiaddr{}
+	for _, addr := range addrs {
+		if manet.IsPrivateAddr(addr) {
+			routable = append(routable, addr)
+		}
+	}
+	return routable
+}

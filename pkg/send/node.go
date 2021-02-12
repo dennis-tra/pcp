@@ -38,18 +38,12 @@ type Node struct {
 // advertising that we want to send a specific file.
 func InitNode(ctx context.Context, filepath string) (*Node, error) {
 
-	var err error
-	h, err := pcpnode.Init(ctx, libp2p.EnableAutoRelay())
+	h, err := pcpnode.New(ctx, libp2p.EnableAutoRelay())
 	if err != nil {
 		return nil, err
 	}
 
-	advertisers := []pcpdiscovery.Advertiser{
-		dht.NewAdvertiser(h),
-		mdns.NewAdvertiser(h),
-	}
-
-	node := &Node{Node: h, advertisers: advertisers, authPeers: sync.Map{}, filepath: filepath}
+	node := &Node{Node: h, advertisers: []pcpdiscovery.Advertiser{}, authPeers: sync.Map{}, filepath: filepath}
 
 	pubKey, err := node.Peerstore().PubKey(node.ID()).Bytes()
 	if err != nil {
@@ -81,18 +75,22 @@ func InitNode(ctx context.Context, filepath string) (*Node, error) {
 
 func (n *Node) Shutdown() {
 	n.StopAdvertising()
-
 	n.UnregisterKeyExchangeHandler()
-
 	n.Node.Shutdown()
 }
 
 // Advertise asynchronously advertises the given code through the means of all
 // registered advertisers. Currently these are multicast DNS and DHT.
-func (n *Node) Advertise(ctx context.Context, code string) {
+func (n *Node) Advertise(code string) {
+
+	n.advertisers = []pcpdiscovery.Advertiser{
+		dht.NewAdvertiser(n.Node),
+		mdns.NewAdvertiser(n.Node),
+	}
+
 	for _, advertiser := range n.advertisers {
-		go func(ad pcpdiscovery.Advertiser) {
-			if err := ad.Advertise(ctx, code); err != nil {
+		go func(a pcpdiscovery.Advertiser) {
+			if err := a.Advertise(code); err != nil {
 				log.Warningln(err)
 			}
 		}(advertiser)
@@ -104,9 +102,7 @@ func (n *Node) StopAdvertising() {
 	for _, advertiser := range n.advertisers {
 		wg.Add(1)
 		go func(a pcpdiscovery.Advertiser) {
-			if err := a.Stop(); err != nil {
-				log.Warningln(err)
-			}
+			a.Shutdown()
 			wg.Done()
 		}(advertiser)
 	}
@@ -116,7 +112,7 @@ func (n *Node) StopAdvertising() {
 func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
 	// TODO: Prevent calling this twice
 	n.UnregisterKeyExchangeHandler()
-	n.StopAdvertising()
+	go n.StopAdvertising()
 
 	err := n.Transfer(peerID)
 	if err != nil {
@@ -146,7 +142,7 @@ func (n *Node) Transfer(peerID peer.ID) error {
 
 	log.Infof("Asking for confirmation... ")
 
-	accepted, err := n.SendPushRequest(n.Ctx(), peerID, path.Base(f.Name()), fstat.Size(), c)
+	accepted, err := n.SendPushRequest(n.ServiceContext(), peerID, path.Base(f.Name()), fstat.Size(), c)
 	if err != nil {
 		return err
 	}
@@ -162,7 +158,7 @@ func (n *Node) Transfer(peerID peer.ID) error {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	ctx, cancel := context.WithCancel(n.Ctx())
+	ctx, cancel := context.WithCancel(n.ServiceContext())
 	go pcpnode.IndicateProgress(ctx, pr, path.Base(f.Name()), fstat.Size(), &wg)
 	defer func() { cancel(); wg.Wait() }()
 

@@ -47,29 +47,29 @@ func Action(c *cli.Context) error {
 		return fmt.Errorf("list of words must be exactly 4")
 	}
 
-	local, err := InitNode(ctx, tcode)
-	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to initialize node"))
-	}
-	defer local.Shutdown()
-
 	chanID, err := words.ToInt(tcode[0])
 	if err != nil {
 		return err
 	}
 
+	local, err := InitNode(ctx, tcode)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("failed to initialize node"))
+	}
+
 	// Search for identifier
 	dhtKey := local.AdvertiseIdentifier(time.Now(), chanID)
 	log.Infof("Looking for peer %s... (%s)\n", c.Args().First(), dhtKey)
-	local.Discover(ctx, dhtKey)
+	local.Discover(dhtKey)
 
-	// Wait for the node to stop
+	// Wait for the user to stop the tool or the transfer to finish.
 	select {
 	case <-ctx.Done():
-	case <-local.Done():
+		local.Shutdown()
+		return nil
+	case <-local.SigDone():
+		return nil
 	}
-
-	return nil
 }
 
 func printInformation(data *p2p.PushRequest) {

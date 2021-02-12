@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"go.uber.org/atomic"
+	"github.com/dennis-tra/pcp/pkg/service"
 	"io"
 	"io/ioutil"
 	"sync"
 	"time"
 
+	"github.com/dennis-tra/pcp/internal/log"
+	p2p "github.com/dennis-tra/pcp/pkg/pb"
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/libp2p/go-libp2p"
@@ -19,12 +21,9 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/routing"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
+	manet "github.com/multiformats/go-multiaddr/net"
 	"github.com/multiformats/go-varint"
 	"github.com/pkg/errors"
-
-	"github.com/dennis-tra/pcp/internal/log"
-	"github.com/dennis-tra/pcp/pkg/config"
-	p2p "github.com/dennis-tra/pcp/pkg/pb"
 )
 
 // Node encapsulates the logic for sending and receiving messages.
@@ -32,48 +31,23 @@ type Node struct {
 	host.Host
 	*PushProtocol
 	*TransferProtocol
+	*service.Service
 
 	authenticatedPeers sync.Map
 
 	// DHT is an accessor that is needed in the DHT discoverer/advertiser.
 	DHT *kaddht.IpfsDHT
-
-	//
-	done chan struct{}
-
-	stopped *atomic.Bool
 }
 
-// Init creates a new, fully initialized node with the given options.
-func Init(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
+// New creates a new, fully initialized node with the given options.
+func New(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
 
-	conf, err := config.FromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if !conf.Identity.IsInitialized() {
-		err = conf.Identity.GenerateKeyPair()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	node := &Node{
-		authenticatedPeers: sync.Map{},
-		done:               make(chan struct{}),
-		stopped:            atomic.NewBool(false),
-	}
+	node := &Node{authenticatedPeers: sync.Map{}, Service: service.New()}
 	node.PushProtocol = NewPushProtocol(node)
 	node.TransferProtocol = NewTransferProtocol(node)
 
-	key, err := conf.Identity.PrivateKey()
-	if err != nil {
-		return nil, err
-	}
-
+	var err error
 	opts = append(opts,
-		libp2p.Identity(key),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
 			node.DHT, err = kaddht.New(ctx, h)
 			return node.DHT, err
@@ -85,7 +59,7 @@ func Init(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
 		return nil, err
 	}
 
-	return node, nil
+	return node, node.ServiceStarted()
 }
 
 func (n *Node) AddAuthenticatedPeer(peerID peer.ID) {
@@ -97,31 +71,24 @@ func (n *Node) IsAuthenticated(peerID peer.ID) bool {
 	return found
 }
 
-func (n *Node) Ctx() context.Context {
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		<-n.done
-		cancel()
-	}()
-	return ctx
+func (n *Node) HasPublicAddr() bool {
+	for _, addr := range n.Addrs() {
+		if manet.IsPublicAddr(addr) {
+			return true
+		}
+	}
+	return false
 }
 
 func (n *Node) Shutdown() {
-	if n.stopped.Load() {
-		return
-	}
-	n.stopped.Store(true)
+
+	n.Service.Shutdown()
 
 	if err := n.Host.Close(); err != nil {
 		log.Warningln("error closing node", err)
 	}
 
-	close(n.done)
-}
-
-func (n *Node) Done() chan struct{} {
-	// TODO: make it impossible to close this chan from extern
-	return n.done
+	n.ServiceStopped()
 }
 
 // AdvertiseIdentifier returns the string, that we use to advertise

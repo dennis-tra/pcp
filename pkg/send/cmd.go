@@ -10,7 +10,6 @@ import (
 
 	"github.com/ipfs/go-cid"
 	mh "github.com/multiformats/go-multihash"
-	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 
 	"github.com/dennis-tra/pcp/internal/log"
@@ -52,24 +51,24 @@ func Action(c *cli.Context) error {
 	// Initialize node
 	local, err := InitNode(ctx, filepath)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to initialize node"))
+		return err
 	}
-	defer local.Shutdown()
 
 	// Broadcast the code to be found by peers.
 	dhtKey := local.AdvertiseIdentifier(time.Now(), local.ChannelID)
 	log.Infoln("Code is: ", strings.Join(local.TransferCode, "-"), "(", dhtKey, ")")
 	log.Infoln("On the other machine run:\n\tpcp receive", strings.Join(local.TransferCode, "-"))
-	local.Advertise(ctx, dhtKey)
 
-	// Wait for the user to stop the tool
-	// Wait for the node to stop
+	local.Advertise(dhtKey)
+
+	// Wait for the user to stop the tool or the transfer to finish.
 	select {
 	case <-ctx.Done():
-	case <-local.Done():
+		local.Shutdown()
+		return nil
+	case <-local.SigDone():
+		return nil
 	}
-
-	return nil
 }
 
 // verifyFileAccess just tries to open the file at the given path to check

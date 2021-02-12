@@ -1,91 +1,66 @@
 package dht
 
 import (
-	"context"
-	"github.com/dennis-tra/pcp/internal/log"
-	"github.com/dennis-tra/pcp/pkg/discovery"
-	pcpnode "github.com/dennis-tra/pcp/pkg/node"
-	"github.com/ipfs/go-cid"
+	"github.com/libp2p/go-libp2p-core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
-	mh "github.com/multiformats/go-multihash"
+
+	"github.com/dennis-tra/pcp/pkg/discovery"
+	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 )
 
 type Discoverer struct {
 	*protocol
-	shutdown chan struct{}
-	done     chan struct{}
 }
 
 func NewDiscoverer(node *pcpnode.Node) *Discoverer {
 	return &Discoverer{protocol: newProtocol(node)}
 }
 
-func (d *Discoverer) Discover(ctx context.Context, code string, handler discovery.PeerHandler) error {
+func (d *Discoverer) Discover(code string, handler discovery.PeerHandler) error {
+	if err := d.ServiceStarted(); err != nil {
+		return err
+	}
+	defer d.ServiceStopped()
 
-	if err := d.Bootstrap(ctx); err != nil {
+	if err := d.Bootstrap(); err != nil {
 		return err
 	}
 
-	h, err := mh.Sum([]byte(code), mh.SHA2_256, -1)
+	contentID, err := strToCid(code)
 	if err != nil {
 		return err
 	}
 
-	d.shutdown = make(chan struct{})
-	d.done = make(chan struct{})
-	defer close(d.done)
-
 	for {
-		queryDone := make(chan struct{})
-		cctx, cancel := context.WithCancel(ctx)
-		go func() {
-			for pi := range d.DHT.FindProvidersAsync(cctx, cid.NewCidV1(cid.Raw, h), 100) {
-
-				// Filter out addresses that are local - only allow public ones.
-				routable := []ma.Multiaddr{}
-				for _, addr := range pi.Addrs {
-					if manet.IsPublicAddr(addr) {
-						routable = append(routable, addr)
-					}
-				}
-
-				if len(routable) == 0 {
-					log.Infoln("Found peer that is not publicly accessible: ", pi.ID)
-					continue
-				}
-
-				log.Infoln("Found peer: ", pi.ID)
-				pi.Addrs = routable
+		for pi := range d.DHT.FindProvidersAsync(
+			d.ServiceContext(),
+			contentID,
+			100,
+		) {
+			pi.Addrs = onlyPublic(pi.Addrs)
+			if isRoutable(pi) {
 				go handler.HandlePeer(pi)
 			}
-			close(queryDone)
-		}()
-
-		select {
-		case <-queryDone:
-			cancel()
-			continue
-		case <-d.shutdown:
-		case <-ctx.Done():
 		}
-
-		cancel()
-		<-queryDone
-		return nil
 	}
 }
 
-func (d *Discoverer) Stop() error {
-	if d.shutdown == nil {
-		return nil
+func (d *Discoverer) Shutdown() {
+	d.Service.Shutdown()
+}
+
+// Filter out addresses that are local - only allow public ones.
+func onlyPublic(addrs []ma.Multiaddr) []ma.Multiaddr {
+	routable := []ma.Multiaddr{}
+	for _, addr := range addrs {
+		if manet.IsPublicAddr(addr) {
+			routable = append(routable, addr)
+		}
 	}
+	return routable
+}
 
-	close(d.shutdown)
-	<-d.done
-
-	d.shutdown = nil
-	d.done = nil
-
-	return nil
+func isRoutable(pi peer.AddrInfo) bool {
+	return len(pi.Addrs) > 0
 }

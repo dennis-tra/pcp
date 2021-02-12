@@ -1,23 +1,28 @@
 package dht
 
 import (
-	"context"
-	"github.com/dennis-tra/pcp/internal/log"
-	pcpnode "github.com/dennis-tra/pcp/pkg/node"
+	"github.com/dennis-tra/pcp/pkg/service"
+	"sync"
+
+	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/multiformats/go-multiaddr"
-	"sync"
+	mh "github.com/multiformats/go-multihash"
+
+	"github.com/dennis-tra/pcp/internal/log"
+	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 )
 
 // protocol encapsulates the logic for discovering peers
 // through providing it in the IPFS DHT.
 type protocol struct {
 	*pcpnode.Node
+	*service.Service
 	init sync.Once
 }
 
 func newProtocol(node *pcpnode.Node) *protocol {
-	return &protocol{Node: node}
+	return &protocol{Node: node, Service: service.New()}
 }
 
 // Bootstrap connects to a set of bootstrap nodes to connect
@@ -26,7 +31,7 @@ func newProtocol(node *pcpnode.Node) *protocol {
 // TODO: Make bootstrap nodes configurable
 // TODO: Make it possible to bootstrap from local IPFS node
 // TODO: Exit early after we have established min 3 connections
-func (p *protocol) Bootstrap(ctx context.Context) error {
+func (p *protocol) Bootstrap() error {
 
 	var err error
 	p.init.Do(func() {
@@ -54,7 +59,7 @@ func (p *protocol) Bootstrap(ctx context.Context) error {
 			wg.Add(1)
 			go func(pi peer.AddrInfo) {
 				defer wg.Done()
-				if err := p.Connect(ctx, pi); err != nil {
+				if err := p.Connect(p.ServiceContext(), pi); err != nil {
 					log.Infoln("Error connecting to bootstrap peer:", err)
 				}
 			}(*peerInfo)
@@ -64,4 +69,12 @@ func (p *protocol) Bootstrap(ctx context.Context) error {
 	})
 
 	return err
+}
+
+func strToCid(str string) (cid.Cid, error) {
+	h, err := mh.Sum([]byte(str), mh.SHA2_256, -1)
+	if err != nil {
+		return cid.Undef, err
+	}
+	return cid.NewCidV1(cid.Raw, h), nil
 }
