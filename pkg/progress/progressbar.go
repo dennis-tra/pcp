@@ -786,49 +786,49 @@ func writeString(c config, str string) error {
 	return nil
 }
 
-//// Reader is the progressbar io.Reader struct
-//type Reader struct {
-//	io.Reader
-//	bar *ProgressBar
-//}
-//
-//// NewReader return a new Reader with a given progress bar.
-//func NewReader(r io.Reader, bar *ProgressBar) Reader {
-//	return Reader{
-//		Reader: r,
-//		bar:    bar,
-//	}
-//}
-//
-//// Read will read the data and add the number of bytes to the progressbar
-//func (r *Reader) Read(p []byte) (n int, err error) {
-//	n, err = r.Reader.Read(p)
-//	r.bar.Add(n)
-//	return
-//}
-//
-//// Close the reader when it implements io.Closer
-//func (r *Reader) Close() (err error) {
-//	if closer, ok := r.Reader.(io.Closer); ok {
-//		return closer.Close()
-//	}
-//	r.bar.Finish()
-//	return
-//}
-//
-//// Write implement io.Writer
-//func (p *ProgressBar) Write(b []byte) (n int, err error) {
-//	n = len(b)
-//	p.Add(n)
-//	return
-//}
-//
-//// Read implement io.Reader
-//func (p *ProgressBar) Read(b []byte) (n int, err error) {
-//	n = len(b)
-//	p.Add(n)
-//	return
-//}
+// Reader is the progressbar io.Reader struct
+type Reader struct {
+	io.Reader
+	bar *ProgressBar
+}
+
+// NewReader return a new Reader with a given progress bar.
+func NewReader(r io.Reader, bar *ProgressBar) Reader {
+	return Reader{
+		Reader: r,
+		bar:    bar,
+	}
+}
+
+// Read will read the data and add the number of bytes to the progressbar
+func (r *Reader) Read(p []byte) (n int, err error) {
+	n, err = r.Reader.Read(p)
+	r.bar.Add(n)
+	return
+}
+
+// Close the reader when it implements io.Closer
+func (r *Reader) Close() (err error) {
+	if closer, ok := r.Reader.(io.Closer); ok {
+		return closer.Close()
+	}
+	r.bar.Finish()
+	return
+}
+
+// Write implement io.Writer
+func (p *ProgressBar) Write(b []byte) (n int, err error) {
+	n = len(b)
+	p.Add(n)
+	return
+}
+
+// Read implement io.Reader
+func (p *ProgressBar) Read(b []byte) (n int, err error) {
+	n = len(b)
+	p.Add(n)
+	return
+}
 
 func average(xs []float64) float64 {
 	total := 0.0

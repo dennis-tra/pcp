@@ -3,6 +3,7 @@ package send
 import (
 	"context"
 	"fmt"
+	"github.com/dennis-tra/pcp/pkg/progress"
 	"os"
 	"path"
 	"sync"
@@ -15,7 +16,6 @@ import (
 	"github.com/dennis-tra/pcp/pkg/dht"
 	"github.com/dennis-tra/pcp/pkg/mdns"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
-	"github.com/dennis-tra/pcp/pkg/progress"
 	"github.com/dennis-tra/pcp/pkg/words"
 )
 
@@ -157,16 +157,12 @@ func (n *Node) Transfer(peerID peer.ID) error {
 	}
 	log.Infoln("Accepted!")
 
-	pr := progress.NewReader(f)
+	bar := progress.DefaultBytes(
+		fstat.Size(),
+		path.Base(f.Name()),
+	)
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	ctx, cancel := context.WithCancel(n.ServiceContext())
-	go pcpnode.IndicateProgress(ctx, pr, path.Base(f.Name()), fstat.Size(), &wg)
-	defer func() { cancel(); wg.Wait() }()
-
-	if _, err = n.Node.Transfer(ctx, peerID, pr); err != nil {
+	if _, err = n.Node.Transfer(n.ServiceContext(), peerID, bar, f); err != nil {
 		return errors.Wrap(err, "could not transfer file to peer")
 	}
 
