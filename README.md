@@ -112,17 +112,23 @@ The current proto definitions were generated with `libprotoc 3.14.0`.
 
 Shamelessly copied from `croc`:
 
-- [x] Two computers on the same network can exchange files
-- [ ] Two computers on the same network can exchange directories
-- [ ] allows any two computers to transfer data (using a relay)
-- [ ] provides end-to-end encryption (using PAKE)
-- [ ] enables easy cross-platform transfers (Windows, Linux, Mac)
+- [x] allows any two computers to transfer data (using a relay)
+  - ✅ using mDNS and DHT for peer discovery and [AutoRelay](https://docs.libp2p.io/concepts/circuit-relay/#autorelay) / [AutoNat](https://docs.libp2p.io/concepts/nat/#autonat)
+- [x] provides end-to-end encryption (using PAKE)
+  - ✅ actually PAKE is only used for authentication TLS for end-to-end encryption
+- [x] enables easy cross-platform transfers (Windows, Linux, Mac)
+  - 🤔 needs to be tested, but builds exist
 - [ ] allows multiple file transfers
+  - ❌ not yet
 - [ ] allows resuming transfers that are interrupted
-- [ ] local server or port-forwarding not needed
+  - ❌ not yet
+- [x] local server or port-forwarding not needed
+  - ✅ thanks to [AutoNat](https://docs.libp2p.io/concepts/nat/#autonat)
 - [ ] ipv6-first with ipv4 fallback
+  - 🤔 I think that's the case, but I'm not sure about the libp2p internals
 - [ ] can use proxy, like tor
-
+  - ❌ not yet
+  
 ## Related Efforts
 
 - [`croc`](https://github.com/schollz/croc) - Easily and securely send things from one computer to another
