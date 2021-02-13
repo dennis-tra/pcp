@@ -29,7 +29,7 @@ install:
 	go install ${LDFLAGS}
 
 format:
-	gofumpt -l -w .
+	gofumpt -w $(shell go list -f {{.Dir}} ./... | grep -v pkg/pb)
 
 tools:
 	go install mvdan.cc/gofumpt

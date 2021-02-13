@@ -111,10 +111,10 @@ func (x *Header) GetSignature() []byte {
 	return nil
 }
 
-// PushRequest is sent to the receiving peer for acceptance.
+// PullRequest is sent to the receiving peer for acceptance.
 // It contains basic information about the data that is
 // about to be transmitted.
-type PushRequest struct {
+type PullRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -130,8 +130,8 @@ type PushRequest struct {
 	Cid []byte `protobuf:"bytes,4,opt,name=cid,proto3" json:"cid,omitempty"`
 }
 
-func (x *PushRequest) Reset() {
-	*x = PushRequest{}
+func (x *PullRequest) Reset() {
+	*x = PullRequest{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_p2p_proto_msgTypes[1]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -139,13 +139,13 @@ func (x *PushRequest) Reset() {
 	}
 }
 
-func (x *PushRequest) String() string {
+func (x *PullRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PushRequest) ProtoMessage() {}
+func (*PullRequest) ProtoMessage() {}
 
-func (x *PushRequest) ProtoReflect() protoreflect.Message {
+func (x *PullRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_p2p_proto_msgTypes[1]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -157,43 +157,43 @@ func (x *PushRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PushRequest.ProtoReflect.Descriptor instead.
-func (*PushRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use PullRequest.ProtoReflect.Descriptor instead.
+func (*PullRequest) Descriptor() ([]byte, []int) {
 	return file_p2p_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *PushRequest) GetHeader() *Header {
+func (x *PullRequest) GetHeader() *Header {
 	if x != nil {
 		return x.Header
 	}
 	return nil
 }
 
-func (x *PushRequest) GetFilename() string {
+func (x *PullRequest) GetFilename() string {
 	if x != nil {
 		return x.Filename
 	}
 	return ""
 }
 
-func (x *PushRequest) GetSize() int64 {
+func (x *PullRequest) GetSize() int64 {
 	if x != nil {
 		return x.Size
 	}
 	return 0
 }
 
-func (x *PushRequest) GetCid() []byte {
+func (x *PullRequest) GetCid() []byte {
 	if x != nil {
 		return x.Cid
 	}
 	return nil
 }
 
-// PushResponse is sent as a reply to the PushRequest message.
+// PullResponse is sent as a reply to the PullRequest message.
 // It just indicates if the receiving peer is willing to
 // accept the file.
-type PushResponse struct {
+type PullResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -202,8 +202,8 @@ type PushResponse struct {
 	Accept bool    `protobuf:"varint,2,opt,name=accept,proto3" json:"accept,omitempty"`
 }
 
-func (x *PushResponse) Reset() {
-	*x = PushResponse{}
+func (x *PullResponse) Reset() {
+	*x = PullResponse{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_p2p_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -211,13 +211,13 @@ func (x *PushResponse) Reset() {
 	}
 }
 
-func (x *PushResponse) String() string {
+func (x *PullResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PushResponse) ProtoMessage() {}
+func (*PullResponse) ProtoMessage() {}
 
-func (x *PushResponse) ProtoReflect() protoreflect.Message {
+func (x *PullResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_p2p_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -229,19 +229,19 @@ func (x *PushResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PushResponse.ProtoReflect.Descriptor instead.
-func (*PushResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use PullResponse.ProtoReflect.Descriptor instead.
+func (*PullResponse) Descriptor() ([]byte, []int) {
 	return file_p2p_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *PushResponse) GetHeader() *Header {
+func (x *PullResponse) GetHeader() *Header {
 	if x != nil {
 		return x.Header
 	}
 	return nil
 }
 
-func (x *PushResponse) GetAccept() bool {
+func (x *PullResponse) GetAccept() bool {
 	if x != nil {
 		return x.Accept
 	}
@@ -262,14 +262,14 @@ var file_p2p_proto_rawDesc = []byte{
 	0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x6f, 0x64, 0x65, 0x50, 0x75, 0x62, 0x4b, 0x65, 0x79, 0x12, 0x1c,
 	0x0a, 0x09, 0x73, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28,
 	0x0c, 0x52, 0x09, 0x73, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x22, 0x70, 0x0a, 0x0b,
-	0x50, 0x75, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x06, 0x68,
+	0x50, 0x75, 0x6c, 0x6c, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x06, 0x68,
 	0x65, 0x61, 0x64, 0x65, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x07, 0x2e, 0x48, 0x65,
 	0x61, 0x64, 0x65, 0x72, 0x52, 0x06, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72, 0x12, 0x1a, 0x0a, 0x08,
 	0x66, 0x69, 0x6c, 0x65, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08,
 	0x66, 0x69, 0x6c, 0x65, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x73, 0x69, 0x7a, 0x65,
 	0x18, 0x03, 0x20, 0x01, 0x28, 0x03, 0x52, 0x04, 0x73, 0x69, 0x7a, 0x65, 0x12, 0x10, 0x0a, 0x03,
 	0x63, 0x69, 0x64, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x03, 0x63, 0x69, 0x64, 0x22, 0x47,
-	0x0a, 0x0c, 0x50, 0x75, 0x73, 0x68, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1f,
+	0x0a, 0x0c, 0x50, 0x75, 0x6c, 0x6c, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1f,
 	0x0a, 0x06, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x07,
 	0x2e, 0x48, 0x65, 0x61, 0x64, 0x65, 0x72, 0x52, 0x06, 0x68, 0x65, 0x61, 0x64, 0x65, 0x72, 0x12,
 	0x16, 0x0a, 0x06, 0x61, 0x63, 0x63, 0x65, 0x70, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x08, 0x52,
@@ -295,14 +295,14 @@ var (
 	file_p2p_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 	file_p2p_proto_goTypes  = []interface{}{
 		(*Header)(nil),       // 0: Header
-		(*PushRequest)(nil),  // 1: PushRequest
-		(*PushResponse)(nil), // 2: PushResponse
+		(*PullRequest)(nil),  // 1: PullRequest
+		(*PullResponse)(nil), // 2: PullResponse
 	}
 )
 
 var file_p2p_proto_depIdxs = []int32{
-	0, // 0: PushRequest.header:type_name -> Header
-	0, // 1: PushResponse.header:type_name -> Header
+	0, // 0: PullRequest.header:type_name -> Header
+	0, // 1: PullResponse.header:type_name -> Header
 	2, // [2:2] is the sub-list for method output_type
 	2, // [2:2] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
@@ -329,7 +329,7 @@ func file_p2p_proto_init() {
 			}
 		}
 		file_p2p_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PushRequest); i {
+			switch v := v.(*PullRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -341,7 +341,7 @@ func file_p2p_proto_init() {
 			}
 		}
 		file_p2p_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PushResponse); i {
+			switch v := v.(*PullResponse); i {
 			case 0:
 				return &v.state
 			case 1:

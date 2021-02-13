@@ -92,6 +92,7 @@ It's on the roadmap to distribute `pcp` via `apt`, `yum`, `brew`, `scoop` etc
 First install the protoc compiler:
 
 ```shell
+go install mvdan.cc/gofumpt
 go install google.golang.org/protobuf/cmd/protoc-gen-go
 ```
 
