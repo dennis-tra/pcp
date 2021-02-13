@@ -1,8 +1,9 @@
 package dht
 
 import (
-	"github.com/dennis-tra/pcp/pkg/service"
 	"sync"
+
+	"github.com/dennis-tra/pcp/pkg/service"
 
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -32,10 +33,8 @@ func newProtocol(node *pcpnode.Node) *protocol {
 // TODO: Make it possible to bootstrap from local IPFS node
 // TODO: Exit early after we have established min 3 connections
 func (p *protocol) Bootstrap() error {
-
 	var err error
 	p.init.Do(func() {
-
 		bootstrapPeers := []string{
 			"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
 			"/ip4/159.69.43.228/tcp/4001/p2p/QmSKVUFAyCddg2wDUdZVCfvqG5YCwwJTWY1HRmorebXcKG",

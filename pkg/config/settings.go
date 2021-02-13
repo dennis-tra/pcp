@@ -32,7 +32,7 @@ func LoadSettings() (*Settings, error) {
 }
 
 func (s *Settings) Save() error {
-	err := save(settingsFile, s, 0744)
+	err := save(settingsFile, s, 0o744)
 	if err == nil {
 		s.Exists = true
 	}

@@ -3,10 +3,11 @@ package send
 import (
 	"context"
 	"fmt"
-	"github.com/dennis-tra/pcp/pkg/progress"
 	"os"
 	"path"
 	"sync"
+
+	"github.com/dennis-tra/pcp/pkg/progress"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -41,7 +42,6 @@ type Advertiser interface {
 // InitNode returns a fully configured node ready to start
 // advertising that we want to send a specific file.
 func InitNode(ctx context.Context, filepath string) (*Node, error) {
-
 	h, err := pcpnode.New(ctx, libp2p.EnableAutoRelay())
 	if err != nil {
 		return nil, err
@@ -86,7 +86,6 @@ func (n *Node) Shutdown() {
 // Advertise asynchronously advertises the given code through the means of all
 // registered advertisers. Currently these are multicast DNS and DHT.
 func (n *Node) Advertise(code string) {
-
 	n.advertisers = []Advertiser{
 		dht.NewAdvertiser(n.Node),
 		mdns.NewAdvertiser(n.Node),
@@ -127,7 +126,6 @@ func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
 }
 
 func (n *Node) Transfer(peerID peer.ID) error {
-
 	c, err := calcContentID(n.filepath)
 	if err != nil {
 		return err

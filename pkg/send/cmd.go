@@ -35,7 +35,6 @@ you're providing and request to receive it.`,
 // Action contains the logic for the send subcommand of the pcp program. It is
 // mainly responsible for the TUI state handling and input parsing.
 func Action(c *cli.Context) error {
-
 	// Read config file and fill context with it.
 	ctx, err := config.FillContext(c.Context)
 	if err != nil {
@@ -74,7 +73,6 @@ func Action(c *cli.Context) error {
 // verifyFileAccess just tries to open the file at the given path to check
 // if we have the correct permissions to read it.
 func verifyFileAccess(filepath string) error {
-
 	if filepath == "" {
 		return fmt.Errorf("please specify the file you want to transfer")
 	}
@@ -96,7 +94,6 @@ func help() {
 }
 
 func calcContentID(filepath string) (cid.Cid, error) {
-
 	f, err := os.Open(filepath)
 	if err != nil {
 		return cid.Cid{}, err

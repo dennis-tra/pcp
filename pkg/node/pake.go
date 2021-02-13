@@ -174,7 +174,6 @@ func NewPakeClientProtocol(node *Node, pw []byte) *PakeClientProtocol {
 }
 
 func (p *PakeClientProtocol) StartKeyExchange(ctx context.Context, peerID peer.ID) ([]byte, error) {
-
 	s, err := p.node.NewStream(ctx, peerID, ProtocolPake)
 	if err != nil {
 		return nil, err
@@ -276,7 +275,6 @@ func (p *PakeProtocol) SendProof(s network.Stream, key []byte) error {
 }
 
 func (p *PakeProtocol) ReceiveVerifyProof(s network.Stream, key []byte) error {
-
 	response, err := p.node.ReadBytes(s)
 	if err != nil {
 		return err

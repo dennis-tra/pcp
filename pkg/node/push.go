@@ -80,7 +80,6 @@ func (p *PushProtocol) onPushRequest(s network.Stream) {
 }
 
 func (p *PushProtocol) SendPushRequest(ctx context.Context, peerID peer.ID, filename string, size int64, c cid.Cid) (bool, error) {
-
 	s, err := p.node.NewStream(ctx, peerID, ProtocolPushRequest)
 	if err != nil {
 		return false, err

@@ -2,8 +2,9 @@ package service
 
 import (
 	"context"
-	"github.com/pkg/errors"
 	"sync"
+
+	"github.com/pkg/errors"
 )
 
 type ServiceState uint8

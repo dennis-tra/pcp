@@ -21,7 +21,6 @@ var (
 )
 
 func main() {
-
 	app := &cli.App{
 		Name: "pcp",
 		Authors: []*cli.Author{
@@ -36,7 +35,7 @@ func main() {
 		Commands: []*cli.Command{
 			receive.Command,
 			send.Command,
-			//initialize.Command,
+			// initialize.Command,
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{

@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/dennis-tra/pcp/pkg/service"
 	"io"
 	"io/ioutil"
 	"sync"
 	"time"
+
+	"github.com/dennis-tra/pcp/pkg/service"
 
 	"github.com/dennis-tra/pcp/internal/log"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
@@ -45,7 +46,6 @@ type PeerHandler interface {
 
 // New creates a new, fully initialized node with the given options.
 func New(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
-
 	node := &Node{authenticatedPeers: sync.Map{}, Service: service.New()}
 	node.PushProtocol = NewPushProtocol(node)
 	node.TransferProtocol = NewTransferProtocol(node)
@@ -160,7 +160,6 @@ func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
 // It takes the given signature and verifies it against the given public
 // key.
 func (n *Node) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
-
 	// store a temp ref to signature and remove it from message msg
 	// sign is a string to allow easy reset to zero-value (empty string)
 	signature := msg.GetHeader().Signature
@@ -188,7 +187,6 @@ func (n *Node) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
 
 	// extract node id from the provided public key
 	idFromKey, err := peer.IDFromPublicKey(key)
-
 	if err != nil {
 		return false, fmt.Errorf("failed to extract peer id from public key")
 	}
@@ -205,7 +203,6 @@ func (n *Node) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
 // it into the protobuf object. It also verifies the authenticity of the message.
 // Read closes the stream for reading but leaves it open for writing.
 func (n *Node) Read(s network.Stream, data p2p.HeaderMessage) error {
-
 	defer s.CloseRead()
 	buf, err := ioutil.ReadAll(s)
 	if err != nil {
@@ -232,7 +229,6 @@ func (n *Node) Read(s network.Stream, data p2p.HeaderMessage) error {
 }
 
 func (n *Node) WriteBytes(w io.Writer, data []byte) (int, error) {
-
 	hdr := varint.ToUvarint(uint64(len(data)))
 	nhdr, err := w.Write(hdr)
 	if err != nil {

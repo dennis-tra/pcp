@@ -1,8 +1,9 @@
 package mdns
 
 import (
-	"github.com/dennis-tra/pcp/pkg/service"
 	"time"
+
+	"github.com/dennis-tra/pcp/pkg/service"
 
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 )

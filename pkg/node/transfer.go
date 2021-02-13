@@ -2,10 +2,11 @@ package node
 
 import (
 	"context"
-	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"io"
 	"sync"
+
+	"github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peer"
 
 	"github.com/dennis-tra/pcp/internal/log"
 )
@@ -74,7 +75,6 @@ func (t *TransferProtocol) onTransfer(s network.Stream) {
 // the progress to the user. This function returns when the bytes where transmitted and we have received an
 // acknowledgment.
 func (t *TransferProtocol) Transfer(ctx context.Context, peerID peer.ID, bar io.Writer, payload io.Reader) (int64, error) {
-
 	// Open a new stream to our peer.
 	s, err := t.node.NewStream(ctx, peerID, ProtocolTransfer)
 	if err != nil {

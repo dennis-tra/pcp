@@ -87,6 +87,7 @@ func ExampleOptionClearOnFinish() {
 	// Output:
 	// Finished
 }
+
 func ExampleProgressBar_Finish() {
 	bar := NewOptions(100, OptionSetWidth(10), OptionSetRenderBlankState(false))
 	bar.Finish()
@@ -502,7 +503,6 @@ func TestConcurrency(t *testing.T) {
 }
 
 func TestIterationNames(t *testing.T) {
-
 	b := Default(20)
 	tc := b.config
 

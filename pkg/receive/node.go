@@ -46,7 +46,6 @@ type Discoverer interface {
 }
 
 func InitNode(ctx context.Context, code []string) (*Node, error) {
-
 	h, err := pcpnode.New(ctx)
 	if err != nil {
 		return nil, err
@@ -181,7 +180,6 @@ func (n *Node) HandlePeer(info peer.AddrInfo) {
 }
 
 func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {
-
 	log.Infof("File: %s (%s)\n", pr.Filename, format.Bytes(pr.Size))
 	for {
 		log.Infof("Do you want to receive this file? [y,n,i,?] ")

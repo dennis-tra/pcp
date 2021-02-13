@@ -24,6 +24,7 @@ func (t Time) Now() stdtime.Time {
 func (t Time) NewTimer(d stdtime.Duration) *stdtime.Timer {
 	return stdtime.NewTimer(d)
 }
+
 func (t Time) Sleep(d stdtime.Duration) {
 	stdtime.Sleep(d)
 }

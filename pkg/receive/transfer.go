@@ -1,10 +1,11 @@
 package receive
 
 import (
-	"github.com/pkg/errors"
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/pkg/errors"
 
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/progress"
@@ -18,7 +19,6 @@ type TransferHandler struct {
 }
 
 func NewTransferHandler(filename string, size int64, cid []byte, done chan int64) (*TransferHandler, error) {
-
 	th := &TransferHandler{
 		filename: filename,
 		size:     size,

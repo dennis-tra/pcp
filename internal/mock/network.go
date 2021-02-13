@@ -6,14 +6,15 @@ package mock
 
 import (
 	context "context"
+	reflect "reflect"
+	time "time"
+
 	gomock "github.com/golang/mock/gomock"
 	crypto "github.com/libp2p/go-libp2p-core/crypto"
 	network "github.com/libp2p/go-libp2p-core/network"
 	peer "github.com/libp2p/go-libp2p-core/peer"
 	protocol "github.com/libp2p/go-libp2p-core/protocol"
 	multiaddr "github.com/multiformats/go-multiaddr"
-	reflect "reflect"
-	time "time"
 )
 
 // MockStreamer is a mock of Streamer interface

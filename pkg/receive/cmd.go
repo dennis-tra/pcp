@@ -3,12 +3,13 @@ package receive
 import (
 	"encoding/hex"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/dennis-tra/pcp/pkg/words"
 	"github.com/ipfs/go-cid"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
-	"strings"
-	"time"
 
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/config"
@@ -35,7 +36,6 @@ environments.`,
 
 // Action is the function that is called when running pcp receive.
 func Action(c *cli.Context) error {
-
 	ctx, err := config.FillContext(c.Context)
 	if err != nil {
 		return errors.Wrap(err, "failed loading configuration")
@@ -73,7 +73,6 @@ func Action(c *cli.Context) error {
 }
 
 func printInformation(data *p2p.PushRequest) {
-
 	var cStr string
 	if c, err := cid.Cast(data.Cid); err != nil {
 		cStr = err.Error()
