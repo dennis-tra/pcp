@@ -4,15 +4,11 @@ import (
 	"context"
 	"io"
 	"sync"
-	"time"
 
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 
-	"github.com/dennis-tra/pcp/internal/format"
 	"github.com/dennis-tra/pcp/internal/log"
-	"github.com/dennis-tra/pcp/pkg/commons"
-	"github.com/dennis-tra/pcp/pkg/progress"
 )
 
 // pattern: /protocol-name/request-or-response-message/version
@@ -30,7 +26,6 @@ type TransferProtocol struct {
 type TransferHandler interface {
 	HandleTransfer(r io.Reader)
 	GetLimit() int64
-	GetPeerID() peer.ID
 }
 
 func (t *TransferProtocol) RegisterTransferHandler(th TransferHandler) {
@@ -55,6 +50,13 @@ func NewTransferProtocol(node *Node) *TransferProtocol {
 
 // onTransfer is called when the peer initiates a file transfer.
 func (t *TransferProtocol) onTransfer(s network.Stream) {
+	defer t.node.ResetOnShutdown(s)()
+
+	if !t.node.IsAuthenticated(s.Conn().RemotePeer()) {
+		log.Infoln("Received push request from unauthenticated peer")
+		return
+	}
+
 	t.lk.RLock()
 	defer func() {
 		if err := s.Close(); err != nil {
@@ -62,11 +64,6 @@ func (t *TransferProtocol) onTransfer(s network.Stream) {
 		}
 		t.lk.RUnlock()
 	}()
-
-	if t.th.GetPeerID() != s.Conn().RemotePeer() {
-		log.Infof("Transfer initiated from unexpected peer %q instead of %q\n", s.Conn().RemotePeer(), t.th.GetPeerID())
-		return
-	}
 
 	// Only read as much as we expect to avoid stuffing.
 	lr := io.LimitReader(s, t.th.GetLimit())
@@ -77,37 +74,20 @@ func (t *TransferProtocol) onTransfer(s network.Stream) {
 // Transfer can be called to transfer the given payload to the given peer. The PushRequest is used for displaying
 // the progress to the user. This function returns when the bytes where transmitted and we have received an
 // acknowledgment.
-func (t *TransferProtocol) Transfer(ctx context.Context, peerID peer.ID, payload io.Reader) (int64, error) {
-
+func (t *TransferProtocol) Transfer(ctx context.Context, peerID peer.ID, bar io.Writer, payload io.Reader) (int64, error) {
 	// Open a new stream to our peer.
 	s, err := t.node.NewStream(ctx, peerID, ProtocolTransfer)
 	if err != nil {
 		return 0, err
 	}
 	defer s.Close()
+	defer t.node.ResetOnShutdown(s)()
 
 	// The actual file transfer.
-	written, err := io.Copy(s, payload)
+	written, err := io.Copy(io.MultiWriter(s, bar), payload)
 	if err != nil {
 		return 0, err
 	}
 
 	return written, t.node.WaitForEOF(s)
-}
-
-func IndicateProgress(ctx context.Context, bCounter progress.Counter, filename string, size int64, wg *sync.WaitGroup) {
-	ticker := progress.NewTicker(ctx, bCounter, size, 500*time.Millisecond)
-	tWidth := commons.TerminalWidth()
-
-	iCounter := 0 // iteration counter
-	start := time.Now()
-
-	for t := range ticker {
-		bps := int64(float64(t.N()) / time.Now().Sub(start).Seconds()) // bytes per second
-		msg := format.TransferStatus(filename, iCounter, tWidth, t.Percent()/100, t.Remaining(), bps)
-		log.Infof("\r%s", msg)
-		iCounter++
-	}
-
-	wg.Done()
 }

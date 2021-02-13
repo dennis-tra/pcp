@@ -3,58 +3,186 @@ package receive
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"os"
 	"strings"
+	"sync"
 
-	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
-	"go.uber.org/atomic"
 
 	"github.com/dennis-tra/pcp/internal/format"
 	"github.com/dennis-tra/pcp/internal/log"
-	"github.com/dennis-tra/pcp/pkg/node"
+	"github.com/dennis-tra/pcp/pkg/dht"
+	"github.com/dennis-tra/pcp/pkg/mdns"
+	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
+	"github.com/dennis-tra/pcp/pkg/words"
+)
+
+type nodeState uint8
+
+const (
+	idle = iota
+	discovering
+	connected
 )
 
 type Node struct {
-	*node.Node
-	busy     *atomic.Bool
-	shutdown chan error
+	*pcpnode.Node
+	*pcpnode.PakeClientProtocol
+
+	discoverers     []Discoverer
+	discoveredPeers sync.Map
+
+	code []string
+
+	stateLk sync.RWMutex
+	state   nodeState
 }
 
-func InitNode(ctx context.Context, host string, port int64, shutdown chan error) (*Node, error) {
+type Discoverer interface {
+	Discover(identifier string, handler pcpnode.PeerHandler) error
+	Shutdown()
+}
 
-	hostAddr := fmt.Sprintf("/ip4/%s/tcp/%d", host, port)
-	nn, err := node.Init(ctx, libp2p.ListenAddrStrings(hostAddr))
+func InitNode(ctx context.Context, code []string) (*Node, error) {
+	h, err := pcpnode.New(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	pw, err := words.ToBytes(code)
 	if err != nil {
 		return nil, err
 	}
 
 	n := &Node{
-		Node:     nn,
-		busy:     atomic.NewBool(false),
-		shutdown: shutdown,
+		Node:               h,
+		code:               code,
+		state:              idle,
+		stateLk:            sync.RWMutex{},
+		discoveredPeers:    sync.Map{},
+		discoverers:        []Discoverer{},
+		PakeClientProtocol: pcpnode.NewPakeClientProtocol(h, pw),
 	}
-	n.RegisterRequestHandler(n)
+
+	n.RegisterPushRequestHandler(n)
 
 	return n, nil
 }
 
-func (n *Node) Shutdown(err error) {
-	n.shutdown <- err
-	close(n.shutdown)
+func (n *Node) Shutdown() {
+	n.StopDiscovering()
+	n.UnregisterPushRequestHandler()
+	n.UnregisterTransferHandler()
+	n.Node.Shutdown()
+}
+
+func (n *Node) Discover(code string) {
+	n.setState(discovering)
+
+	n.discoverers = []Discoverer{
+		dht.NewDiscoverer(n.Node),
+		mdns.NewDiscoverer(n.Node),
+	}
+
+	for _, discoverer := range n.discoverers {
+		go func(d Discoverer) {
+			if err := d.Discover(code, n); err != nil {
+				log.Warningln(err)
+			}
+		}(discoverer)
+	}
+}
+
+func (n *Node) StopDiscovering() {
+	var wg sync.WaitGroup
+	for _, discoverer := range n.discoverers {
+		wg.Add(1)
+		go func(d Discoverer) {
+			d.Shutdown()
+			wg.Done()
+		}(discoverer)
+	}
+	wg.Wait()
+}
+
+func (n *Node) setState(state nodeState) nodeState {
+	n.stateLk.Lock()
+	defer n.stateLk.Unlock()
+	n.state = state
+	return n.state
+}
+
+func (n *Node) getState() nodeState {
+	n.stateLk.RLock()
+	defer n.stateLk.RUnlock()
+	return n.state
+}
+
+// HandlePeer is called async from the discoverers. It's okay to have long running tasks here.
+func (n *Node) HandlePeer(info peer.AddrInfo) {
+	if n.getState() != discovering {
+		log.Debugln("Received a peer from the discoverer although we're not discovering")
+		return
+	}
+
+	// Check if we have already seen the peer and exit early to not connect again.
+	// TODO: Check if the multi addresses have changed
+	_, loaded := n.discoveredPeers.LoadOrStore(info.ID, info)
+	if loaded {
+		return
+	}
+
+	err := n.Connect(n.ServiceContext(), info)
+	if err != nil {
+		// stale entry in DHT?
+		// log.Debugln(err)
+		return
+	}
+
+	pubKey, err := n.Peerstore().PubKey(info.ID).Bytes()
+	if err != nil {
+		log.Errorln(err)
+		return
+	}
+
+	// Check if the public key matches given words
+	code, err := words.FromBytes(pubKey)
+	if err != nil {
+		log.Errorln(err)
+		return
+	}
+
+	for i := range code {
+		if n.code[i] != code[i] {
+			log.Debugln("Pub Key of found peer does not match given word list")
+			return
+		}
+	}
+
+	// Negotiate PAKE
+	_, err = n.StartKeyExchange(n.ServiceContext(), info.ID)
+	if err != nil {
+		log.Errorln(err)
+		return
+	}
+
+	// We're authenticated so can initiate a transfer
+	if n.getState() == connected {
+		log.Debugln("already connected and authenticated with another node")
+		return
+	}
+	n.setState(connected)
+
+	// Stop the discovering process as we have found the valid peer
+	n.StopDiscovering()
 }
 
 func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {
-	if n.busy.Load() {
-		return false, nil
-	}
-	n.busy.Store(true)
-
-	log.Infof("Sending request: %s (%s)\n", pr.Filename, format.Bytes(pr.Size))
+	log.Infof("File: %s (%s)\n", pr.Filename, format.Bytes(pr.Size))
 	for {
-		log.Infof("Do you want to receive this file? [y,n,i,q,?] ")
+		log.Infof("Do you want to receive this file? [y,n,i,?] ")
 		scanner := bufio.NewScanner(os.Stdin)
 		if !scanner.Scan() {
 			return true, errors.Wrap(scanner.Err(), "failed reading from stdin")
@@ -66,12 +194,6 @@ func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {
 		// Empty input, user just pressed enter => do nothing and prompt again
 		if input == "" {
 			continue
-		}
-
-		// Quit the process
-		if input == "q" {
-			go n.Shutdown(nil)
-			return false, nil
 		}
 
 		// Print the help text and prompt again
@@ -88,14 +210,8 @@ func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {
 
 		// Accept the file transfer
 		if input == "y" {
-
-			peerID, err := pr.PeerID()
-			if err != nil {
-				return true, err
-			}
-
 			done := n.TransferFinishHandler(pr.Size)
-			th, err := NewTransferHandler(peerID, pr.Filename, pr.Size, pr.Cid, done)
+			th, err := NewTransferHandler(pr.Filename, pr.Size, pr.Cid, done)
 			if err != nil {
 				return true, err
 			}
@@ -106,8 +222,7 @@ func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {
 
 		// Reject the file transfer
 		if input == "n" {
-			n.busy.Store(false)
-			log.Infoln("Ready to receive files... (cancel with ctrl+c)")
+			go n.Shutdown()
 			return false, nil
 		}
 
@@ -120,18 +235,18 @@ func (n *Node) TransferFinishHandler(size int64) chan int64 {
 	go func() {
 		var received int64
 		select {
-		case received = <-done:
-		case <-n.shutdown:
+		case <-n.SigShutdown():
 			return
+		case received = <-done:
 		}
 
 		if received == size {
 			log.Infoln("Successfully received file!")
 		} else {
-			log.Infoln("WARNING: Only received %d of %d bytes!", received, size)
+			log.Infof("WARNING: Only received %d of %d bytes!\n", received, size)
 		}
 
-		n.shutdown <- nil
+		n.Shutdown()
 	}()
 	return done
 }

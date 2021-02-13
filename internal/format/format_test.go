@@ -9,8 +9,7 @@ import (
 )
 
 func TestBytes(t *testing.T) {
-
-	var tests = []struct {
+	tests := []struct {
 		bytes int64
 		want  string
 	}{
@@ -25,9 +24,9 @@ func TestBytes(t *testing.T) {
 		})
 	}
 }
-func TestFormatFilename(t *testing.T) {
 
-	var tests = []struct {
+func TestFormatFilename(t *testing.T) {
+	tests := []struct {
 		name      string
 		iteration int
 		maxLen    int
@@ -62,8 +61,7 @@ func TestFormatFilename(t *testing.T) {
 }
 
 func TestFormatProgress(t *testing.T) {
-
-	var tests = []struct {
+	tests := []struct {
 		width   int
 		percent float64
 		want    string
@@ -89,8 +87,7 @@ func TestFormatProgress(t *testing.T) {
 }
 
 func TestFormatTransferStatus(t *testing.T) {
-
-	var tests = []struct {
+	tests := []struct {
 		filename  string
 		iteration int
 		twidth    int

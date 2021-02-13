@@ -5,9 +5,10 @@
 package mock
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	os "os"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockIoutiler is a mock of Ioutiler interface

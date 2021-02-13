@@ -7,29 +7,69 @@
 
 Command line peer-to-peer data transfer tool based on [libp2p](https://github.com/libp2p/go-libp2p).
 
-![Demo animation](./docs/demo-2021-01-27.gif)
+![Demo animation](./docs/demo-2021-02-13.gif)
 
 ## Table of Contents
 
-- [Table of Contents](#table-of-contents)
-- [Project Status & Motivation](#project-status--motivation)
-- [Install](#install)
+- [Motivation](#motivation)
 - [Usage](#usage)
+- [Install](#install)
+  - [Release download](#release-download) | [From source](#from-source) | [Package managers](#package-managers)
 - [Development](#development)
-  - [Generate Protobuf definitions](#generate-protobuf-definitions)
+  - [Protobuf definitions](#generate-protobuf-definitions)
 - [Feature Roadmap](#feature-roadmap)
 - [Related Efforts](#related-efforts)
 - [Maintainers](#maintainers)
+- [Acknowledgment](#acknowledgment)
 - [Contributing](#contributing)
 - [License](#license)
 
-## Project Status & Motivation
+## Motivation
 
-The tool is in a very early stage and I'm aware of security, performance and usability issues. For now it works in the limited scope of transfering files in your local network. Don't use it for anything serious. There is already a very good Go implementation named [`croc`](https://github.com/schollz/croc). 
+There already exists a long list of file transfer tools (see [Related Efforts](#related-efforts)), so why bother
+building another one? The problem I had with the existing tools is that they rely on
+a [limited set of](https://github.com/schollz/croc/issues/289) [servers](https://magic-wormhole.readthedocs.io/en/latest/welcome.html#relays)
+to orchestrate peer matching and data relaying which poses a centralisation concern. Many of the usual centralisation
+vs. decentralisation arguments apply here, e.g. the servers are single points of failures, the service operator has the
+power over whom to serve and whom not, etc. Further, as
+this [recent issue in croc](https://github.com/schollz/croc/issues/289) shows, this is a real risk for sustainable
+operation of the provided service. Only because a benevolent big player jumps in as a sponsor the service continues to
+exist.
 
-My motivation to build a new tool is to levarage the peer-to-peer networking stack that is provided by [libp2p](https://github.com/libp2p/go-libp2p). In the future `pcp` should also enable two peers in different networks to exchange files via a relay. I'm not sure how croc chooses relay servers but I guess there is just a limited set which puts the power to a limited number of service providers and is therefore a centralization concern (if my assumption is correct). By using libp2ps [experimental autorelay](https://docs.libp2p.io/concepts/circuit-relay/#autorelay) feature I think `pcp` takes another step into a more decentralized world.
+`pcp` leverages the peer-to-peer networking stack of [libp2p](https://github.com/libp2p/go-libp2p). It uses multicast
+DNS to find peers locally and the distributed hash table of IPFS for remote peer discovery. Unfortunately there is a significant drawbacks with this approach: It's slower than established centralised methods if
+you want to transmit data over network boundaries. A DHT query to find your peer can take 2 - 3 minutes.
+
+[comment]: <> (The `identify` discovery mechanism serves the same role as `STUN`, but without the need for a set of `STUN` servers. The libp2p `Circuit Relay` protocol allows peers to communicate indirectly via a helpful intermediary peer that is found via the DHT. This replaces dedicated `TURN` servers.)
+
+## Usage
+
+The sending peer runs:
+
+```shell
+$ pcp send my_file
+Code is:  bubble-enemy-result-increase
+On the other machine run:
+	pcp receive bubble-enemy-result-increase
+```
+
+The receiving peer runs:
+
+```shell
+$ pcp receive december-iron-old-increase
+Looking for peer december-iron-old-increase...
+```
+
+If you're on different networks the lookup can take quite long without any user facing output yet (~2 - 3 minutes).
 
 ## Install
+
+### Release download
+
+Head over to the [releases](https://github.com/dennis-tra/pcp/releases/tag/v0.1.1) and download the latest binary for
+your platform.
+
+### From source
 
 For now, you need to compile it yourself:
 
@@ -45,69 +85,48 @@ go install cmd/pcp/pcp.go
 
 Make sure the `$GOPATH/bin` is in your `PATH` variable to access the installed `pcp` executable.
 
-## Usage
+### Package managers
 
-The receiving peer runs:
-
-```shell
-$ pcp receive
-Your identity:
-
-	16Uiu2HAkwyP8guhAXN66rkn8BEw3SjBavUuEu4VizTHhRcu7WLxq
-
-Waiting for peers to connect... (cancel with strg+c)
-```
-
-The sending peer runs:
-
-```shell
-$ pcp send my_file
-Querying peers that are waiting to receive files...
-
-Found the following peer(s):
-[0] 16Uiu2HAkwyP8guhAXN66rkn8BEw3SjBavUuEu4VizTHhRcu7WLxq
-
-Select the peer you want to send the file to [#,r,q,?]:
-```
-
-At this point the sender needs to select the receiving peer, who in turn needs to confirm the file transfer.
+It's on the roadmap to distribute `pcp` via `apt`, `yum`, `brew`, `scoop` and more ...
 
 ## Development
 
-### Generate Protobuf definitions
+### Protobuf definitions
 
 First install the protoc compiler:
 
 ```shell
-go install google.golang.org/protobuf/cmd/protoc-gen-go
+make tools # downloads gofumpt and protoc
+make proto # generates protobuf
 ```
 
-Then run from the root of this repository:
-
-```shell
-protoc -I=pkg/pb --go_out=pkg/pb --go_opt=paths=source_relative p2p.proto
-```
-
-The proto defintions were generated with `libprotoc 3.14.0`.
+The current proto definitions were generated with `libprotoc 3.14.0`.
 
 ## Feature Roadmap
 
 Shamelessly copied from `croc`:
 
-- [x] Two computers on the same network can exchange files
-- [ ] Two computers on the same network can exchange directories
-- [ ] allows any two computers to transfer data (using a relay)
-- [ ] provides end-to-end encryption (using PAKE)
-- [ ] enables easy cross-platform transfers (Windows, Linux, Mac)
+- [x] allows any two computers to transfer data (using a relay)
+  - ✅ using mDNS and DHT for peer discovery and [AutoRelay](https://docs.libp2p.io/concepts/circuit-relay/#autorelay) / [AutoNat](https://docs.libp2p.io/concepts/nat/#autonat)
+- [x] provides end-to-end encryption (using PAKE)
+  - ✅ actually PAKE is only used for authentication TLS for end-to-end encryption
+- [x] enables easy cross-platform transfers (Windows, Linux, Mac)
+  - 🤔✅ only tested Linux <-> Mac
 - [ ] allows multiple file transfers
+  - ❌ not yet
 - [ ] allows resuming transfers that are interrupted
-- [ ] local server or port-forwarding not needed
+  - ❌ not yet
+- [x] local server or port-forwarding not needed
+  - ✅ thanks to [AutoNat](https://docs.libp2p.io/concepts/nat/#autonat)
 - [ ] ipv6-first with ipv4 fallback
+  - 🤔 I think that's the case, but I'm not sure about the libp2p internals
 - [ ] can use proxy, like tor
-
+  - ❌ not yet
+  
 ## Related Efforts
 
 - [`croc`](https://github.com/schollz/croc) - Easily and securely send things from one computer to another
+- [`magic-wormhole`](https://github.com/magic-wormhole/magic-wormhole) - get things from one computer to another, safely
 - [`dcp`](https://github.com/tom-james-watson/dat-cp) - Remote file copy, powered by the Dat protocol.
 - [`iwant`](https://github.com/nirvik/iWant) - CLI based decentralized peer to peer file sharing
 - [`p2pcopy`](https://github.com/psantosl/p2pcopy) - Small command line application to do p2p file copy behind firewalls
@@ -117,6 +136,7 @@ Shamelessly copied from `croc`:
   AirDrop
 - [`filepizza`](https://github.com/kern/filepizza) - Peer-to-peer file transfers in your browser
 - [`toss`](https://github.com/zerotier/toss) - Dead simple LAN file transfers from the command line
+- Forgot yours? [Open an issue](https://github.com/dennis-tra/pcp/issues/new) or submit a PR :)
 
 ## Maintainers
 
@@ -124,7 +144,9 @@ Shamelessly copied from `croc`:
 
 ## Acknowledgment
 
-- [`progress`](https://github.com/machinebox/progress) - package to print progress
+- [`go-libp2p`](https://github.com/libp2p/go-libp2p) - The Go implementation of the libp2p Networking Stack.
+- [`pake/v2`](https://github.com/schollz/pake/tree/v2.0.6) - PAKE library for generating a strong secret between parties over an insecure channel
+- [`progressbar`](https://github.com/schollz/progressbar) - A really basic thread-safe progress bar for Golang applications
 
 ## Contributing
 

@@ -1,32 +1,25 @@
 package receive
 
 import (
-	"context"
 	"io"
 	"os"
 	"path/filepath"
-	"sync"
 
-	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 
 	"github.com/dennis-tra/pcp/internal/log"
-	"github.com/dennis-tra/pcp/pkg/node"
 	"github.com/dennis-tra/pcp/pkg/progress"
 )
 
 type TransferHandler struct {
-	peerID   peer.ID
 	filename string
 	size     int64
 	cid      []byte
 	done     chan int64
 }
 
-func NewTransferHandler(peerID peer.ID, filename string, size int64, cid []byte, done chan int64) (*TransferHandler, error) {
-
+func NewTransferHandler(filename string, size int64, cid []byte, done chan int64) (*TransferHandler, error) {
 	th := &TransferHandler{
-		peerID:   peerID,
 		filename: filename,
 		size:     size,
 		cid:      cid,
@@ -61,19 +54,12 @@ func (th *TransferHandler) HandleTransfer(src io.Reader) {
 		}
 	}()
 
-	pw := progress.NewWriter(f)
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	go node.IndicateProgress(ctx, pw, th.filename, th.size, &wg)
-
+	bar := progress.DefaultBytes(
+		th.size,
+		th.filename,
+	)
 	// Receive and persist the actual data.
-	received, err = io.Copy(pw, src)
-	cancel()
-	wg.Wait()
-
+	received, err = io.Copy(io.MultiWriter(f, bar), src)
 	if err != nil {
 		log.Infoln(errors.Wrap(err, "error receiving or writing bytes"))
 	}
@@ -81,8 +67,4 @@ func (th *TransferHandler) HandleTransfer(src io.Reader) {
 
 func (th *TransferHandler) GetLimit() int64 {
 	return th.size
-}
-
-func (th *TransferHandler) GetPeerID() peer.ID {
-	return th.peerID
 }

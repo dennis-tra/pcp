@@ -3,7 +3,10 @@ package receive
 import (
 	"encoding/hex"
 	"fmt"
+	"strings"
+	"time"
 
+	"github.com/dennis-tra/pcp/pkg/words"
 	"github.com/ipfs/go-cid"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -15,73 +18,78 @@ import (
 
 // Command contains the receive sub-command configuration.
 var Command = &cli.Command{
-	Name:    "receive",
-	Usage:   "waits until a peer attempts to connect",
-	Aliases: []string{"r"},
-	Action:  Action,
-	Flags: []cli.Flag{
-		&cli.Int64Flag{
-			Name:    "port",
-			EnvVars: []string{"PCP_PORT"},
-			Aliases: []string{"p"},
-			Usage:   "The port at which you are reachable for other peers in the network.",
-			Value:   44044,
-		},
-		&cli.StringFlag{
-			Name:    "host",
-			EnvVars: []string{"PCP_HOST"},
-			Usage:   "The host at which you are reachable for other peers in the network.",
-			Value:   "0.0.0.0",
-		},
-	},
-	ArgsUsage: "[DEST_DIR]",
-	UsageText: `DEST_DIR	The destination directory where the received file
-	should be saved. The file will be named as the sender
-	specifies. If no DEST_DIR is given the file will be
-	saved to $XDG_DATA_HOME - usually ~/.data/. If the file
-	already exists you will be prompted what you want to do.`,
-	Description: `The receive subcommand starts a multicast DNS service. This
-makes it possible for other peers to discover us - it enables
-peer-to-peer discovery. It is important to note that many
-networks restrict the use of multicasting, which prevents mDNS
-from functioning. Notably, multicast cannot be used in any
-sort of cloud, or shared infrastructure environment. However it
-works well in most office, home, or private infrastructure
-environments.`,
+	Name:      "receive",
+	Usage:     "search for peers in your local network and the DHT",
+	Aliases:   []string{"r"},
+	Action:    Action,
+	ArgsUsage: "[WORD-CODE]",
+	Description: `The receive subcommand starts searching for peers in your local 
+network by sending out multicast DNS queries. These queries are
+based on the current time and the first word of the given list. It
+simultaneously queries the distributed hash table (DHT) with the
+exact same parameters.
+
+It is important to note that many networks restrict the use of
+multicasting, which prevents mDNS from functioning. Notably,
+multicast cannot be used in any sort of cloud, or shared infra-
+structure environment. However it works well in most office, home,
+or private infrastructure environments.
+
+After it has found a potential peer it starts a password authen-
+ticated key exchange (PAKE) with the remaining three words to
+proof that the peer is in possession of the password. While this
+is happening the tool still searches for other peers as the
+currently connected one could fail the authentication procedure.
+
+After the authentication was successful you need to confirm the
+file transfer. The confirmation dialog shows the name and size of
+the file.
+
+The file will be saved to your current working directory overwriting
+any files with the same name. If the transmission fails the file 
+will contain the partial written bytes.`,
 }
 
 // Action is the function that is called when running pcp receive.
 func Action(c *cli.Context) error {
-	shutdown := make(chan error)
-
 	ctx, err := config.FillContext(c.Context)
 	if err != nil {
 		return errors.Wrap(err, "failed loading configuration")
 	}
 
-	local, err := InitNode(ctx, c.String("host"), c.Int64("port"), shutdown)
-	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to initialize node"))
+	// TODO: make words count configurable
+	tcode := strings.Split(c.Args().First(), "-") // transfer code
+	if len(tcode) != 4 {
+		_ = cli.ShowSubcommandHelp(c)
+		return fmt.Errorf("list of words must be exactly 4")
 	}
-	defer local.Close()
 
-	log.Infof("Your identity:\n\n\t%s\n\n", local.Host.ID())
-
-	err = local.StartMdnsService(ctx)
+	chanID, err := words.ToInt(tcode[0])
 	if err != nil {
 		return err
 	}
-	defer local.StopMdnsService()
 
-	local.RegisterRequestHandler(local)
+	local, err := InitNode(ctx, tcode)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("failed to initialize node"))
+	}
 
-	log.Infoln("Ready to receive files... (cancel with ctrl+c)")
+	// Search for identifier
+	dhtKey := local.AdvertiseIdentifier(time.Now(), chanID)
+	log.Infof("Looking for peer %s... \n", c.Args().First())
+	local.Discover(dhtKey)
 
-	return <-shutdown
+	// Wait for the user to stop the tool or the transfer to finish.
+	select {
+	case <-ctx.Done():
+		local.Shutdown()
+		return nil
+	case <-local.SigDone():
+		return nil
+	}
 }
 
 func printInformation(data *p2p.PushRequest) {
-
 	var cStr string
 	if c, err := cid.Cast(data.Cid); err != nil {
 		cStr = err.Error()
@@ -99,9 +107,8 @@ func printInformation(data *p2p.PushRequest) {
 }
 
 func help() {
-	log.Infoln("y: accept and thus accept the file")
-	log.Infoln("n: reject the request to accept the file")
+	log.Infoln("y: accept the file transfer")
+	log.Infoln("n: reject the file transfer")
 	log.Infoln("i: show information about the sender and file to be received")
-	log.Infoln("q: quit pcp")
 	log.Infoln("?: this help message")
 }

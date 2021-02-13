@@ -1,12 +1,18 @@
 package node
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"sync"
 	"time"
 
+	"github.com/dennis-tra/pcp/pkg/service"
+
+	"github.com/dennis-tra/pcp/internal/log"
+	p2p "github.com/dennis-tra/pcp/pkg/pb"
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/libp2p/go-libp2p"
@@ -14,61 +20,97 @@ import (
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/routing"
+	kaddht "github.com/libp2p/go-libp2p-kad-dht"
+	manet "github.com/multiformats/go-multiaddr/net"
+	"github.com/multiformats/go-varint"
 	"github.com/pkg/errors"
-
-	"github.com/dennis-tra/pcp/pkg/config"
-	p2p "github.com/dennis-tra/pcp/pkg/pb"
 )
-
-// authenticateMessages is used in tests to skip
-// message authentication due to bogus keys.
-var authenticateMessages = true
 
 // Node encapsulates the logic for sending and receiving messages.
 type Node struct {
 	host.Host
-	*MdnsProtocol
 	*PushProtocol
 	*TransferProtocol
+	*service.Service
+
+	authenticatedPeers sync.Map
+
+	// DHT is an accessor that is needed in the DHT discoverer/advertiser.
+	DHT *kaddht.IpfsDHT
 }
 
-// Init creates a new, fully initialized node with the given options.
-func Init(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
+type PeerHandler interface {
+	HandlePeer(info peer.AddrInfo)
+}
 
-	conf, err := config.FromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if !conf.Identity.IsInitialized() {
-		err = conf.Identity.GenerateKeyPair()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	key, err := conf.Identity.PrivateKey()
-	if err != nil {
-		return nil, err
-	}
-	opts = append(opts, libp2p.Identity(key))
-	h, err := libp2p.New(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-
-	node := &Node{Host: h}
-	node.MdnsProtocol = NewMdnsProtocol(node)
+// New creates a new, fully initialized node with the given options.
+func New(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
+	node := &Node{authenticatedPeers: sync.Map{}, Service: service.New()}
 	node.PushProtocol = NewPushProtocol(node)
 	node.TransferProtocol = NewTransferProtocol(node)
 
-	return node, nil
+	key, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
+	if err != nil {
+		return nil, err
+	}
+
+	opts = append(opts,
+		libp2p.Identity(key),
+		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
+			node.DHT, err = kaddht.New(ctx, h)
+			return node.DHT, err
+		}),
+	)
+
+	node.Host, err = libp2p.New(ctx, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	return node, node.ServiceStarted()
+}
+
+func (n *Node) AddAuthenticatedPeer(peerID peer.ID) {
+	n.authenticatedPeers.Store(peerID, struct{}{})
+}
+
+func (n *Node) IsAuthenticated(peerID peer.ID) bool {
+	_, found := n.authenticatedPeers.Load(peerID)
+	return found
+}
+
+func (n *Node) HasPublicAddr() bool {
+	for _, addr := range n.Addrs() {
+		if manet.IsPublicAddr(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+func (n *Node) Shutdown() {
+	if err := n.Host.Close(); err != nil {
+		log.Warningln("error closing node", err)
+	}
+
+	n.ServiceStopped()
+}
+
+// AdvertiseIdentifier returns the string, that we use to advertise
+// via mDNS and the DHT. See ChannelID above for more information.
+func (n *Node) AdvertiseIdentifier(t time.Time, chanID int16) string {
+	return fmt.Sprintf("/pcp/%d/%d", t.Truncate(5*time.Minute).Unix(), chanID)
 }
 
 // Send prepares the message msg to be sent over the network stream s.
 // Send closes the stream for writing but leaves it open for reading.
 func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
-	defer s.CloseWrite()
+	defer func() {
+		if err := s.CloseWrite(); err != nil {
+			log.Warningln("Error closing writer part of stream after sending", err)
+		}
+	}()
 
 	// Get own public key.
 	pub, err := n.Host.Peerstore().PubKey(n.Host.ID()).Bytes()
@@ -80,7 +122,7 @@ func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
 		RequestId:  uuid.New().String(),
 		NodeId:     peer.Encode(n.Host.ID()),
 		NodePubKey: pub,
-		Timestamp:  appTime.Now().Unix(),
+		Timestamp:  time.Now().Unix(),
 	}
 	msg.SetHeader(hdr)
 
@@ -118,12 +160,6 @@ func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
 // It takes the given signature and verifies it against the given public
 // key.
 func (n *Node) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
-
-	// Short circuit in test runs with bogus keys.
-	if !authenticateMessages {
-		return true, nil
-	}
-
 	// store a temp ref to signature and remove it from message msg
 	// sign is a string to allow easy reset to zero-value (empty string)
 	signature := msg.GetHeader().Signature
@@ -151,7 +187,6 @@ func (n *Node) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
 
 	// extract node id from the provided public key
 	idFromKey, err := peer.IDFromPublicKey(key)
-
 	if err != nil {
 		return false, fmt.Errorf("failed to extract peer id from public key")
 	}
@@ -191,6 +226,47 @@ func (n *Node) Read(s network.Stream, data p2p.HeaderMessage) error {
 	}
 
 	return nil
+}
+
+func (n *Node) WriteBytes(w io.Writer, data []byte) (int, error) {
+	hdr := varint.ToUvarint(uint64(len(data)))
+	nhdr, err := w.Write(hdr)
+	if err != nil {
+		return nhdr, err
+	}
+
+	ndata, err := w.Write(data)
+	if err != nil {
+		return ndata, err
+	}
+
+	return nhdr + ndata, nil
+}
+
+func (n *Node) ReadBytes(r io.Reader) ([]byte, error) {
+	l, err := varint.ReadUvarint(bufio.NewReader(r))
+	if err != nil {
+		return nil, err
+	}
+
+	buf := make([]byte, l)
+	if _, err = r.Read(buf); err != nil {
+		return nil, err
+	}
+
+	return buf, nil
+}
+
+func (n *Node) ResetOnShutdown(s network.Stream) context.CancelFunc {
+	cancel := make(chan struct{})
+	go func() {
+		select {
+		case <-n.SigShutdown():
+			s.Reset()
+		case <-cancel:
+		}
+	}()
+	return func() { close(cancel) }
 }
 
 // WaitForEOF waits for an EOF signal on the stream. This indicates that the peer

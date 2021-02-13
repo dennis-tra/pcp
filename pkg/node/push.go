@@ -30,14 +30,14 @@ func NewPushProtocol(node *Node) *PushProtocol {
 	return &PushProtocol{node: node, lk: sync.RWMutex{}}
 }
 
-func (p *PushProtocol) RegisterRequestHandler(prh PushRequestHandler) {
+func (p *PushProtocol) RegisterPushRequestHandler(prh PushRequestHandler) {
 	p.lk.Lock()
 	defer p.lk.Unlock()
 	p.prh = prh
 	p.node.SetStreamHandler(ProtocolPushRequest, p.onPushRequest)
 }
 
-func (p *PushProtocol) UnregisterRequestHandler() {
+func (p *PushProtocol) UnregisterPushRequestHandler() {
 	p.lk.Lock()
 	defer p.lk.Unlock()
 	p.node.RemoveStreamHandler(ProtocolPushRequest)
@@ -46,6 +46,12 @@ func (p *PushProtocol) UnregisterRequestHandler() {
 
 func (p *PushProtocol) onPushRequest(s network.Stream) {
 	defer s.Close()
+	defer p.node.ResetOnShutdown(s)()
+
+	if !p.node.IsAuthenticated(s.Conn().RemotePeer()) {
+		log.Infoln("Received push request from unauthenticated peer")
+		return
+	}
 
 	req := &p2p.PushRequest{}
 	if err := p.node.Read(s, req); err != nil {
@@ -74,7 +80,6 @@ func (p *PushProtocol) onPushRequest(s network.Stream) {
 }
 
 func (p *PushProtocol) SendPushRequest(ctx context.Context, peerID peer.ID, filename string, size int64, c cid.Cid) (bool, error) {
-
 	s, err := p.node.NewStream(ctx, peerID, ProtocolPushRequest)
 	if err != nil {
 		return false, err

@@ -7,11 +7,12 @@
 package proto
 
 import (
+	reflect "reflect"
+	sync "sync"
+
 	proto "github.com/golang/protobuf/proto"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	reflect "reflect"
-	sync "sync"
 )
 
 const (
@@ -290,12 +291,15 @@ func file_p2p_proto_rawDescGZIP() []byte {
 	return file_p2p_proto_rawDescData
 }
 
-var file_p2p_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
-var file_p2p_proto_goTypes = []interface{}{
-	(*Header)(nil),       // 0: Header
-	(*PushRequest)(nil),  // 1: PushRequest
-	(*PushResponse)(nil), // 2: PushResponse
-}
+var (
+	file_p2p_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+	file_p2p_proto_goTypes  = []interface{}{
+		(*Header)(nil),       // 0: Header
+		(*PushRequest)(nil),  // 1: PushRequest
+		(*PushResponse)(nil), // 2: PushResponse
+	}
+)
+
 var file_p2p_proto_depIdxs = []int32{
 	0, // 0: PushRequest.header:type_name -> Header
 	0, // 1: PushResponse.header:type_name -> Header

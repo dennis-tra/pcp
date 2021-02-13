@@ -15,12 +15,9 @@ const (
 	ContextKey = "config"
 )
 
-var (
-	// settingsFile contains the path suffix that's appended to
-	// an XDG compliant directory to find the settings file.
-	settingsFile = filepath.Join(Prefix, "settings.json")
-	identityFile = filepath.Join(Prefix, "identity.json")
-)
+// settingsFile contains the path suffix that's appended to
+// an XDG compliant directory to find the settings file.
+var settingsFile = filepath.Join(Prefix, "settings.json")
 
 var (
 	appIoutil app.Ioutiler = app.Ioutil{}
@@ -33,19 +30,12 @@ var (
 // access permissions as it contains the private Key.
 type Config struct {
 	Settings *Settings
-	Identity *Identity
 }
 
 // Save saves the peer settings and identity information
 // to disk.
 func (c *Config) Save() error {
-
 	err := c.Settings.Save()
-	if err != nil {
-		return err
-	}
-
-	err = c.Identity.Save()
 	if err != nil {
 		return err
 	}
@@ -59,13 +49,7 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
-	identity, err := LoadIdentity()
-	if err != nil {
-		return nil, err
-	}
-
 	c := &Config{
-		Identity: identity,
 		Settings: settings,
 	}
 
@@ -95,7 +79,6 @@ func FromContext(ctx context.Context) (*Config, error) {
 }
 
 func save(relPath string, obj interface{}, perm os.FileMode) error {
-
 	path, err := appXdg.ConfigFile(relPath)
 	if err != nil {
 		return err
