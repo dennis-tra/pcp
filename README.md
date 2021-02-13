@@ -12,6 +12,7 @@ Command line peer-to-peer data transfer tool based on [libp2p](https://github.co
 ## Table of Contents
 
 - [Motivation](#motivation)
+- [Project Status](#project-status)
 - [Usage](#usage)
 - [Install](#install)
   - [Release download](#release-download) | [From source](#from-source) | [Package managers](#package-managers)
@@ -37,10 +38,17 @@ operation of the provided service. Only because a benevolent big player jumps in
 exist.
 
 `pcp` leverages the peer-to-peer networking stack of [libp2p](https://github.com/libp2p/go-libp2p). It uses multicast
-DNS to find peers locally and the distributed hash table of IPFS for remote peer discovery. Unfortunately there is a significant drawbacks with this approach: It's slower than established centralised methods if
-you want to transmit data over network boundaries. A DHT query to find your peer can take 2 - 3 minutes.
+DNS to find peers locally, and the distributed hash table of IPFS for remote peer discovery.
 
 [comment]: <> (The `identify` discovery mechanism serves the same role as `STUN`, but without the need for a set of `STUN` servers. The libp2p `Circuit Relay` protocol allows peers to communicate indirectly via a helpful intermediary peer that is found via the DHT. This replaces dedicated `TURN` servers.)
+
+## Project Status
+
+The tool is in a very early stage, and I'm aware of performance and usability issues. Don't use it for anything serious. There is already a very good Go implementation named [`croc`](https://github.com/schollz/croc).
+
+There are also drawbacks of this approach: It's slower than established centralised methods if
+you want to transmit data across network boundaries. A DHT query to find your peer can take 2 - 3 minutes.
+Further, the bandwidth and geographic location of a potential relaying peer is not guaranteed which can lead to long transmission times.
 
 ## Usage
 
@@ -60,13 +68,13 @@ $ pcp receive december-iron-old-increase
 Looking for peer december-iron-old-increase...
 ```
 
-If you're on different networks the lookup can take quite long without any user facing output yet (~2 - 3 minutes).
+If you're on different networks the lookup can take quite long without any user facing output yet (~ 2-3 minutes).
 
 ## Install
 
 ### Release download
 
-Head over to the [releases](https://github.com/dennis-tra/pcp/releases/tag/v0.1.1) and download the latest binary for
+Head over to the [releases](https://github.com/dennis-tra/pcp/releases) and download the latest binary for
 your platform.
 
 ### From source
@@ -77,7 +85,7 @@ For now, you need to compile it yourself:
 git clone https://github.com/dennis-tra/pcp.git
 ```
 
-Navigate into the `pcp` folder and run:
+Navigate into the `pcp` folder and run (at least `Go 1.13` required):
 
 ```shell
 go install cmd/pcp/pcp.go
