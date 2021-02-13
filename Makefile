@@ -32,7 +32,8 @@ format:
 	gofumpt -l -w .
 
 tools:
-	go get mvdan.cc/gofumpt
+	go install mvdan.cc/gofumpt
+	go install google.golang.org/protobuf/cmd/protoc-gen-go
 
 # Remove only what we've created
 clean:

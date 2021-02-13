@@ -23,17 +23,49 @@ Command line peer-to-peer data transfer tool based on [libp2p](https://github.co
 - [Contributing](#contributing)
 - [License](#license)
 
-## Project Status & Motivation
+## Motivation
 
-The tool is in a very early stage and I'm aware of security, performance and usability issues. For now it works in the limited scope of transfering files in your local network. Don't use it for anything serious. There is already a very good Go implementation named [`croc`](https://github.com/schollz/croc). 
+There already exists a long list of file transfer tools (see [Related Efforts](#related-efforts)), so why bother building another one?
+The problem I had with the existing tools is that they rely on a [limited set of](https://github.com/schollz/croc/issues/289) [servers](https://magic-wormhole.readthedocs.io/en/latest/welcome.html#relays) to orchestrate peer matching and data relaying which poses a centralisation concern.
+Many of the usual centralisation vs. decentralisation arguments apply here, e.g. the servers are single points of failures, the service operator has the power over whom to serve and whom not, etc. Further, as this [recent issue in croc](https://github.com/schollz/croc/issues/289) shows, this is a real risk for sustainable operation of the provided service.
+ Only because a benevolent big player jumps in as a sponsor the service continues to exist.
 
-My motivation to build a new tool is to levarage the peer-to-peer networking stack that is provided by [libp2p](https://github.com/libp2p/go-libp2p). In the future `pcp` should also enable two peers in different networks to exchange files via a relay. I'm not sure how croc chooses relay servers but I guess there is just a limited set which puts the power to a limited number of service providers and is therefore a centralization concern (if my assumption is correct). By using libp2ps [experimental autorelay](https://docs.libp2p.io/concepts/circuit-relay/#autorelay) feature I think `pcp` takes another step into a more decentralized world.
+## Description
 
-## Advantages over `croc`
+`pcp` leverages the peer-to-peer networking stack of [libp2p](https://github.com/libp2p/go-libp2p).
+It uses multicast DNS to find peers locally and the distributed hash table of IPFS for remote
+peer discovery. The `identify` discovery mechanism serves the same role as `STUN`, but without the
+need for a set of `STUN` servers. The libp2p `Circuit Relay` protocol allows peers to
+communicate indirectly via a helpful intermediary peer that is found via the DHT. This replaces
+dedicated `TURN` servers.
 
-1. The libp2p `identify` discovery mechanism serves the same role as STUN, but without the need for a set of “STUN servers”.
-2. The libp2p `Circuit Relay` protocol allows peers to communicate indirectly via a helpful intermediary peer. Replaces dedicated TURN servers.
+Of course there are some significant drawbacks with this approach: It's slower than established centralised methods if you want to transmit data over network boundaries. A DHT query to find your peer can take 2 - 3 minutes.
+
+## Usage
+
+The sending peer runs:
+
+```shell
+$ pcp send my_file
+Code is:  bubble-enemy-result-increase
+On the other machine run:
+	pcp receive bubble-enemy-result-increase
+```
+
+The receiving peer runs:
+
+```shell
+$ pcp receive december-iron-old-increase
+Looking for peer december-iron-old-increase...
+```
+
 ## Install
+
+### Release download
+
+Head over to the [releases](https://github.com/dennis-tra/pcp/releases/tag/v0.1.1) and download the latest binary for your platform.
+
+### Build from source
 
 For now, you need to compile it yourself:
 
@@ -49,32 +81,9 @@ go install cmd/pcp/pcp.go
 
 Make sure the `$GOPATH/bin` is in your `PATH` variable to access the installed `pcp` executable.
 
-## Usage
+### Package managers
 
-The receiving peer runs:
-
-```shell
-$ pcp receive
-Your identity:
-
-	16Uiu2HAkwyP8guhAXN66rkn8BEw3SjBavUuEu4VizTHhRcu7WLxq
-
-Waiting for peers to connect... (cancel with strg+c)
-```
-
-The sending peer runs:
-
-```shell
-$ pcp send my_file
-Querying peers that are waiting to receive files...
-
-Found the following peer(s):
-[0] 16Uiu2HAkwyP8guhAXN66rkn8BEw3SjBavUuEu4VizTHhRcu7WLxq
-
-Select the peer you want to send the file to [#,r,q,?]:
-```
-
-At this point the sender needs to select the receiving peer, who in turn needs to confirm the file transfer.
+It's on the roadmap to distribute `pcp` via `apt`, `yum`, `brew`, `scoop` etc
 
 ## Development
 
