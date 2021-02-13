@@ -7,12 +7,11 @@
 
 Command line peer-to-peer data transfer tool based on [libp2p](https://github.com/libp2p/go-libp2p).
 
-![Demo animation](./docs/demo-2021-01-27.gif)
+![Demo animation](./docs/demo-2021-02-13.gif)
 
 ## Table of Contents
 
 - [Motivation](#motivation)
-- [Description](#description)
 - [Usage](#usage)
 - [Install](#install)
   - [Release download](#release-download) | [From source](#from-source) | [Package managers](#package-managers)
@@ -37,16 +36,11 @@ this [recent issue in croc](https://github.com/schollz/croc/issues/289) shows, t
 operation of the provided service. Only because a benevolent big player jumps in as a sponsor the service continues to
 exist.
 
-## Description
-
 `pcp` leverages the peer-to-peer networking stack of [libp2p](https://github.com/libp2p/go-libp2p). It uses multicast
-DNS to find peers locally and the distributed hash table of IPFS for remote peer discovery. The `identify` discovery
-mechanism serves the same role as `STUN`, but without the need for a set of `STUN` servers. The libp2p `Circuit Relay`
-protocol allows peers to communicate indirectly via a helpful intermediary peer that is found via the DHT. This replaces
-dedicated `TURN` servers.
-
-Of course there are some significant drawbacks with this approach: It's slower than established centralised methods if
+DNS to find peers locally and the distributed hash table of IPFS for remote peer discovery. Unfortunately there is a significant drawbacks with this approach: It's slower than established centralised methods if
 you want to transmit data over network boundaries. A DHT query to find your peer can take 2 - 3 minutes.
+
+[comment]: <> (The `identify` discovery mechanism serves the same role as `STUN`, but without the need for a set of `STUN` servers. The libp2p `Circuit Relay` protocol allows peers to communicate indirectly via a helpful intermediary peer that is found via the DHT. This replaces dedicated `TURN` servers.)
 
 ## Usage
 
@@ -117,7 +111,7 @@ Shamelessly copied from `croc`:
 - [x] provides end-to-end encryption (using PAKE)
   - ✅ actually PAKE is only used for authentication TLS for end-to-end encryption
 - [x] enables easy cross-platform transfers (Windows, Linux, Mac)
-  - 🤔 needs to be tested, but builds exist
+  - 🤔✅ only tested Linux <-> Mac
 - [ ] allows multiple file transfers
   - ❌ not yet
 - [ ] allows resuming transfers that are interrupted
