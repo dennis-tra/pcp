@@ -15,9 +15,12 @@ import (
 )
 
 var (
-	// Version of the PCP command line tool.
-	Version = "compile-time"
-	Build   = "compile-time"
+	// Version and build tag of the
+	// PCP command line tool. This is
+	// replaced on build via e.g.:
+	// -ldflags "-X main.Version=${VERSION}"
+	Version = "dev"
+	Build   = "5f3759df" // quake
 )
 
 func main() {
@@ -35,14 +38,6 @@ func main() {
 		Commands: []*cli.Command{
 			receive.Command,
 			send.Command,
-			// initialize.Command,
-		},
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "config",
-				Aliases: []string{"c"},
-				Usage:   "Load configuration from `FILE`",
-			},
 		},
 	}
 

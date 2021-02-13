@@ -19,17 +19,28 @@ import (
 // Command holds the `send` subcommand configuration.
 var Command = &cli.Command{
 	Name:      "send",
-	Usage:     "makes the given file available to peers who then can search for it",
+	Usage:     "make the given file available to your peers",
 	Aliases:   []string{"s"},
 	Action:    Action,
 	Flags:     []cli.Flag{},
-	ArgsUsage: "FILE",
-	UsageText: `FILE	The file you want to transmit to your peer (required).`,
-	Description: `The send subcommand will broadcast in your local network that you're 
-providing a particular file via multicast DNS services. Furthermore
-pcp will advertise your file in the distributed hash table of the 
-IPFS network. Other peers will be able to find you and the file
-you're providing and request to receive it.`,
+	ArgsUsage: `FILE`,
+	// UsageText: `pcp send [command options] FILE
+	// The file you want to transmit to your peer (required).`,
+	Description: `
+The send subcommand generates four random words based on the first
+bytes of a newly generated peer identity. The first word and the
+current time are used to generate an identifier that is broadcasted
+in your local network via mDNS and provided through the distributed
+hash table of the IPFS network.
+
+After a peer attempts to connect it starts a password authen-
+ticated key exchange (PAKE) with the remaining three words to
+proof that the peer is in possession of the password. While this
+is happening the tool still searches for other peers as the
+currently connected one could fail the authentication procedure.
+
+After the authentication was successful and the peer confirmed
+the file transfer the transmission is started.`,
 }
 
 // Action contains the logic for the send subcommand of the pcp program. It is

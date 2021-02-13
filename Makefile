@@ -28,6 +28,12 @@ release:
 install:
 	go install ${LDFLAGS}
 
+format:
+	gofumpt -l -w .
+
+tools:
+	go get mvdan.cc/gofumpt
+
 # Remove only what we've created
 clean:
 	rm -r out
