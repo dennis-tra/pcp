@@ -16,15 +16,14 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
-// ProgressBar is a thread-safe, simple
-// progress bar
-type ProgressBar struct {
+// Bar is a thread-safe, simple progress bar
+type Bar struct {
 	state  state
 	config config
 	lock   sync.Mutex
 }
 
-// State is the basic properties of the bar
+// State contains the basic properties of the bar
 type State struct {
 	CurrentPercent float64
 	CurrentBytes   float64
@@ -108,60 +107,60 @@ type Theme struct {
 }
 
 // Option is the type all options need to adhere to
-type Option func(p *ProgressBar)
+type Option func(p *Bar)
 
 // OptionSetWidth sets the width of the bar
 func OptionSetWidth(s int) Option {
-	return func(p *ProgressBar) {
+	return func(p *Bar) {
 		p.config.width = s
 	}
 }
 
 // OptionSpinnerType sets the type of spinner used for indeterminate bars
 func OptionSpinnerType(spinnerType int) Option {
-	return func(p *ProgressBar) {
+	return func(p *Bar) {
 		p.config.spinnerType = spinnerType
 	}
 }
 
 // OptionSetTheme sets the elements the bar is constructed of
 func OptionSetTheme(t Theme) Option {
-	return func(p *ProgressBar) {
+	return func(p *Bar) {
 		p.config.theme = t
 	}
 }
 
 // OptionSetVisibility sets the visibility
 func OptionSetVisibility(visibility bool) Option {
-	return func(p *ProgressBar) {
+	return func(p *Bar) {
 		p.config.invisible = !visibility
 	}
 }
 
 // OptionFullWidth sets the bar to be full width
 func OptionFullWidth() Option {
-	return func(p *ProgressBar) {
+	return func(p *Bar) {
 		p.config.fullWidth = true
 	}
 }
 
 // OptionSetWriter sets the output writer (defaults to os.StdOut)
 func OptionSetWriter(w io.Writer) Option {
-	return func(p *ProgressBar) {
+	return func(p *Bar) {
 		p.config.writer = w
 	}
 }
 
 // OptionSetRenderBlankState sets whether or not to render a 0% bar on construction
 func OptionSetRenderBlankState(r bool) Option {
-	return func(p *ProgressBar) {
+	return func(p *Bar) {
 		p.config.renderWithBlankState = r
 	}
 }
 
 // OptionSetDescription sets the description of the bar to render in front of it
 func OptionSetDescription(description string) Option {
-	return func(p *ProgressBar) {
+	return func(p *Bar) {
 		p.config.description = description
 	}
 }
@@ -169,35 +168,35 @@ func OptionSetDescription(description string) Option {
 // OptionEnableColorCodes enables or disables support for color codes
 // using mitchellh/colorstring
 func OptionEnableColorCodes(colorCodes bool) Option {
-	return func(p *ProgressBar) {
+	return func(p *Bar) {
 		p.config.colorCodes = colorCodes
 	}
 }
 
 // OptionSetPredictTime will also attempt to predict the time remaining.
 func OptionSetPredictTime(predictTime bool) Option {
-	return func(p *ProgressBar) {
+	return func(p *Bar) {
 		p.config.predictTime = predictTime
 	}
 }
 
 // OptionShowCount will also print current count out of total
 func OptionShowCount() Option {
-	return func(p *ProgressBar) {
+	return func(p *Bar) {
 		p.config.showIterationsCount = true
 	}
 }
 
 // OptionShowIts will also print the iterations/second
 func OptionShowIts() Option {
-	return func(p *ProgressBar) {
+	return func(p *Bar) {
 		p.config.showIterationsPerSecond = true
 	}
 }
 
-// OptionSetItsString sets what's displayed for interations a second. The default is "it" which would display: "it/s"
+// OptionSetItsString sets what's displayed for interactions a second. The default is "it" which would display: "it/s"
 func OptionSetItsString(iterationString string) Option {
-	return func(p *ProgressBar) {
+	return func(p *Bar) {
 		p.config.iterationString = iterationString
 	}
 }
@@ -205,29 +204,29 @@ func OptionSetItsString(iterationString string) Option {
 // OptionThrottle will wait the specified duration before updating again. The default
 // duration is 0 seconds.
 func OptionThrottle(duration time.Duration) Option {
-	return func(p *ProgressBar) {
+	return func(p *Bar) {
 		p.config.throttleDuration = duration
 	}
 }
 
 // OptionClearOnFinish will clear the bar once its finished
 func OptionClearOnFinish() Option {
-	return func(p *ProgressBar) {
+	return func(p *Bar) {
 		p.config.clearOnFinish = true
 	}
 }
 
-// OptionOnCompletion will invoke cmpl function once its finished
-func OptionOnCompletion(cmpl func()) Option {
-	return func(p *ProgressBar) {
-		p.config.onCompletion = cmpl
+// OptionOnCompletion will invoke completion function once its finished
+func OptionOnCompletion(completion func()) Option {
+	return func(p *Bar) {
+		p.config.onCompletion = completion
 	}
 }
 
 // OptionShowBytes will update the progress bar
 // configuration settings to display/hide kBytes/Sec
 func OptionShowBytes(val bool) Option {
-	return func(p *ProgressBar) {
+	return func(p *Bar) {
 		p.config.showBytes = val
 	}
 }
@@ -236,21 +235,21 @@ func OptionShowBytes(val bool) Option {
 //
 // Only useful in environments with support for ANSI escape sequences.
 func OptionUseANSICodes(val bool) Option {
-	return func(p *ProgressBar) {
+	return func(p *Bar) {
 		p.config.useANSICodes = val
 	}
 }
 
 var defaultTheme = Theme{Saucer: "█", SaucerPadding: " ", BarStart: "|", BarEnd: "|"}
 
-// NewOptions constructs a new instance of ProgressBar, with any options you specify
-func NewOptions(max int, options ...Option) *ProgressBar {
+// NewOptions constructs a new instance of Bar, with any options you specify
+func NewOptions(max int, options ...Option) *Bar {
 	return NewOptions64(int64(max), options...)
 }
 
-// NewOptions64 constructs a new instance of ProgressBar, with any options you specify
-func NewOptions64(max int64, options ...Option) *ProgressBar {
-	b := ProgressBar{
+// NewOptions64 constructs a new instance of Bar, with any options you specify
+func NewOptions64(max int64, options ...Option) *Bar {
+	b := Bar{
 		state: getBasicState(),
 		config: config{
 			writer:           os.Stdout,
@@ -298,16 +297,16 @@ func getBasicState() state {
 	}
 }
 
-// New returns a new ProgressBar
+// New returns a new Bar
 // with the specified maximum
-func New(max int) *ProgressBar {
+func New(max int) *Bar {
 	return NewOptions(max)
 }
 
 // DefaultBytes provides a progressbar to measure byte
 // throughput with recommended defaults.
 // Set maxBytes to -1 to use as a spinner.
-func DefaultBytes(maxBytes int64, description ...string) *ProgressBar {
+func DefaultBytes(maxBytes int64, description ...string) *Bar {
 	desc := ""
 	if len(description) > 0 {
 		desc = description[0]
@@ -332,7 +331,7 @@ func DefaultBytes(maxBytes int64, description ...string) *ProgressBar {
 
 // Default provides a progressbar with recommended defaults.
 // Set max to -1 to use as a spinner.
-func Default(max int64, description ...string) *ProgressBar {
+func Default(max int64, description ...string) *Bar {
 	desc := ""
 	if len(description) > 0 {
 		desc = description[0]
@@ -356,7 +355,7 @@ func Default(max int64, description ...string) *ProgressBar {
 }
 
 // RenderBlank renders the current bar state, you can use this to render a 0% state
-func (p *ProgressBar) RenderBlank() error {
+func (p *Bar) RenderBlank() error {
 	if p.config.invisible {
 		return nil
 	}
@@ -365,7 +364,7 @@ func (p *ProgressBar) RenderBlank() error {
 
 // Reset will reset the clock that is used
 // to calculate current time and the time left.
-func (p *ProgressBar) Reset() {
+func (p *Bar) Reset() {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -373,7 +372,7 @@ func (p *ProgressBar) Reset() {
 }
 
 // Finish will fill the bar to full
-func (p *ProgressBar) Finish() error {
+func (p *Bar) Finish() error {
 	p.lock.Lock()
 	p.state.currentNum = p.config.max
 	p.lock.Unlock()
@@ -381,17 +380,17 @@ func (p *ProgressBar) Finish() error {
 }
 
 // Add will add the specified amount to the progressbar
-func (p *ProgressBar) Add(num int) error {
+func (p *Bar) Add(num int) error {
 	return p.Add64(int64(num))
 }
 
 // Set wil set the bar to a current number
-func (p *ProgressBar) Set(num int) error {
+func (p *Bar) Set(num int) error {
 	return p.Set64(int64(num))
 }
 
 // Set64 wil set the bar to a current number
-func (p *ProgressBar) Set64(num int64) error {
+func (p *Bar) Set64(num int64) error {
 	p.lock.Lock()
 	toAdd := int64(num) - p.state.currentNum
 	p.lock.Unlock()
@@ -399,7 +398,7 @@ func (p *ProgressBar) Set64(num int64) error {
 }
 
 // Add64 will add the specified amount to the progressbar
-func (p *ProgressBar) Add64(num int64) error {
+func (p *Bar) Add64(num int64) error {
 	if p.config.invisible {
 		return nil
 	}
@@ -450,36 +449,36 @@ func (p *ProgressBar) Add64(num int64) error {
 }
 
 // Clear erases the progress bar from the current line
-func (p *ProgressBar) Clear() error {
+func (p *Bar) Clear() error {
 	return clearProgressBar(p.config, p.state)
 }
 
 // Describe will change the description shown before the progress, which
 // can be changed on the fly (as for a slow running process).
-func (p *ProgressBar) Describe(description string) {
+func (p *Bar) Describe(description string) {
 	p.config.description = description
 }
 
-// New64 returns a new ProgressBar
+// New64 returns a new Bar
 // with the specified maximum
-func New64(max int64) *ProgressBar {
+func New64(max int64) *Bar {
 	return NewOptions64(max)
 }
 
 // GetMax returns the max of a bar
-func (p *ProgressBar) GetMax() int {
+func (p *Bar) GetMax() int {
 	return int(p.config.max)
 }
 
 // GetMax64 returns the current max
-func (p *ProgressBar) GetMax64() int64 {
+func (p *Bar) GetMax64() int64 {
 	return p.config.max
 }
 
 // ChangeMax takes in a int
 // and changes the max value
 // of the progress bar
-func (p *ProgressBar) ChangeMax(newMax int) {
+func (p *Bar) ChangeMax(newMax int) {
 	p.ChangeMax64(int64(newMax))
 }
 
@@ -487,20 +486,20 @@ func (p *ProgressBar) ChangeMax(newMax int) {
 // the same as ChangeMax,
 // but takes in a int64
 // to avoid casting
-func (p *ProgressBar) ChangeMax64(newMax int64) {
+func (p *Bar) ChangeMax64(newMax int64) {
 	p.config.max = newMax
 	p.Add(0) // re-render
 }
 
 // IsFinished returns true if progreess bar is completed
-func (p *ProgressBar) IsFinished() bool {
+func (p *Bar) IsFinished() bool {
 	return p.state.finished
 }
 
 // render renders the progress bar, updating the maximum
 // rendered line width. this function is not thread-safe,
 // so it must be called with an acquired lock.
-func (p *ProgressBar) render() error {
+func (p *Bar) render() error {
 	// make sure that the rendering is not happening too quickly
 	// but always show if the currentNum reaches the max
 	if time.Since(p.state.lastShown).Nanoseconds() < p.config.throttleDuration.Nanoseconds() &&
@@ -554,7 +553,7 @@ func (p *ProgressBar) render() error {
 }
 
 // State returns the current state
-func (p *ProgressBar) State() State {
+func (p *Bar) State() State {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	s := State{}
@@ -676,13 +675,7 @@ func renderProgressBar(c config, s state) (int, error) {
 	}
 
 	if c.fullWidth && !c.ignoreLength {
-		width, _, err := terminal.GetSize(int(os.Stdout.Fd()))
-		if err != nil {
-			width, _, err = terminal.GetSize(int(os.Stderr.Fd()))
-			if err != nil {
-				width = 80
-			}
-		}
+		width := TerminalWidth()
 
 		c.width = width - getStringWidth(c, c.description, true) - 14 - len(bytesString) - len(leftBrac) - len(rightBrac)
 		s.currentSaucerSize = int(float64(s.currentPercent) / 100.0 * float64(c.width))
@@ -759,6 +752,17 @@ func renderProgressBar(c config, s state) (int, error) {
 	return getStringWidth(c, str, false), writeString(c, str)
 }
 
+func TerminalWidth() int {
+	width, _, err := terminal.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		width, _, err = terminal.GetSize(int(os.Stderr.Fd()))
+		if err != nil {
+			width = 80
+		}
+	}
+	return width
+}
+
 func clearProgressBar(c config, s state) error {
 	if c.useANSICodes {
 		// write the "clear current line" ANSI escape sequence
@@ -789,11 +793,11 @@ func writeString(c config, str string) error {
 // Reader is the progressbar io.Reader struct
 type Reader struct {
 	io.Reader
-	bar *ProgressBar
+	bar *Bar
 }
 
 // NewReader return a new Reader with a given progress bar.
-func NewReader(r io.Reader, bar *ProgressBar) Reader {
+func NewReader(r io.Reader, bar *Bar) Reader {
 	return Reader{
 		Reader: r,
 		bar:    bar,
@@ -817,14 +821,14 @@ func (r *Reader) Close() (err error) {
 }
 
 // Write implement io.Writer
-func (p *ProgressBar) Write(b []byte) (n int, err error) {
+func (p *Bar) Write(b []byte) (n int, err error) {
 	n = len(b)
 	p.Add(n)
 	return
 }
 
 // Read implement io.Reader
-func (p *ProgressBar) Read(b []byte) (n int, err error) {
+func (p *Bar) Read(b []byte) (n int, err error) {
 	n = len(b)
 	p.Add(n)
 	return

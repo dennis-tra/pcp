@@ -100,7 +100,7 @@ func (n *Node) Shutdown() {
 // AdvertiseIdentifier returns the string, that we use to advertise
 // via mDNS and the DHT. See ChannelID above for more information.
 func (n *Node) AdvertiseIdentifier(t time.Time, chanID int16) string {
-	return fmt.Sprintf("/pcp/%d/%d", t.Truncate(24*time.Minute).Unix(), chanID)
+	return fmt.Sprintf("/pcp/%d/%d", t.Truncate(5*time.Minute).Unix(), chanID)
 }
 
 // Send prepares the message msg to be sent over the network stream s.

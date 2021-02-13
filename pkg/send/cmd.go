@@ -56,7 +56,7 @@ func Action(c *cli.Context) error {
 
 	// Broadcast the code to be found by peers.
 	dhtKey := local.AdvertiseIdentifier(time.Now(), local.ChannelID)
-	log.Infoln("Code is: ", strings.Join(local.TransferCode, "-"), "(", dhtKey, ")")
+	log.Infoln("Code is: ", strings.Join(local.TransferCode, "-"))
 	log.Infoln("On the other machine run:\n\tpcp receive", strings.Join(local.TransferCode, "-"))
 
 	local.Advertise(dhtKey)

@@ -59,7 +59,7 @@ func Action(c *cli.Context) error {
 
 	// Search for identifier
 	dhtKey := local.AdvertiseIdentifier(time.Now(), chanID)
-	log.Infof("Looking for peer %s... (%s)\n", c.Args().First(), dhtKey)
+	log.Infof("Looking for peer %s... \n", c.Args().First())
 	local.Discover(dhtKey)
 
 	// Wait for the user to stop the tool or the transfer to finish.

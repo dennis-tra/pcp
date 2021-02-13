@@ -490,7 +490,7 @@ func TestConcurrency(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := 0; i < 900; i++ {
 		wg.Add(1)
-		go func(b *ProgressBar, wg *sync.WaitGroup) {
+		go func(b *Bar, wg *sync.WaitGroup) {
 			bar.Add(1)
 			wg.Done()
 		}(bar, &wg)
