@@ -29,7 +29,11 @@ install:
 	go install ${LDFLAGS}
 
 format:
-	gofumpt -w $(shell go list -f {{.Dir}} ./... | grep -v pkg/pb)
+	gofumpt -w -l .
+
+proto:
+	protoc -I=pkg/pb --go_out=pkg/pb --go_opt=paths=source_relative p2p.proto
+	gofumpt -w -l ./pkg/pb/
 
 tools:
 	go install mvdan.cc/gofumpt

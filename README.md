@@ -11,35 +11,42 @@ Command line peer-to-peer data transfer tool based on [libp2p](https://github.co
 
 ## Table of Contents
 
-- [Table of Contents](#table-of-contents)
-- [Project Status & Motivation](#project-status--motivation)
-- [Install](#install)
+- [Motivation](#motivation)
+- [Description](#description)
 - [Usage](#usage)
+- [Install](#install)
+  - [Release download](#release-download) | [From source](#from-source) | [Package managers](#package-managers)
 - [Development](#development)
-  - [Generate Protobuf definitions](#generate-protobuf-definitions)
+  - [Protobuf definitions](#generate-protobuf-definitions)
 - [Feature Roadmap](#feature-roadmap)
 - [Related Efforts](#related-efforts)
 - [Maintainers](#maintainers)
+- [Acknowledgment](#acknowledgment)
 - [Contributing](#contributing)
 - [License](#license)
 
 ## Motivation
 
-There already exists a long list of file transfer tools (see [Related Efforts](#related-efforts)), so why bother building another one?
-The problem I had with the existing tools is that they rely on a [limited set of](https://github.com/schollz/croc/issues/289) [servers](https://magic-wormhole.readthedocs.io/en/latest/welcome.html#relays) to orchestrate peer matching and data relaying which poses a centralisation concern.
-Many of the usual centralisation vs. decentralisation arguments apply here, e.g. the servers are single points of failures, the service operator has the power over whom to serve and whom not, etc. Further, as this [recent issue in croc](https://github.com/schollz/croc/issues/289) shows, this is a real risk for sustainable operation of the provided service.
- Only because a benevolent big player jumps in as a sponsor the service continues to exist.
+There already exists a long list of file transfer tools (see [Related Efforts](#related-efforts)), so why bother
+building another one? The problem I had with the existing tools is that they rely on
+a [limited set of](https://github.com/schollz/croc/issues/289) [servers](https://magic-wormhole.readthedocs.io/en/latest/welcome.html#relays)
+to orchestrate peer matching and data relaying which poses a centralisation concern. Many of the usual centralisation
+vs. decentralisation arguments apply here, e.g. the servers are single points of failures, the service operator has the
+power over whom to serve and whom not, etc. Further, as
+this [recent issue in croc](https://github.com/schollz/croc/issues/289) shows, this is a real risk for sustainable
+operation of the provided service. Only because a benevolent big player jumps in as a sponsor the service continues to
+exist.
 
 ## Description
 
-`pcp` leverages the peer-to-peer networking stack of [libp2p](https://github.com/libp2p/go-libp2p).
-It uses multicast DNS to find peers locally and the distributed hash table of IPFS for remote
-peer discovery. The `identify` discovery mechanism serves the same role as `STUN`, but without the
-need for a set of `STUN` servers. The libp2p `Circuit Relay` protocol allows peers to
-communicate indirectly via a helpful intermediary peer that is found via the DHT. This replaces
+`pcp` leverages the peer-to-peer networking stack of [libp2p](https://github.com/libp2p/go-libp2p). It uses multicast
+DNS to find peers locally and the distributed hash table of IPFS for remote peer discovery. The `identify` discovery
+mechanism serves the same role as `STUN`, but without the need for a set of `STUN` servers. The libp2p `Circuit Relay`
+protocol allows peers to communicate indirectly via a helpful intermediary peer that is found via the DHT. This replaces
 dedicated `TURN` servers.
 
-Of course there are some significant drawbacks with this approach: It's slower than established centralised methods if you want to transmit data over network boundaries. A DHT query to find your peer can take 2 - 3 minutes.
+Of course there are some significant drawbacks with this approach: It's slower than established centralised methods if
+you want to transmit data over network boundaries. A DHT query to find your peer can take 2 - 3 minutes.
 
 ## Usage
 
@@ -59,13 +66,16 @@ $ pcp receive december-iron-old-increase
 Looking for peer december-iron-old-increase...
 ```
 
+If you're on different networks the lookup can take quite long without any user facing output yet (~2 - 3 minutes).
+
 ## Install
 
 ### Release download
 
-Head over to the [releases](https://github.com/dennis-tra/pcp/releases/tag/v0.1.1) and download the latest binary for your platform.
+Head over to the [releases](https://github.com/dennis-tra/pcp/releases/tag/v0.1.1) and download the latest binary for
+your platform.
 
-### Build from source
+### From source
 
 For now, you need to compile it yourself:
 
@@ -83,26 +93,20 @@ Make sure the `$GOPATH/bin` is in your `PATH` variable to access the installed `
 
 ### Package managers
 
-It's on the roadmap to distribute `pcp` via `apt`, `yum`, `brew`, `scoop` etc
+It's on the roadmap to distribute `pcp` via `apt`, `yum`, `brew`, `scoop` and more ...
 
 ## Development
 
-### Generate Protobuf definitions
+### Protobuf definitions
 
 First install the protoc compiler:
 
 ```shell
-go install mvdan.cc/gofumpt
-go install google.golang.org/protobuf/cmd/protoc-gen-go
+make tools # downloads gofumpt and protoc
+make proto # generates protobuf
 ```
 
-Then run from the root of this repository:
-
-```shell
-protoc -I=pkg/pb --go_out=pkg/pb --go_opt=paths=source_relative p2p.proto
-```
-
-The proto defintions were generated with `libprotoc 3.14.0`.
+The current proto definitions were generated with `libprotoc 3.14.0`.
 
 ## Feature Roadmap
 
@@ -122,6 +126,7 @@ Shamelessly copied from `croc`:
 ## Related Efforts
 
 - [`croc`](https://github.com/schollz/croc) - Easily and securely send things from one computer to another
+- [`magic-wormhole`](https://github.com/magic-wormhole/magic-wormhole) - get things from one computer to another, safely
 - [`dcp`](https://github.com/tom-james-watson/dat-cp) - Remote file copy, powered by the Dat protocol.
 - [`iwant`](https://github.com/nirvik/iWant) - CLI based decentralized peer to peer file sharing
 - [`p2pcopy`](https://github.com/psantosl/p2pcopy) - Small command line application to do p2p file copy behind firewalls
@@ -131,6 +136,7 @@ Shamelessly copied from `croc`:
   AirDrop
 - [`filepizza`](https://github.com/kern/filepizza) - Peer-to-peer file transfers in your browser
 - [`toss`](https://github.com/zerotier/toss) - Dead simple LAN file transfers from the command line
+- Forgot yours? [Open an issue](https://github.com/dennis-tra/pcp/issues/new) or submit a PR :)
 
 ## Maintainers
 
@@ -138,7 +144,9 @@ Shamelessly copied from `croc`:
 
 ## Acknowledgment
 
-- [`progress`](https://github.com/machinebox/progress) - package to print progress
+- [`go-libp2p`](https://github.com/libp2p/go-libp2p) - The Go implementation of the libp2p Networking Stack.
+- [`pake/v2`](https://github.com/schollz/pake/tree/v2.0.6) - PAKE library for generating a strong secret between parties over an insecure channel
+- [`progressbar`](https://github.com/schollz/progressbar) - A really basic thread-safe progress bar for Golang applications
 
 ## Contributing
 
