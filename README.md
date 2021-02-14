@@ -41,8 +41,8 @@ operation of the provided service. A benevolent big player jumped in to sponsor 
 
 ## Project Status
 
-The tool is in a very early stage, and I'm aware of performance and usability issues. Don't use it for anything serious.
-Although I criticised tools like [`magic-wormhole`](https://github.com/magic-wormhole/magic-wormhole) or [`croc`](https://github.com/schollz/croc) above, they are way more mature.
+The tool is in a very early stage, and I'm aware of performance, usability and **security** issues. Don't use it for anything serious.
+Although I criticised tools like [`magic-wormhole`](https://github.com/magic-wormhole/magic-wormhole) or [`croc`](https://github.com/schollz/croc) above, they are amazing and way more mature.
 
 There are also drawbacks with this approach: It's slower than established centralised methods if
 you want to transmit data across network boundaries. A DHT query to find your peer can easily take several minutes.
