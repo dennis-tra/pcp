@@ -7,7 +7,7 @@ import (
 
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/multiformats/go-multiaddr"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	mh "github.com/multiformats/go-multihash"
 
 	"github.com/dennis-tra/pcp/internal/log"
@@ -35,33 +35,16 @@ func newProtocol(node *pcpnode.Node) *protocol {
 func (p *protocol) Bootstrap() error {
 	var err error
 	p.init.Do(func() {
-		bootstrapPeers := []string{
-			"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
-			"/ip4/159.69.43.228/tcp/4001/p2p/QmSKVUFAyCddg2wDUdZVCfvqG5YCwwJTWY1HRmorebXcKG",
-			"/ip4/103.25.23.251/tcp/4001/p2p/Qmdo6uKt4u23wegnU8yhR1PKXP3RAqwiTvqymJY1PmccsQ",
-		}
 
 		var wg sync.WaitGroup
-		for _, bp := range bootstrapPeers {
-			ma, err := multiaddr.NewMultiaddr(bp)
-			if err != nil {
-				log.Errorln(err)
-				continue
-			}
-
-			peerInfo, err := peer.AddrInfoFromP2pAddr(ma)
-			if err != nil {
-				log.Errorln(err)
-				continue
-			}
-
+		for _, bp := range dht.GetDefaultBootstrapPeerAddrInfos() {
 			wg.Add(1)
 			go func(pi peer.AddrInfo) {
 				defer wg.Done()
 				if err := p.Connect(p.ServiceContext(), pi); err != nil {
 					log.Infoln("Error connecting to bootstrap peer:", err)
 				}
-			}(*peerInfo)
+			}(bp)
 		}
 
 		wg.Wait()
