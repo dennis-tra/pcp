@@ -1,10 +1,3 @@
-# ########################################################## #
-# Makefile for Golang Project
-# Includes cross-compiling, installation, cleanup
-# ########################################################## #
-
-ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
-
 BINARY=pcp
 VERSION=0.1.0
 BUILD=`git rev-parse HEAD`
@@ -23,7 +16,7 @@ build:
 
 release:
 	$(foreach GOOS, $(PLATFORMS),\
-	$(foreach GOARCH, $(ARCHITECTURES), $(shell export GOOS=$(GOOS); export GOARCH=$(GOARCH); go build -o out/$(BINARY)-$(GOOS)-$(GOARCH) cmd/pcp/pcp.go)))
+	$(foreach GOARCH, $(ARCHITECTURES), $(shell export GOOS=$(GOOS); export GOARCH=$(GOARCH); go build ${LDFLAGS} -o out/$(BINARY)-$(GOOS)-$(GOARCH) cmd/pcp/pcp.go)))
 
 install:
 	go install ${LDFLAGS}
