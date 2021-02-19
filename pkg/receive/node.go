@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
@@ -16,7 +17,6 @@ import (
 	"github.com/dennis-tra/pcp/pkg/mdns"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
-	"github.com/dennis-tra/pcp/pkg/words"
 )
 
 type nodeState uint8
@@ -29,41 +29,31 @@ const (
 
 type Node struct {
 	*pcpnode.Node
-	*pcpnode.PakeClientProtocol
 
 	discoverers     []Discoverer
 	discoveredPeers sync.Map
-
-	code []string
 
 	stateLk sync.RWMutex
 	state   nodeState
 }
 
 type Discoverer interface {
-	Discover(identifier string, handler pcpnode.PeerHandler) error
+	Discover(handler pcpnode.PeerHandler) error
 	Shutdown()
 }
 
-func InitNode(ctx context.Context, code []string) (*Node, error) {
-	h, err := pcpnode.New(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	pw, err := words.ToBytes(code)
+func InitNode(ctx context.Context, words []string) (*Node, error) {
+	h, err := pcpnode.New(ctx, words)
 	if err != nil {
 		return nil, err
 	}
 
 	n := &Node{
-		Node:               h,
-		code:               code,
-		state:              idle,
-		stateLk:            sync.RWMutex{},
-		discoveredPeers:    sync.Map{},
-		discoverers:        []Discoverer{},
-		PakeClientProtocol: pcpnode.NewPakeClientProtocol(h, pw),
+		Node:            h,
+		state:           idle,
+		stateLk:         sync.RWMutex{},
+		discoveredPeers: sync.Map{},
+		discoverers:     []Discoverer{},
 	}
 
 	n.RegisterPushRequestHandler(n)
@@ -78,17 +68,23 @@ func (n *Node) Shutdown() {
 	n.Node.Shutdown()
 }
 
-func (n *Node) Discover(code string) {
+func (n *Node) StartDiscovering() {
 	n.setState(discovering)
 
+	// TODO: Implement rolling 5 minute window
+	dhtKey1 := n.AdvertiseIdentifier(time.Now())
+	dhtKey2 := n.AdvertiseIdentifier(time.Now().Add(-5 * time.Minute))
+
 	n.discoverers = []Discoverer{
-		dht.NewDiscoverer(n.Node),
-		mdns.NewDiscoverer(n.Node),
+		dht.NewDiscoverer(n.Node, dhtKey1),
+		dht.NewDiscoverer(n.Node, dhtKey2),
+		mdns.NewDiscoverer(n.Node, dhtKey1),
+		mdns.NewDiscoverer(n.Node, dhtKey2),
 	}
 
 	for _, discoverer := range n.discoverers {
 		go func(d Discoverer) {
-			if err := d.Discover(code, n); err != nil {
+			if err := d.Discover(n); err != nil {
 				log.Warningln(err)
 			}
 		}(discoverer)
@@ -121,7 +117,7 @@ func (n *Node) getState() nodeState {
 }
 
 // HandlePeer is called async from the discoverers. It's okay to have long running tasks here.
-func (n *Node) HandlePeer(info peer.AddrInfo) {
+func (n *Node) HandlePeer(pi peer.AddrInfo) {
 	if n.getState() != discovering {
 		log.Debugln("Received a peer from the discoverer although we're not discovering")
 		return
@@ -129,41 +125,19 @@ func (n *Node) HandlePeer(info peer.AddrInfo) {
 
 	// Check if we have already seen the peer and exit early to not connect again.
 	// TODO: Check if the multi addresses have changed
-	_, loaded := n.discoveredPeers.LoadOrStore(info.ID, info)
+	_, loaded := n.discoveredPeers.LoadOrStore(pi.ID, pi)
 	if loaded {
 		return
 	}
 
-	err := n.Connect(n.ServiceContext(), info)
-	if err != nil {
+	if err := n.Connect(n.ServiceContext(), pi); err != nil {
 		// stale entry in DHT?
 		// log.Debugln(err)
 		return
 	}
 
-	pubKey, err := n.Peerstore().PubKey(info.ID).Bytes()
-	if err != nil {
-		log.Errorln(err)
-		return
-	}
-
-	// Check if the public key matches given words
-	code, err := words.FromBytes(pubKey)
-	if err != nil {
-		log.Errorln(err)
-		return
-	}
-
-	for i := range code {
-		if n.code[i] != code[i] {
-			log.Debugln("Pub Key of found peer does not match given word list")
-			return
-		}
-	}
-
 	// Negotiate PAKE
-	_, err = n.StartKeyExchange(n.ServiceContext(), info.ID)
-	if err != nil {
+	if _, err := n.StartKeyExchange(n.ServiceContext(), pi.ID); err != nil {
 		log.Errorln(err)
 		return
 	}
@@ -211,7 +185,7 @@ func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {
 		// Accept the file transfer
 		if input == "y" {
 			done := n.TransferFinishHandler(pr.Size)
-			th, err := NewTransferHandler(pr.Filename, pr.Size, pr.Cid, done)
+			th, err := NewTransferHandler(pr.Filename, pr.Size, done)
 			if err != nil {
 				return true, err
 			}

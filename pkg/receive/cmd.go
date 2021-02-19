@@ -4,10 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/dennis-tra/pcp/pkg/words"
-	"github.com/ipfs/go-cid"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 
@@ -57,27 +54,16 @@ func Action(c *cli.Context) error {
 		return errors.Wrap(err, "failed loading configuration")
 	}
 
-	// TODO: make words count configurable
-	tcode := strings.Split(c.Args().First(), "-") // transfer code
-	if len(tcode) != 4 {
-		_ = cli.ShowSubcommandHelp(c)
-		return fmt.Errorf("list of words must be exactly 4")
-	}
+	words := strings.Split(c.Args().First(), "-") // transfer words
 
-	chanID, err := words.ToInt(tcode[0])
-	if err != nil {
-		return err
-	}
-
-	local, err := InitNode(ctx, tcode)
+	local, err := InitNode(ctx, words)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("failed to initialize node"))
 	}
 
 	// Search for identifier
-	dhtKey := local.AdvertiseIdentifier(time.Now(), chanID)
 	log.Infof("Looking for peer %s... \n", c.Args().First())
-	local.Discover(dhtKey)
+	local.StartDiscovering()
 
 	// Wait for the user to stop the tool or the transfer to finish.
 	select {
@@ -90,18 +76,10 @@ func Action(c *cli.Context) error {
 }
 
 func printInformation(data *p2p.PushRequest) {
-	var cStr string
-	if c, err := cid.Cast(data.Cid); err != nil {
-		cStr = err.Error()
-	} else {
-		cStr = c.String()
-	}
-
 	log.Infoln("Sending request information:")
 	log.Infoln("\tPeer:\t", data.Header.NodeId)
 	log.Infoln("\tName:\t", data.Filename)
 	log.Infoln("\tSize:\t", data.Size)
-	log.Infoln("\tCID:\t", cStr)
 	log.Infoln("\tSign:\t", hex.EncodeToString(data.Header.Signature))
 	log.Infoln("\tPubKey:\t", hex.EncodeToString(data.Header.GetNodePubKey()))
 }

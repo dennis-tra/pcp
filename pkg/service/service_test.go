@@ -93,3 +93,19 @@ func TestNewService_restart(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, ErrServiceAlreadyStarted, err)
 }
+
+func TestService_SigDone(t *testing.T) {
+	s := New()
+	err := s.ServiceStarted()
+	require.NoError(t, err)
+	s.ServiceStopped()
+	<-s.SigDone()
+}
+
+func TestService_SigShutdown(t *testing.T) {
+	s := New()
+	err := s.ServiceStarted()
+	require.NoError(t, err)
+	go s.Shutdown()
+	<-s.SigShutdown()
+}

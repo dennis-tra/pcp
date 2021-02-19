@@ -16,13 +16,14 @@ import (
 
 type Discoverer struct {
 	*protocol
+	code string
 }
 
-func NewDiscoverer(node *pcpnode.Node) *Discoverer {
-	return &Discoverer{newProtocol(node)}
+func NewDiscoverer(node *pcpnode.Node, code string) *Discoverer {
+	return &Discoverer{protocol: newProtocol(node), code: code}
 }
 
-func (d *Discoverer) Discover(code string, handler pcpnode.PeerHandler) error {
+func (d *Discoverer) Discover(handler pcpnode.PeerHandler) error {
 	if err := d.ServiceStarted(); err != nil {
 		return err
 	}
@@ -35,7 +36,7 @@ func (d *Discoverer) Discover(code string, handler pcpnode.PeerHandler) error {
 		qp := &mdns.QueryParam{
 			Domain:  "local",
 			Entries: entriesCh,
-			Service: code, // keep in sync with advertiser
+			Service: d.code, // keep in sync with advertiser
 			Timeout: time.Second * 5,
 		}
 

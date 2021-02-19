@@ -17,21 +17,17 @@ import (
 	"github.com/dennis-tra/pcp/pkg/dht"
 	"github.com/dennis-tra/pcp/pkg/mdns"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
-	"github.com/dennis-tra/pcp/pkg/words"
 )
 
 // Node encapsulates the logic of advertising and transmitting
 // a particular file to a peer.
 type Node struct {
 	*pcpnode.Node
-	*pcpnode.PakeServerProtocol
+
 	advertisers []Advertiser
 
 	authPeers sync.Map
 	filepath  string
-
-	TransferCode []string
-	ChannelID    int16
 }
 
 type Advertiser interface {
@@ -41,38 +37,20 @@ type Advertiser interface {
 
 // InitNode returns a fully configured node ready to start
 // advertising that we want to send a specific file.
-func InitNode(ctx context.Context, filepath string) (*Node, error) {
-	h, err := pcpnode.New(ctx, libp2p.EnableAutoRelay())
+func InitNode(ctx context.Context, filepath string, words []string) (*Node, error) {
+	h, err := pcpnode.New(ctx, words, libp2p.EnableAutoRelay())
 	if err != nil {
 		return nil, err
 	}
 
-	node := &Node{Node: h, advertisers: []Advertiser{}, authPeers: sync.Map{}, filepath: filepath}
-
-	pubKey, err := node.Peerstore().PubKey(node.ID()).Bytes()
-	if err != nil {
-		return nil, err
+	node := &Node{
+		Node:        h,
+		advertisers: []Advertiser{},
+		authPeers:   sync.Map{},
+		filepath:    filepath,
 	}
 
-	tcode, err := words.FromBytes(pubKey)
-	if err != nil {
-		return nil, err
-	}
-
-	chanID, err := words.ToInt(tcode[0])
-	if err != nil {
-		return nil, err
-	}
-
-	node.ChannelID = chanID
-	node.TransferCode = tcode
-
-	pw, err := words.ToBytes(tcode)
-	if err != nil {
-		return nil, err
-	}
-	node.PakeServerProtocol = pcpnode.NewPakeServerProtocol(h, pw)
-	node.PakeServerProtocol.RegisterKeyExchangeHandler(node)
+	node.RegisterKeyExchangeHandler(node)
 
 	return node, nil
 }
@@ -83,9 +61,10 @@ func (n *Node) Shutdown() {
 	n.Node.Shutdown()
 }
 
-// Advertise asynchronously advertises the given code through the means of all
+// StartAdvertising asynchronously advertises the given code through the means of all
 // registered advertisers. Currently these are multicast DNS and DHT.
-func (n *Node) Advertise(code string) {
+func (n *Node) StartAdvertising(code string) {
+	// TODO: Implement rolling 5 minute window
 	n.advertisers = []Advertiser{
 		dht.NewAdvertiser(n.Node),
 		mdns.NewAdvertiser(n.Node),
@@ -126,25 +105,20 @@ func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
 }
 
 func (n *Node) Transfer(peerID peer.ID) error {
-	c, err := calcContentID(n.filepath)
-	if err != nil {
-		return err
-	}
-
 	f, err := os.Open(n.filepath)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
+	filename := path.Base(f.Name())
 	fstat, err := f.Stat()
 	if err != nil {
 		return err
 	}
 
 	log.Infof("Asking for confirmation... ")
-
-	accepted, err := n.SendPushRequest(n.ServiceContext(), peerID, path.Base(f.Name()), fstat.Size(), c)
+	accepted, err := n.SendPushRequest(n.ServiceContext(), peerID, filename, fstat.Size())
 	if err != nil {
 		return err
 	}
@@ -155,12 +129,8 @@ func (n *Node) Transfer(peerID peer.ID) error {
 	}
 	log.Infoln("Accepted!")
 
-	bar := progress.DefaultBytes(
-		fstat.Size(),
-		path.Base(f.Name()),
-	)
-
-	if _, err = n.Node.Transfer(n.ServiceContext(), peerID, bar, f); err != nil {
+	bar := progress.DefaultBytes(fstat.Size(), filename)
+	if err = n.Node.Transfer(n.ServiceContext(), peerID, bar, f); err != nil {
 		return errors.Wrap(err, "could not transfer file to peer")
 	}
 

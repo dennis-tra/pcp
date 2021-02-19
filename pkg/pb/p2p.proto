@@ -25,6 +25,7 @@ message Header {
 // about to be transmitted.
 message PushRequest {
 
+  // General meta information about the request.
   Header header = 1;
 
   // The name of the file that is about to be transferred.
@@ -34,9 +35,6 @@ message PushRequest {
 
   // The size of the file to be transmitted.
   int64 size = 3;
-
-  // The content identifier of the file to send.
-  bytes cid = 4;
 }
 
 // PushResponse is sent as a reply to the PushRequest message.
@@ -44,7 +42,9 @@ message PushRequest {
 // accept the file.
 message PushResponse {
 
+  // General meta information about the request.
   Header header = 1;
 
+  // Whether or not the user accepted the file transfer.
   bool accept = 2;
 }

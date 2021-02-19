@@ -6,13 +6,8 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"sync"
 	"time"
 
-	"github.com/dennis-tra/pcp/pkg/service"
-
-	"github.com/dennis-tra/pcp/internal/log"
-	p2p "github.com/dennis-tra/pcp/pkg/pb"
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/libp2p/go-libp2p"
@@ -25,6 +20,12 @@ import (
 	manet "github.com/multiformats/go-multiaddr/net"
 	"github.com/multiformats/go-varint"
 	"github.com/pkg/errors"
+
+	"github.com/dennis-tra/pcp/internal/log"
+	"github.com/dennis-tra/pcp/pkg/crypt"
+	p2p "github.com/dennis-tra/pcp/pkg/pb"
+	"github.com/dennis-tra/pcp/pkg/service"
+	"github.com/dennis-tra/pcp/pkg/words"
 )
 
 // Node encapsulates the logic for sending and receiving messages.
@@ -32,12 +33,17 @@ type Node struct {
 	host.Host
 	*PushProtocol
 	*TransferProtocol
+	*PakeProtocol
 	*service.Service
 
-	authenticatedPeers sync.Map
+	// The public key of this node for easy access
+	pubKey []byte
 
 	// DHT is an accessor that is needed in the DHT discoverer/advertiser.
 	DHT *kaddht.IpfsDHT
+
+	ChanID int
+	Words  []string
 }
 
 type PeerHandler interface {
@@ -45,12 +51,30 @@ type PeerHandler interface {
 }
 
 // New creates a new, fully initialized node with the given options.
-func New(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
-	node := &Node{authenticatedPeers: sync.Map{}, Service: service.New()}
+func New(ctx context.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
+	ints, err := words.ToInts(wrds)
+	if err != nil {
+		return nil, err
+	}
+
+	node := &Node{
+		Service: service.New(),
+		Words:   wrds,
+		ChanID:  ints[0],
+	}
 	node.PushProtocol = NewPushProtocol(node)
 	node.TransferProtocol = NewTransferProtocol(node)
+	node.PakeProtocol, err = NewPakeProtocol(node, wrds)
+	if err != nil {
+		return nil, err
+	}
 
-	key, _, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
+	key, pub, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
+	if err != nil {
+		return nil, err
+	}
+
+	node.pubKey, err = pub.Raw()
 	if err != nil {
 		return nil, err
 	}
@@ -71,15 +95,10 @@ func New(ctx context.Context, opts ...libp2p.Option) (*Node, error) {
 	return node, node.ServiceStarted()
 }
 
-func (n *Node) AddAuthenticatedPeer(peerID peer.ID) {
-	n.authenticatedPeers.Store(peerID, struct{}{})
-}
-
-func (n *Node) IsAuthenticated(peerID peer.ID) bool {
-	_, found := n.authenticatedPeers.Load(peerID)
-	return found
-}
-
+// HasPublicAddr returns true if there is at least one public
+// address associated with the current node - aka we got at
+// least three confirmations from peers through the identify
+// protocol.
 func (n *Node) HasPublicAddr() bool {
 	for _, addr := range n.Addrs() {
 		if manet.IsPublicAddr(addr) {
@@ -98,9 +117,9 @@ func (n *Node) Shutdown() {
 }
 
 // AdvertiseIdentifier returns the string, that we use to advertise
-// via mDNS and the DHT. See ChannelID above for more information.
-func (n *Node) AdvertiseIdentifier(t time.Time, chanID int16) string {
-	return fmt.Sprintf("/pcp/%d/%d", t.Truncate(5*time.Minute).Unix(), chanID)
+// via mDNS and the DHT. See chanID above for more information.
+func (n *Node) AdvertiseIdentifier(t time.Time) string {
+	return fmt.Sprintf("/pcp/%d/%d", t.Truncate(5*time.Minute).Unix(), n.ChanID)
 }
 
 // Send prepares the message msg to be sent over the network stream s.
@@ -145,6 +164,15 @@ func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
 	data, err = proto.Marshal(msg)
 	if err != nil {
 		return err
+	}
+
+	// Encrypt the data with the PAKE session key if it is found
+	sKey, found := n.GetSessionKey(s.Conn().RemotePeer())
+	if found {
+		data, err = crypt.Encrypt(sKey, data)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Transmit the data.
@@ -202,9 +230,10 @@ func (n *Node) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
 // Read drains the given stream and parses the content. It unmarshalls
 // it into the protobuf object. It also verifies the authenticity of the message.
 // Read closes the stream for reading but leaves it open for writing.
-func (n *Node) Read(s network.Stream, data p2p.HeaderMessage) error {
+func (n *Node) Read(s network.Stream, buf p2p.HeaderMessage) error {
 	defer s.CloseRead()
-	buf, err := ioutil.ReadAll(s)
+
+	data, err := ioutil.ReadAll(s)
 	if err != nil {
 		if err2 := s.Reset(); err2 != nil {
 			err = errors.Wrap(err, err2.Error())
@@ -212,11 +241,20 @@ func (n *Node) Read(s network.Stream, data p2p.HeaderMessage) error {
 		return err
 	}
 
-	if err = proto.Unmarshal(buf, data); err != nil {
+	// Decrypt the data with the PAKE session key if it is found
+	sKey, found := n.GetSessionKey(s.Conn().RemotePeer())
+	if found {
+		data, err = crypt.Decrypt(sKey, data)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err = proto.Unmarshal(data, buf); err != nil {
 		return err
 	}
 
-	valid, err := n.authenticateMessage(data)
+	valid, err := n.authenticateMessage(buf)
 	if err != nil {
 		return err
 	}
@@ -228,6 +266,8 @@ func (n *Node) Read(s network.Stream, data p2p.HeaderMessage) error {
 	return nil
 }
 
+// WriteBytes writes the given bytes to the destination writer and
+// prefixes it with a uvarint indicating the length of the data.
 func (n *Node) WriteBytes(w io.Writer, data []byte) (int, error) {
 	hdr := varint.ToUvarint(uint64(len(data)))
 	nhdr, err := w.Write(hdr)
@@ -243,6 +283,8 @@ func (n *Node) WriteBytes(w io.Writer, data []byte) (int, error) {
 	return nhdr + ndata, nil
 }
 
+// ReadBytes reads an uvarint from the source reader to know how
+// much data is following.
 func (n *Node) ReadBytes(r io.Reader) ([]byte, error) {
 	l, err := varint.ReadUvarint(bufio.NewReader(r))
 	if err != nil {
@@ -257,6 +299,9 @@ func (n *Node) ReadBytes(r io.Reader) ([]byte, error) {
 	return buf, nil
 }
 
+// ResetOnShutdown resets the given stream if the node receives a shutdown
+// signal to indicate to our peer that we're not interested in the conversation
+// anymore.
 func (n *Node) ResetOnShutdown(s network.Stream) context.CancelFunc {
 	cancel := make(chan struct{})
 	go func() {

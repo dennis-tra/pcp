@@ -6,6 +6,7 @@ require (
 	github.com/adrg/xdg v0.3.0
 	github.com/golang/mock v1.4.4
 	github.com/golang/protobuf v1.4.0
+	github.com/google/go-cmp v0.5.4 // indirect
 	github.com/google/uuid v1.1.2
 	github.com/ipfs/go-cid v0.0.7
 	github.com/libp2p/go-libp2p v0.13.0
@@ -22,9 +23,11 @@ require (
 	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/urfave/cli/v2 v2.3.0
 	github.com/whyrusleeping/mdns v0.0.0-20190826153040-b9b60ed33aa9
+	go.uber.org/atomic v1.6.0
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
+	golang.org/x/mod v0.4.0 // indirect
+	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c // indirect
-	golang.org/x/term v0.0.0-20201117132131-f5c789dd3221
+	golang.org/x/tools v0.0.0-20210101214203-2dba1e4ea05c // indirect
 	google.golang.org/protobuf v1.23.0
-	mvdan.cc/gofumpt v0.1.0 // indirect
 )

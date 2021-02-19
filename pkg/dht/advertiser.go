@@ -34,6 +34,7 @@ func (a *Advertiser) Advertise(code string) error {
 	}
 
 	for {
+		// Only advertise in the DHT if we have a public addr.
 		if !a.HasPublicAddr() {
 			select {
 			case <-a.SigShutdown():

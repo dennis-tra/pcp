@@ -10,13 +10,14 @@ import (
 
 type Discoverer struct {
 	*protocol
+	code string
 }
 
-func NewDiscoverer(node *pcpnode.Node) *Discoverer {
-	return &Discoverer{protocol: newProtocol(node)}
+func NewDiscoverer(node *pcpnode.Node, code string) *Discoverer {
+	return &Discoverer{protocol: newProtocol(node), code: code}
 }
 
-func (d *Discoverer) Discover(code string, handler pcpnode.PeerHandler) error {
+func (d *Discoverer) Discover(handler pcpnode.PeerHandler) error {
 	if err := d.ServiceStarted(); err != nil {
 		return err
 	}
@@ -26,7 +27,7 @@ func (d *Discoverer) Discover(code string, handler pcpnode.PeerHandler) error {
 		return err
 	}
 
-	contentID, err := strToCid(code)
+	contentID, err := strToCid(d.code)
 	if err != nil {
 		return err
 	}

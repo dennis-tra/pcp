@@ -1,65 +1,110 @@
 package words
 
 import (
-	"bytes"
-	"encoding/binary"
+	"crypto/rand"
 	"fmt"
+	"math/big"
 
+	"github.com/pkg/errors"
 	"github.com/tyler-smith/go-bip39/wordlists"
 )
 
-func FromBytes(b []byte) ([]string, error) {
-	length := 4
-	words := make([]string, length)
-	for i := 0; i < length; i++ {
-		sum := 0
-		for j := 0; j < 8; j++ {
-			sum += int(b[j+i*8+i])
-		}
-		words[i] = wordlists.English[sum]
-	}
+type Language string
 
-	return words, nil
+const (
+	English            Language = "english"
+	ChineseSimplified           = "chinese_simplified"
+	ChineseTraditional          = "chinese_traditional"
+	Czech                       = "czech"
+	French                      = "french"
+	Italian                     = "italian"
+	Japanese                    = "japanese"
+	Korean                      = "korean"
+	Spanish                     = "spanish"
+)
+
+var Lists = map[Language][]string{
+	English:            wordlists.English,
+	ChineseSimplified:  wordlists.ChineseSimplified,
+	ChineseTraditional: wordlists.ChineseTraditional,
+	Czech:              wordlists.Czech,
+	French:             wordlists.French,
+	Italian:            wordlists.Italian,
+	Japanese:           wordlists.Japanese,
+	Korean:             wordlists.Korean,
+	Spanish:            wordlists.Spanish,
 }
 
-func ToBytes(words []string) ([]byte, error) {
-	ints, err := ToInts(words)
+var ErrUnsupportedLanguage = errors.New("unsupported language")
+
+// Random returns a slice of random words and their respective
+// integer values from the BIP39 wordlist of that given language.
+func Random(lang string, count int) ([]int, []string, error) {
+	wordList, err := wordsForLang(lang)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return intsToBytes(ints)
-}
-
-func intsToBytes(ints []int16) ([]byte, error) {
-	buffer := []byte{}
-
-	for _, i := range ints {
-		buf := new(bytes.Buffer)
-		if err := binary.Write(buf, binary.LittleEndian, i); err != nil {
-			return nil, err
-		}
-		buffer = append(buffer, buf.Bytes()...)
-	}
-	return buffer, nil
-}
-
-func ToInts(words []string) ([]int16, error) {
-	ints := []int16{}
-	for _, word := range words {
-		i, err := ToInt(word)
+	words := make([]string, count)
+	ints := make([]int, count)
+	for i := 0; i < count; i++ {
+		rint, err := rand.Int(rand.Reader, big.NewInt(int64(len(wordList))))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		ints = append(ints, i)
+		words[i] = wordList[rint.Int64()]
+		ints[i] = int(rint.Int64())
 	}
-	return ints, nil
+	return ints, words, nil
 }
 
-func ToInt(word string) (int16, error) {
-	for i, w := range wordlists.English {
+func ToInts(words []string) ([]int, error) {
+	var ints []int
+ListLoop:
+	for _, wordList := range Lists {
+		ints = []int{}
+		for _, word := range words {
+			idx := wordInList(word, wordList)
+			if idx == -1 {
+				continue ListLoop
+			}
+			ints = append(ints, idx)
+		}
+		return ints, nil
+	}
+	return nil, fmt.Errorf("could not find all words in a single wordlist")
+}
+
+// Tried sort.SearchStrings
+func wordInList(word string, list []string) int {
+	for i, w := range list {
 		if w == word {
-			return int16(i), nil
+			return i
 		}
 	}
-	return 0, fmt.Errorf("word not found in list")
+	return -1
+}
+
+func wordsForLang(lang string) ([]string, error) {
+	switch Language(lang) {
+	case English:
+		return wordlists.English, nil
+	case ChineseSimplified:
+		return wordlists.ChineseSimplified, nil
+	case ChineseTraditional:
+		return wordlists.ChineseTraditional, nil
+	case Czech:
+		return wordlists.Czech, nil
+	case French:
+		return wordlists.French, nil
+	case Italian:
+		return wordlists.Italian, nil
+	case Japanese:
+		return wordlists.Japanese, nil
+	case Korean:
+		return wordlists.Korean, nil
+	case Spanish:
+		return wordlists.Spanish, nil
+	default:
+		return nil, ErrUnsupportedLanguage
+	}
 }

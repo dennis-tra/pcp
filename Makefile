@@ -1,5 +1,5 @@
 BINARY=pcp
-VERSION=0.1.0
+VERSION=0.3.0
 BUILD=`git rev-parse HEAD`
 PLATFORMS=darwin linux windows
 ARCHITECTURES=386 amd64 arm

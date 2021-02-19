@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 
@@ -79,14 +78,14 @@ func (p *PushProtocol) onPushRequest(s network.Stream) {
 	}
 }
 
-func (p *PushProtocol) SendPushRequest(ctx context.Context, peerID peer.ID, filename string, size int64, c cid.Cid) (bool, error) {
+func (p *PushProtocol) SendPushRequest(ctx context.Context, peerID peer.ID, filename string, size int64) (bool, error) {
 	s, err := p.node.NewStream(ctx, peerID, ProtocolPushRequest)
 	if err != nil {
 		return false, err
 	}
 	defer s.Close()
 
-	if err = p.node.Send(s, p2p.NewPushRequest(filename, size, c)); err != nil {
+	if err = p.node.Send(s, p2p.NewPushRequest(filename, size)); err != nil {
 		return false, err
 	}
 

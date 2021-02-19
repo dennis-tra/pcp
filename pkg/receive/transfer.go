@@ -14,15 +14,13 @@ import (
 type TransferHandler struct {
 	filename string
 	size     int64
-	cid      []byte
 	done     chan int64
 }
 
-func NewTransferHandler(filename string, size int64, cid []byte, done chan int64) (*TransferHandler, error) {
+func NewTransferHandler(filename string, size int64, done chan int64) (*TransferHandler, error) {
 	th := &TransferHandler{
 		filename: filename,
 		size:     size,
-		cid:      cid,
 		done:     done,
 	}
 
@@ -54,10 +52,7 @@ func (th *TransferHandler) HandleTransfer(src io.Reader) {
 		}
 	}()
 
-	bar := progress.DefaultBytes(
-		th.size,
-		th.filename,
-	)
+	bar := progress.DefaultBytes(th.size, th.filename)
 	// Receive and persist the actual data.
 	received, err = io.Copy(io.MultiWriter(f, bar), src)
 	if err != nil {

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dennis-tra/pcp/pkg/words"
+
 	"github.com/ipfs/go-cid"
 	mh "github.com/multiformats/go-multihash"
 	"github.com/urfave/cli/v2"
@@ -18,14 +20,27 @@ import (
 
 // Command holds the `send` subcommand configuration.
 var Command = &cli.Command{
-	Name:      "send",
-	Usage:     "make the given file available to your peers",
-	Aliases:   []string{"s"},
-	Action:    Action,
-	Flags:     []cli.Flag{},
+	Name:    "send",
+	Usage:   "make the given file available to your peer",
+	Aliases: []string{"s"},
+	Action:  Action,
+	Flags: []cli.Flag{
+		&cli.IntFlag{
+			Name:    "w",
+			Aliases: []string{"word-count"},
+			Usage:   "the number of random words to use (min 3)",
+			EnvVars: []string{"PCP_WORD_COUNT"},
+			Value:   4,
+		},
+		&cli.StringFlag{
+			Name:    "l",
+			Aliases: []string{"language"},
+			Usage:   "the language to choose the random words from. Supported languages are listed above.",
+			EnvVars: []string{"PCP_LANGUAGE"},
+			Value:   "english",
+		},
+	},
 	ArgsUsage: `FILE`,
-	// UsageText: `pcp send [command options] FILE
-	// The file you want to transmit to your peer (required).`,
 	Description: `
 The send subcommand generates four random words based on the first
 bytes of a newly generated peer identity. The first word and the
@@ -40,11 +55,23 @@ is happening the tool still searches for other peers as the
 currently connected one could fail the authentication procedure.
 
 After the authentication was successful and the peer confirmed
-the file transfer the transmission is started.`,
+the file transfer the transmission is started.
+
+Supported languages:
+	- english
+	- chinese_simplified
+	- chinese_traditional
+	- czech
+	- french
+	- italian
+	- japanese
+	- korean
+	- spanish
+`,
 }
 
 // Action contains the logic for the send subcommand of the pcp program. It is
-// mainly responsible for the TUI state handling and input parsing.
+// mainly responsible for input parsing and service initialisation.
 func Action(c *cli.Context) error {
 	// Read config file and fill context with it.
 	ctx, err := config.FillContext(c.Context)
@@ -54,22 +81,31 @@ func Action(c *cli.Context) error {
 
 	// Try to open the file to check if we have access and fail early.
 	filepath := c.Args().First()
-	if err = verifyFileAccess(filepath); err != nil {
+	if err = validateFile(filepath); err != nil {
+		return err
+	}
+
+	if c.Int("w") < 3 {
+		return fmt.Errorf("the number of words must not be less than 3")
+	}
+
+	// Generate the random words
+	_, wrds, err := words.Random(strings.ToLower(c.String("l")), c.Int("w"))
+	if err != nil {
 		return err
 	}
 
 	// Initialize node
-	local, err := InitNode(ctx, filepath)
+	local, err := InitNode(ctx, filepath, wrds)
 	if err != nil {
 		return err
 	}
 
 	// Broadcast the code to be found by peers.
-	dhtKey := local.AdvertiseIdentifier(time.Now(), local.ChannelID)
-	log.Infoln("Code is: ", strings.Join(local.TransferCode, "-"))
-	log.Infoln("On the other machine run:\n\tpcp receive", strings.Join(local.TransferCode, "-"))
+	log.Infoln("Code is: ", strings.Join(local.Words, "-"))
+	log.Infoln("On the other machine run:\n\tpcp receive", strings.Join(local.Words, "-"))
 
-	local.Advertise(dhtKey)
+	local.StartAdvertising(local.AdvertiseIdentifier(time.Now()))
 
 	// Wait for the user to stop the tool or the transfer to finish.
 	select {
@@ -81,9 +117,11 @@ func Action(c *cli.Context) error {
 	}
 }
 
-// verifyFileAccess just tries to open the file at the given path to check
-// if we have the correct permissions to read it.
-func verifyFileAccess(filepath string) error {
+// validateFile tries to open the file at the given path to check
+// if we have the correct permissions to read it. Further, it
+// checks whether the filepath represents a directory. This is
+// currently not supported.
+func validateFile(filepath string) error {
 	if filepath == "" {
 		return fmt.Errorf("please specify the file you want to transfer")
 	}
@@ -92,16 +130,18 @@ func verifyFileAccess(filepath string) error {
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 
-	return f.Close()
-}
+	stat, err := f.Stat()
+	if err != nil {
+		return err
+	}
 
-// help prints the usage description for the user input in the "select peer" prompt.
-func help() {
-	log.Infoln("#: the number of the peer you want to connect to")
-	log.Infoln("r: refresh peer list")
-	log.Infoln("q: quit pcp")
-	log.Infoln("?: this help message")
+	if stat.IsDir() {
+		return fmt.Errorf("transferring directories is not supported yet :/")
+	}
+
+	return nil
 }
 
 func calcContentID(filepath string) (cid.Cid, error) {

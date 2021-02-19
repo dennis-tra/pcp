@@ -2,7 +2,6 @@ package proto
 
 import (
 	"github.com/golang/protobuf/proto"
-	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/peer"
 )
 
@@ -33,10 +32,9 @@ func NewPushResponse(accept bool) *PushResponse {
 	return &PushResponse{Accept: accept}
 }
 
-func NewPushRequest(filename string, size int64, c cid.Cid) *PushRequest {
+func NewPushRequest(filename string, size int64) *PushRequest {
 	return &PushRequest{
 		Filename: filename,
 		Size:     size,
-		Cid:      c.Bytes(),
 	}
 }
