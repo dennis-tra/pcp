@@ -35,7 +35,7 @@ to orchestrate peer matching and data relaying which poses a centralisation conc
 vs. decentralisation arguments apply here, e.g. the servers are single points of failures, the service operator has the
 power over whom to serve and whom not, etc. Further, as
 this [recent issue in croc](https://github.com/schollz/croc/issues/289) shows, this is a real risk for sustainable
-operation of the provided service. A benevolent big player jumped in to sponsor the service.
+operation of the provided service.
 
 [comment]: <> (The `identify` discovery mechanism serves the same role as `STUN`, but without the need for a set of `STUN` servers. The libp2p `Circuit Relay` protocol allows peers to communicate indirectly via a helpful intermediary peer that is found via the DHT. This replaces dedicated `TURN` servers.)
 
@@ -50,14 +50,20 @@ Further, the bandwidth and geographic location of a potential relaying peer is n
 
 ## How does it work?
 
-When running `pcp send` a new [peer identity](https://docs.libp2p.io/concepts/peer-id/) is generated.
-The first bytes of the public key are encoded in four words from the Bitcoin improvement proposal [BIP39](https://github.com/bitcoin/bips/blob/master/bip-0039/bip-0039-wordlists.md), so each word is basically random among the 2048 possible words. The first word is interpreted as a channel ID in the range from 0 to 2047.
-`pcp` advertises in its local network via mDNS and in the DHT of IPFS the identifier `/pcp/{unix-timestamp}/channel-id`.
+When running `pcp send` you'll see four random words from a list of the Bitcoin improvement proposal [BIP39](https://github.com/bitcoin/bips/blob/master/bip-0039/bip-0039-wordlists.md).
+There are lists in nine different languages of 2048 words each, currently only `english` is supported.
+The first word is interpreted as a channel ID in the range from 0 to 2047.
+`pcp` advertises the identifier `/pcp/{unix-timestamp}/{channel-id}` in its local network via [mDNS](https://en.wikipedia.org/wiki/Multicast_DNS) and a hashed version of this string in the [DHT](https://en.wikipedia.org/wiki/Distributed_hash_table) of [IPFS](https://en.wikipedia.org/wiki/InterPlanetary_File_System).
 The unix timestamp is the current time truncated to 5 minutes and the prefix `/pcp` is the protocol prefix.
+_In the future:_ When you enter a new 5-minute interval while `pcp send` is running it advertises an updated identifier.
 
-Your peer enters `pcp receive four-words-from-above` and `pcp` uses the first word together with the current time truncated to 5 minutes to find the sending peer in the DHT and in your local network via mDNS.
-When the peer is found, its public key is checked against the three remaining words (as the words were derived from that key), and a password authenticated key exchange happens to authenticate each other.
-The key exchange is **not** used for encryption as the connection uses TLS per default. After the peer is authenticated the receiver must confirm the file transfer, and the file gets transmitted. 
+To receive the file your peer enters `pcp receive four-words-from-above` and `pcp` uses the first word together with the current time truncated to 5 minutes to find the sending peer in the [DHT](https://en.wikipedia.org/wiki/Distributed_hash_table) and in your local network via [mDNS](https://en.wikipedia.org/wiki/Multicast_DNS).
+It also searches for an identifier of the previous 5-minute interval.
+As soon as the peer is found, both do a password authenticated key exchange ([PAKE](https://en.wikipedia.org/wiki/Password-authenticated_key_agreement)) to authenticate each other.
+In this procedure a comparably weak password (`four-words-from-above`) gets replaced with a strong session key that is used to encrypt all future communication.
+The default [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) encryption that [libp2p](https://github.com/libp2p/go-libp2p) provides is not sufficient in this case as we could still, in theory, talk to a wrong peer - just encrypted.
+
+After the peer is authenticated the receiver must confirm the file transfer, and the file gets transmitted. 
 
 ## Usage
 
@@ -126,7 +132,7 @@ Shamelessly copied from `croc`:
 - [x] allows any two computers to transfer data (using a relay)
   - ✅ using mDNS and DHT for peer discovery and [AutoRelay](https://docs.libp2p.io/concepts/circuit-relay/#autorelay) / [AutoNat](https://docs.libp2p.io/concepts/nat/#autonat)
 - [x] provides end-to-end encryption (using PAKE)
-  - ✅ actually PAKE is only used for authentication TLS for end-to-end encryption
+  - ✅ yup, it uses [`pake/v2`](https://github.com/schollz/pake/tree/v2.0.6) from `croc`
 - [x] enables easy cross-platform transfers (Windows, Linux, Mac)
   - 🤔✅ only tested Linux <-> Mac
 - [ ] allows multiple file transfers
