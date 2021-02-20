@@ -3,7 +3,9 @@
 [![standard-readme compliant](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg)](https://github.com/RichardLitt/standard-readme)
 [![Go Report Card](https://goreportcard.com/badge/github.com/dennis-tra/pcp)](https://goreportcard.com/report/github.com/dennis-tra/pcp)
 [![Maintainability](https://api.codeclimate.com/v1/badges/de64b09a3731b8a8842b/maintainability)](https://codeclimate.com/github/dennis-tra/pcp/maintainability)
-[![Test Coverage](https://api.codeclimate.com/v1/badges/de64b09a3731b8a8842b/test_coverage)](https://codeclimate.com/github/dennis-tra/pcp/test_coverage)
+[![Github Releases Download Count](https://img.shields.io/github/downloads/dennis-tra/pcp/total.svg)]()
+
+[comment]: <> ([![Test Coverage]&#40;https://api.codeclimate.com/v1/badges/de64b09a3731b8a8842b/test_coverage&#41;]&#40;https://codeclimate.com/github/dennis-tra/pcp/test_coverage&#41;)
 
 Command line peer-to-peer data transfer tool based on [libp2p](https://github.com/libp2p/go-libp2p).
 
@@ -22,7 +24,7 @@ Command line peer-to-peer data transfer tool based on [libp2p](https://github.co
 - [Feature Roadmap](#feature-roadmap)
 - [Related Efforts](#related-efforts)
 - [Maintainers](#maintainers)
-- [Acknowledgment](#acknowledgment)
+- [Acknowledgments](#acknowledgments)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -165,7 +167,7 @@ Shamelessly copied from `croc`:
 
 [@dennis-tra](https://github.com/dennis-tra).
 
-## Acknowledgment
+## Acknowledgments
 
 - [`go-libp2p`](https://github.com/libp2p/go-libp2p) - The Go implementation of the libp2p Networking Stack.
 - [`pake/v2`](https://github.com/schollz/pake/tree/v2.0.6) - PAKE library for generating a strong secret between parties over an insecure channel
