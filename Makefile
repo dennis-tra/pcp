@@ -12,7 +12,7 @@ default: build
 all: clean release install
 
 build:
-	go build ${LDFLAGS} -o ${BINARY} cmd/pcp/pcp.go
+	go build ${LDFLAGS} -o out/${BINARY} cmd/pcp/pcp.go
 
 release:
 	$(foreach GOOS, $(PLATFORMS),\
