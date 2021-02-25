@@ -143,7 +143,7 @@ func TestDiscoverer_Discover_restartAsSoonAsCurrentTimeSlotIsExpired(t *testing.
 	ctrl, local, net, teardown := setup(t)
 	defer teardown(t)
 
-	TruncateDuration = 20 * time.Millisecond
+	provideTimeout = 20 * time.Millisecond
 
 	mockDefaultBootstrapPeers(t, ctrl, net, local)
 
@@ -154,13 +154,9 @@ func TestDiscoverer_Discover_restartAsSoonAsCurrentTimeSlotIsExpired(t *testing.
 	var wg sync.WaitGroup
 	wg.Add(rounds)
 
-	prevCid := ""
 	dht.EXPECT().
 		FindProvidersAsync(gomock.Any(), gomock.Any(), 100).
 		DoAndReturn(func(ctx context.Context, cID cid.Cid, count int) <-chan peer.AddrInfo {
-			assert.NotEqual(t, prevCid, cID.String())
-			prevCid = cID.String()
-
 			piChan := make(chan peer.AddrInfo)
 			go func() {
 				<-ctx.Done()
@@ -182,7 +178,7 @@ func TestDiscoverer_Discover_restartAsSoonAsCurrentTimeSlotIsExpired(t *testing.
 	assert.NoError(t, err)
 
 	// Only 4 because last round is immediately termianated by d.Shutdown()
-	assert.InDelta(t, 4*TruncateDuration, end.Sub(start), float64(TruncateDuration))
+	assert.InDelta(t, 4*provideTimeout, end.Sub(start), float64(provideTimeout))
 }
 
 func TestDiscoverer_SetOffset(t *testing.T) {

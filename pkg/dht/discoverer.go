@@ -40,8 +40,8 @@ func (d *Discoverer) Discover(chanID int, handler func(info peer.AddrInfo)) erro
 			return err
 		}
 
-		// Find new provider as soon as the new time slot is reached
-		ctx, cancel := context.WithTimeout(d.ServiceContext(), d.DurNextSlot())
+		// Find new provider with a timeout, so the discovery ID is renewed if necessary.
+		ctx, cancel := context.WithTimeout(d.ServiceContext(), provideTimeout)
 		for pi := range d.dht.FindProvidersAsync(ctx, cID, 100) {
 			pi.Addrs = onlyPublic(pi.Addrs)
 			if isRoutable(pi) {

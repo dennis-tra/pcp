@@ -100,12 +100,7 @@ func (p *protocol) TimeSlotStart() time.Time {
 	return p.refTime().Truncate(TruncateDuration)
 }
 
-// DurNextSlot returns the duration until the next time slot.
-func (p *protocol) DurNextSlot() time.Duration {
-	return TruncateDuration - p.refTime().Sub(p.TimeSlotStart())
-}
-
-// refTime returns the reference time to calculate the time slots from.
+// refTime returns the reference time to calculate the time slot from.
 func (p *protocol) refTime() time.Time {
 	return wraptime.Now().Add(p.offset)
 }

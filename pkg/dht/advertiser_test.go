@@ -248,38 +248,3 @@ func TestAdvertiser_Advertise_mutatesDiscoveryIdentifier(t *testing.T) {
 
 	assert.NotEqual(t, cids[0], cids[1])
 }
-
-func TestAdvertiser_Advertiser_restartAsSoonAsCurrentTimeSlotIsExpired(t *testing.T) {
-	ctrl, local, net, teardown := setup(t)
-	defer teardown(t)
-
-	TruncateDuration = 20 * time.Millisecond
-
-	mockDefaultBootstrapPeers(t, ctrl, net, local)
-
-	dht := mock.NewMockIpfsDHT(ctrl)
-
-	rounds := 5
-	a := NewAdvertiser(local, dht)
-
-	count := 1
-	dht.EXPECT().
-		Provide(gomock.Any(), gomock.Any(), true).
-		DoAndReturn(func(ctx context.Context, cID cid.Cid, brdcst bool) error {
-			<-ctx.Done()
-			count += 1
-			if count == rounds {
-				go a.Shutdown()
-			}
-			return ctx.Err()
-		}).Times(rounds)
-
-	start := time.Now()
-	err := a.Advertise(333)
-	end := time.Now()
-
-	assert.NoError(t, err)
-
-	// Only 4 because last round is immediately termianated by d.Shutdown()
-	assert.InDelta(t, 4*TruncateDuration, end.Sub(start), float64(TruncateDuration))
-}

@@ -64,10 +64,7 @@ func (a *Advertiser) Advertise(chanID int) error {
 			}
 		}
 
-		// Newly advertise as soon as the new time slot is reached
-		ctx, cancel := context.WithTimeout(a.ServiceContext(), a.DurNextSlot())
-		err := a.provide(ctx, a.DiscoveryID(chanID))
-		cancel()
+		err := a.provide(a.ServiceContext(), a.DiscoveryID(chanID))
 		if err == context.Canceled {
 			break
 		} else if err != nil && err != context.DeadlineExceeded {
