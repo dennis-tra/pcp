@@ -119,7 +119,7 @@ func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
 
 	err := n.Transfer(peerID)
 	if err != nil {
-		log.Warningln("Error transferring file", err)
+		log.Warningln("Error transferring file:", err)
 	}
 
 	n.Shutdown()
