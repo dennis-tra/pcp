@@ -5,7 +5,16 @@ import (
 	"time"
 
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
+	"github.com/dennis-tra/pcp/internal/wrap"
 	"github.com/dennis-tra/pcp/pkg/service"
+)
+
+var wraptime wrap.Timer = wrap.Time{}
+
+// ConnThreshold represents the minimum number of bootstrap peers we need a connection to.
+var (
+	ConnThreshold    = 3
+	TruncateDuration = 5 * time.Minute
 )
 
 // protocol encapsulates the logic for discovering peers
@@ -14,6 +23,8 @@ type protocol struct {
 	*pcpnode.Node
 	*service.Service
 	interval time.Duration
+
+	offset time.Duration
 }
 
 func newProtocol(node *pcpnode.Node) *protocol {
@@ -24,8 +35,19 @@ func newProtocol(node *pcpnode.Node) *protocol {
 	}
 }
 
-// DiscoveryIdentifier returns the string, that we use to advertise
+// TimeSlotStart returns the time when the current time slot started.f
+func (p *protocol) TimeSlotStart() time.Time {
+	return p.refTime().Truncate(TruncateDuration)
+}
+
+// refTime returns the reference time to calculate the time slot from.
+func (p *protocol) refTime() time.Time {
+	return wraptime.Now().Add(p.offset)
+}
+
+// DiscoveryID returns the string, that we use to advertise
 // via mDNS and the DHT. See chanID above for more information.
-func (p *protocol) DiscoveryIdentifier(chanID int) string {
-	return fmt.Sprintf("/pcp/%d/%d", time.Now().Truncate(5*time.Minute).Unix(), chanID)
+// Using UnixNano for testing.
+func (p *protocol) DiscoveryID(chanID int) string {
+	return fmt.Sprintf("/pcp/%d/%d", p.TimeSlotStart().UnixNano(), chanID)
 }

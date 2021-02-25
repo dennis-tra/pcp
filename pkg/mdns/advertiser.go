@@ -22,15 +22,28 @@ func (a *Advertiser) Advertise(chanID int) error {
 	}
 	defer a.ServiceStopped()
 
-	// TODO: Restart after 5 minutes for new DiscoveryIdentifier
-	mdns, err := discovery.NewMdnsService(a.ServiceContext(), a, a.interval, a.DiscoveryIdentifier(chanID)) // keep in sync with discoverer
-	if err != nil {
-		return err
+	for {
+		ctx, cancel := context.WithTimeout(a.ServiceContext(), time.Minute)
+		mdns, err := discovery.NewMdnsService(ctx, a, a.interval, a.DiscoveryID(chanID))
+		if err != nil {
+			return err
+		}
+
+		select {
+		case <-a.SigShutdown():
+			cancel()
+			return mdns.Close()
+		case <-ctx.Done():
+			cancel()
+			if ctx.Err() == context.DeadlineExceeded {
+				_ = mdns.Close()
+				continue
+			} else if ctx.Err() == context.Canceled {
+				_ = mdns.Close()
+				return nil
+			}
+		}
 	}
-
-	<-a.SigShutdown()
-
-	return mdns.Close()
 }
 
 func (a *Advertiser) Shutdown() {
