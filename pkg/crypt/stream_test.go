@@ -16,7 +16,7 @@ func TestStreamEncrypterDecrypter(t *testing.T) {
 
 	payload := []byte("some text")
 	src := bytes.NewReader(payload)
-	se, err := NewStreamEncrypter(key, salt, src)
+	se, err := NewStreamEncrypter(key, src)
 	assert.Nil(t, err)
 	assert.NotNil(t, se)
 
@@ -24,7 +24,7 @@ func TestStreamEncrypterDecrypter(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, encrypted)
 
-	sd, err := NewStreamDecrypter(key, salt, se.InitializationVector(), bytes.NewReader(encrypted))
+	sd, err := NewStreamDecrypter(key, se.InitializationVector(), bytes.NewReader(encrypted))
 	assert.Nil(t, err)
 	assert.NotNil(t, sd)
 
