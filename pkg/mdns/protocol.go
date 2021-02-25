@@ -46,6 +46,11 @@ func (p *protocol) refTime() time.Time {
 	return wraptime.Now().Add(p.offset)
 }
 
+func (d *Discoverer) SetOffset(offset time.Duration) *Discoverer {
+	d.offset = offset
+	return d
+}
+
 // DiscoveryID returns the string, that we use to advertise
 // via mDNS and the DHT. See chanID above for more information.
 // Using UnixNano for testing.

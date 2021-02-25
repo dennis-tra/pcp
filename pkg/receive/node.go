@@ -60,7 +60,7 @@ func (n *Node) StartDiscovering() {
 		dht.NewDiscoverer(n, n.DHT),
 		dht.NewDiscoverer(n, n.DHT).SetOffset(-dht.TruncateDuration),
 		mdns.NewDiscoverer(n.Node),
-		mdns.NewDiscoverer(n.Node),
+		mdns.NewDiscoverer(n.Node).SetOffset(-dht.TruncateDuration),
 	}
 
 	for _, discoverer := range n.discoverers {
