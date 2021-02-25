@@ -32,13 +32,6 @@ var Command = &cli.Command{
 			EnvVars: []string{"PCP_WORD_COUNT"},
 			Value:   4,
 		},
-		&cli.StringFlag{
-			Name:    "l",
-			Aliases: []string{"language"},
-			Usage:   "the language to choose the random words from. Supported languages are listed above.",
-			EnvVars: []string{"PCP_LANGUAGE"},
-			Value:   "english",
-		},
 	},
 	ArgsUsage: `FILE`,
 	Description: `
@@ -56,17 +49,6 @@ currently connected one could fail the authentication procedure.
 
 After the authentication was successful and the peer confirmed
 the file transfer the transmission is started.
-
-Supported languages:
-	- english
-	- chinese_simplified
-	- chinese_traditional
-	- czech
-	- french
-	- italian
-	- japanese
-	- korean
-	- spanish
 `,
 }
 
@@ -90,7 +72,7 @@ func Action(c *cli.Context) error {
 	}
 
 	// Generate the random words
-	_, wrds, err := words.Random(strings.ToLower(c.String("l")), c.Int("w"))
+	_, wrds, err := words.Random("english", c.Int("w"))
 	if err != nil {
 		return err
 	}
