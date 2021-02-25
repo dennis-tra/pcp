@@ -4,6 +4,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
@@ -11,15 +12,14 @@ import (
 	"github.com/whyrusleeping/mdns"
 
 	"github.com/dennis-tra/pcp/internal/log"
-	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 )
 
 type Discoverer struct {
 	*protocol
 }
 
-func NewDiscoverer(node *pcpnode.Node) *Discoverer {
-	return &Discoverer{protocol: newProtocol(node)}
+func NewDiscoverer(h host.Host) *Discoverer {
+	return &Discoverer{newProtocol(h)}
 }
 
 func (d *Discoverer) Discover(chanID int, handler func(info peer.AddrInfo)) error {
@@ -35,7 +35,7 @@ func (d *Discoverer) Discover(chanID int, handler func(info peer.AddrInfo)) erro
 		qp := &mdns.QueryParam{
 			Domain:  "local",
 			Entries: entriesCh,
-			Service: d.DiscoveryIdentifier(chanID),
+			Service: d.DiscoveryID(chanID),
 			Timeout: time.Second * 5,
 		}
 

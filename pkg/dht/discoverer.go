@@ -4,11 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/dennis-tra/pcp/internal/wrap"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
+
+	"github.com/dennis-tra/pcp/internal/wrap"
 )
 
 // Discoverer is responsible for reading the DHT for an

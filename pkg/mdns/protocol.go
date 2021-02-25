@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	pcpnode "github.com/dennis-tra/pcp/pkg/node"
+	"github.com/libp2p/go-libp2p-core/host"
+
 	"github.com/dennis-tra/pcp/internal/wrap"
 	"github.com/dennis-tra/pcp/pkg/service"
 )
@@ -20,16 +21,16 @@ var (
 // protocol encapsulates the logic for discovering peers
 // via multicast DNS in the local network.
 type protocol struct {
-	*pcpnode.Node
+	host.Host
 	*service.Service
 	interval time.Duration
 
 	offset time.Duration
 }
 
-func newProtocol(node *pcpnode.Node) *protocol {
+func newProtocol(h host.Host) *protocol {
 	return &protocol{
-		Node:     node,
+		Host:     h,
 		interval: time.Second,
 		Service:  service.New(),
 	}

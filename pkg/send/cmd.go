@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/dennis-tra/pcp/pkg/words"
 
@@ -87,7 +86,7 @@ func Action(c *cli.Context) error {
 	log.Infoln("Code is: ", strings.Join(local.Words, "-"))
 	log.Infoln("On the other machine run:\n\tpcp receive", strings.Join(local.Words, "-"))
 
-	local.StartAdvertising(local.AdvertiseIdentifier(time.Now()))
+	local.StartAdvertising()
 
 	// Wait for the user to stop the tool or the transfer to finish.
 	select {

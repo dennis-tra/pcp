@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"sync"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -27,6 +28,15 @@ import (
 	"github.com/dennis-tra/pcp/pkg/words"
 )
 
+type State uint8
+
+const (
+	Idle = iota
+	Discovering
+	Advertising
+	Connected
+)
+
 // Node encapsulates the logic for sending and receiving messages.
 type Node struct {
 	host.Host
@@ -43,6 +53,9 @@ type Node struct {
 
 	ChanID int
 	Words  []string
+
+	stateLk sync.RWMutex
+	state   State
 }
 
 // New creates a new, fully initialized node with the given options.
@@ -54,6 +67,8 @@ func New(ctx context.Context, wrds []string, opts ...libp2p.Option) (*Node, erro
 
 	node := &Node{
 		Service: service.New(),
+		state:   Idle,
+		stateLk: sync.RWMutex{},
 		Words:   wrds,
 		ChanID:  ints[0],
 	}
@@ -98,10 +113,17 @@ func (n *Node) Shutdown() {
 	n.ServiceStopped()
 }
 
-// AdvertiseIdentifier returns the string, that we use to advertise
-// via mDNS and the DHT. See chanID above for more information.
-func (n *Node) AdvertiseIdentifier(t time.Time) string {
-	return fmt.Sprintf("/pcp/%d/%d", t.Truncate(5*time.Minute).Unix(), n.ChanID)
+func (n *Node) SetState(s State) State {
+	n.stateLk.Lock()
+	defer n.stateLk.Unlock()
+	n.state = s
+	return n.state
+}
+
+func (n *Node) GetState() State {
+	n.stateLk.RLock()
+	defer n.stateLk.RUnlock()
+	return n.state
 }
 
 // Send prepares the message msg to be sent over the network stream s.

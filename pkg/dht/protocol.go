@@ -5,13 +5,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ipfs/go-cid"
+	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
+	mh "github.com/multiformats/go-multihash"
 
 	"github.com/dennis-tra/pcp/internal/wrap"
 	"github.com/dennis-tra/pcp/pkg/service"
-	"github.com/ipfs/go-cid"
-	"github.com/libp2p/go-libp2p-core/host"
-	mh "github.com/multiformats/go-multihash"
 )
 
 var (
@@ -25,6 +25,14 @@ var (
 	ConnThreshold    = 3
 	TruncateDuration = 5 * time.Minute
 )
+
+type ErrConnThresholdNotReached struct {
+	List []error
+}
+
+func (e ErrConnThresholdNotReached) Error() string {
+	return "could not establish enough connections to bootstrap peers"
+}
 
 // protocol encapsulates the logic for discovering peers
 // through providing it in the IPFS DHT.
@@ -76,20 +84,20 @@ func (p *protocol) Bootstrap() error {
 	}()
 
 	// Reading the error channel and collect errors.
-	var errs []error
+	errs := ErrConnThresholdNotReached{List: []error{}}
 	for {
 		err, ok := <-errChan
 		if !ok {
 			// channel was closed.
 			break
 		} else if err != nil {
-			errs = append(errs, err)
+			errs.List = append(errs.List, err)
 		}
 	}
 
 	// If we could not establish enough connections return an error
-	if peerCount-len(errs) < ConnThreshold {
-		return fmt.Errorf("could not establish enough connections to bootstrap peers: %s", errs)
+	if peerCount-len(errs.List) < ConnThreshold {
+		return errs
 	}
 
 	return nil

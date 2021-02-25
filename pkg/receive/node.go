@@ -17,22 +17,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-type nodeState uint8
-
-const (
-	idle = iota
-	discovering
-	connected
-)
-
 type Node struct {
 	*pcpnode.Node
 
 	discoverers     []Discoverer
 	discoveredPeers sync.Map
-
-	stateLk sync.RWMutex
-	state   nodeState
 }
 
 type Discoverer interface {
@@ -48,8 +37,6 @@ func InitNode(ctx context.Context, words []string) (*Node, error) {
 
 	n := &Node{
 		Node:            h,
-		state:           idle,
-		stateLk:         sync.RWMutex{},
 		discoveredPeers: sync.Map{},
 		discoverers:     []Discoverer{},
 	}
@@ -67,7 +54,7 @@ func (n *Node) Shutdown() {
 }
 
 func (n *Node) StartDiscovering() {
-	n.setState(discovering)
+	n.SetState(pcpnode.Discovering)
 
 	n.discoverers = []Discoverer{
 		dht.NewDiscoverer(n, n.DHT),
@@ -81,7 +68,16 @@ func (n *Node) StartDiscovering() {
 			if err := d.Discover(n.ChanID, n.HandlePeer); err != nil {
 				// If the user is connected to another peer
 				// we don't care about discover errors.
-				if n.getState() != connected {
+				if n.GetState() == pcpnode.Connected {
+					return
+				}
+
+				if e, ok := err.(dht.ErrConnThresholdNotReached); ok {
+					log.Warningln(err)
+					for _, bperr := range e.List {
+						log.Warningf("\t%s\n", bperr)
+					}
+				} else {
 					log.Warningln(err)
 				}
 			}
@@ -101,22 +97,9 @@ func (n *Node) StopDiscovering() {
 	wg.Wait()
 }
 
-func (n *Node) setState(state nodeState) nodeState {
-	n.stateLk.Lock()
-	defer n.stateLk.Unlock()
-	n.state = state
-	return n.state
-}
-
-func (n *Node) getState() nodeState {
-	n.stateLk.RLock()
-	defer n.stateLk.RUnlock()
-	return n.state
-}
-
 // HandlePeer is called async from the discoverers. It's okay to have long running tasks here.
 func (n *Node) HandlePeer(pi peer.AddrInfo) {
-	if n.getState() != discovering {
+	if n.GetState() != pcpnode.Discovering {
 		log.Debugln("Received a peer from the discoverer although we're not discovering")
 		return
 	}
@@ -141,11 +124,11 @@ func (n *Node) HandlePeer(pi peer.AddrInfo) {
 	}
 
 	// We're authenticated so can initiate a transfer
-	if n.getState() == connected {
+	if n.GetState() == pcpnode.Connected {
 		log.Debugln("already connected and authenticated with another node")
 		return
 	}
-	n.setState(connected)
+	n.SetState(pcpnode.Connected)
 
 	// Stop the discovering process as we have found the valid peer
 	n.StopDiscovering()

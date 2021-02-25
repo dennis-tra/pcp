@@ -63,8 +63,9 @@ func (n *Node) Shutdown() {
 
 // StartAdvertising asynchronously advertises the given code through the means of all
 // registered advertisers. Currently these are multicast DNS and DHT.
-func (n *Node) StartAdvertising(code string) {
-	// TODO: Implement rolling 5 minute window
+func (n *Node) StartAdvertising() {
+	n.SetState(pcpnode.Advertising)
+
 	n.advertisers = []Advertiser{
 		dht.NewAdvertiser(n, n.DHT),
 		mdns.NewAdvertiser(n.Node),
@@ -73,8 +74,21 @@ func (n *Node) StartAdvertising(code string) {
 	for _, advertiser := range n.advertisers {
 		go func(a Advertiser) {
 			if err := a.Advertise(n.ChanID); err != nil {
-				// TODO: Check if we're connected. If yes, don't print warning.
-				log.Warningln(err)
+				// If the user is connected to another peer
+				// we don't care about discover errors.
+				if n.GetState() == pcpnode.Connected {
+					return
+				}
+
+				if e, ok := err.(dht.ErrConnThresholdNotReached); ok {
+					log.Warningln(err)
+					for _, bperr := range e.List {
+						log.Warningf("\t%s\n", bperr)
+					}
+					log.Warningln("this means you will only be able to transfer files in your local network")
+				} else {
+					log.Warningln(err)
+				}
 			}
 		}(advertiser)
 	}
@@ -93,7 +107,13 @@ func (n *Node) StopAdvertising() {
 }
 
 func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
-	// TODO: Prevent calling this twice
+	// We're authenticated so can initiate a transfer
+	if n.GetState() == pcpnode.Connected {
+		log.Debugln("already connected and authenticated with another node")
+		return
+	}
+	n.SetState(pcpnode.Connected)
+
 	n.UnregisterKeyExchangeHandler()
 	go n.StopAdvertising()
 

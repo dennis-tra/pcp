@@ -1,7 +1,10 @@
 package mdns
 
 import (
-	pcpnode "github.com/dennis-tra/pcp/pkg/node"
+	"context"
+	"time"
+
+	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p/p2p/discovery"
 )
 
@@ -9,8 +12,8 @@ type Advertiser struct {
 	*protocol
 }
 
-func NewAdvertiser(node *pcpnode.Node) *Advertiser {
-	return &Advertiser{newProtocol(node)}
+func NewAdvertiser(h host.Host) *Advertiser {
+	return &Advertiser{newProtocol(h)}
 }
 
 // Advertise broadcasts that we're providing data for the given code.
