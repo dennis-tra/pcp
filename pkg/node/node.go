@@ -17,7 +17,6 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/routing"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
-	manet "github.com/multiformats/go-multiaddr/net"
 	"github.com/multiformats/go-varint"
 	"github.com/pkg/errors"
 
@@ -44,10 +43,6 @@ type Node struct {
 
 	ChanID int
 	Words  []string
-}
-
-type PeerHandler interface {
-	HandlePeer(info peer.AddrInfo)
 }
 
 // New creates a new, fully initialized node with the given options.
@@ -93,19 +88,6 @@ func New(ctx context.Context, wrds []string, opts ...libp2p.Option) (*Node, erro
 	}
 
 	return node, node.ServiceStarted()
-}
-
-// HasPublicAddr returns true if there is at least one public
-// address associated with the current node - aka we got at
-// least three confirmations from peers through the identify
-// protocol.
-func (n *Node) HasPublicAddr() bool {
-	for _, addr := range n.Addrs() {
-		if manet.IsPublicAddr(addr) {
-			return true
-		}
-	}
-	return false
 }
 
 func (n *Node) Shutdown() {

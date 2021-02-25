@@ -1,11 +1,11 @@
 package mdns
 
 import (
+	"fmt"
 	"time"
 
-	"github.com/dennis-tra/pcp/pkg/service"
-
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
+	"github.com/dennis-tra/pcp/pkg/service"
 )
 
 // protocol encapsulates the logic for discovering peers
@@ -22,4 +22,10 @@ func newProtocol(node *pcpnode.Node) *protocol {
 		interval: time.Second,
 		Service:  service.New(),
 	}
+}
+
+// DiscoveryIdentifier returns the string, that we use to advertise
+// via mDNS and the DHT. See chanID above for more information.
+func (p *protocol) DiscoveryIdentifier(chanID int) string {
+	return fmt.Sprintf("/pcp/%d/%d", time.Now().Truncate(5*time.Minute).Unix(), chanID)
 }

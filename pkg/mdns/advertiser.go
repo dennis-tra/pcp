@@ -16,13 +16,14 @@ func NewAdvertiser(node *pcpnode.Node) *Advertiser {
 // Advertise broadcasts that we're providing data for the given code.
 //
 // TODO: NewMdnsService also polls for peers. This is quite chatty, so we could extract the server-only logic.
-func (a *Advertiser) Advertise(code string) error {
+func (a *Advertiser) Advertise(chanID int) error {
 	if err := a.ServiceStarted(); err != nil {
 		return err
 	}
 	defer a.ServiceStopped()
 
-	mdns, err := discovery.NewMdnsService(a.ServiceContext(), a, a.interval, code) // keep in sync with discoverer
+	// TODO: Restart after 5 minutes for new DiscoveryIdentifier
+	mdns, err := discovery.NewMdnsService(a.ServiceContext(), a, a.interval, a.DiscoveryIdentifier(chanID)) // keep in sync with discoverer
 	if err != nil {
 		return err
 	}

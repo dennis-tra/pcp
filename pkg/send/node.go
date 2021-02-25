@@ -31,7 +31,7 @@ type Node struct {
 }
 
 type Advertiser interface {
-	Advertise(code string) error
+	Advertise(chanID int) error
 	Shutdown()
 }
 
@@ -66,13 +66,14 @@ func (n *Node) Shutdown() {
 func (n *Node) StartAdvertising(code string) {
 	// TODO: Implement rolling 5 minute window
 	n.advertisers = []Advertiser{
-		dht.NewAdvertiser(n.Node),
+		dht.NewAdvertiser(n, n.DHT),
 		mdns.NewAdvertiser(n.Node),
 	}
 
 	for _, advertiser := range n.advertisers {
 		go func(a Advertiser) {
-			if err := a.Advertise(code); err != nil {
+			if err := a.Advertise(n.ChanID); err != nil {
+				// TODO: Check if we're connected. If yes, don't print warning.
 				log.Warningln(err)
 			}
 		}(advertiser)

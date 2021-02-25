@@ -16,14 +16,13 @@ import (
 
 type Discoverer struct {
 	*protocol
-	code string
 }
 
-func NewDiscoverer(node *pcpnode.Node, code string) *Discoverer {
-	return &Discoverer{protocol: newProtocol(node), code: code}
+func NewDiscoverer(node *pcpnode.Node) *Discoverer {
+	return &Discoverer{protocol: newProtocol(node)}
 }
 
-func (d *Discoverer) Discover(handler pcpnode.PeerHandler) error {
+func (d *Discoverer) Discover(chanID int, handler func(info peer.AddrInfo)) error {
 	if err := d.ServiceStarted(); err != nil {
 		return err
 	}
@@ -36,7 +35,7 @@ func (d *Discoverer) Discover(handler pcpnode.PeerHandler) error {
 		qp := &mdns.QueryParam{
 			Domain:  "local",
 			Entries: entriesCh,
-			Service: d.code, // keep in sync with advertiser
+			Service: d.DiscoveryIdentifier(chanID),
 			Timeout: time.Second * 5,
 		}
 
@@ -58,7 +57,7 @@ func (d *Discoverer) Shutdown() {
 	d.Service.Shutdown()
 }
 
-func (d *Discoverer) drainEntriesChan(entries chan *mdns.ServiceEntry, handler pcpnode.PeerHandler) {
+func (d *Discoverer) drainEntriesChan(entries chan *mdns.ServiceEntry, handler func(info peer.AddrInfo)) {
 	for entry := range entries {
 
 		pi, err := parseServiceEntry(entry)
@@ -75,7 +74,7 @@ func (d *Discoverer) drainEntriesChan(entries chan *mdns.ServiceEntry, handler p
 			continue
 		}
 
-		go handler.HandlePeer(pi)
+		go handler(pi)
 	}
 }
 

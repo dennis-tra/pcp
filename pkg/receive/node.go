@@ -6,10 +6,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
-
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/pkg/errors"
 
 	"github.com/dennis-tra/pcp/internal/format"
 	"github.com/dennis-tra/pcp/internal/log"
@@ -17,6 +13,8 @@ import (
 	"github.com/dennis-tra/pcp/pkg/mdns"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
+	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/pkg/errors"
 )
 
 type nodeState uint8
@@ -38,7 +36,7 @@ type Node struct {
 }
 
 type Discoverer interface {
-	Discover(handler pcpnode.PeerHandler) error
+	Discover(chanID int, handler func(info peer.AddrInfo)) error
 	Shutdown()
 }
 
@@ -71,15 +69,11 @@ func (n *Node) Shutdown() {
 func (n *Node) StartDiscovering() {
 	n.setState(discovering)
 
-	// TODO: Implement rolling 5 minute window
-	dhtKey1 := n.AdvertiseIdentifier(time.Now())
-	dhtKey2 := n.AdvertiseIdentifier(time.Now().Add(-5 * time.Minute))
-
 	n.discoverers = []Discoverer{
-		dht.NewDiscoverer(n.Node, dhtKey1),
-		dht.NewDiscoverer(n.Node, dhtKey2),
-		mdns.NewDiscoverer(n.Node, dhtKey1),
-		mdns.NewDiscoverer(n.Node, dhtKey2),
+		dht.NewDiscoverer(n, n.DHT),
+		dht.NewDiscoverer(n, n.DHT).SetOffset(-dht.TruncateDuration),
+		mdns.NewDiscoverer(n.Node),
+		mdns.NewDiscoverer(n.Node),
 	}
 
 	for _, discoverer := range n.discoverers {
