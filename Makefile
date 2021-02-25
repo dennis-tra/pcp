@@ -1,5 +1,5 @@
 BINARY=pcp
-VERSION=0.3.0
+VERSION=0.3.1
 BUILD=`git rev-parse HEAD`
 PLATFORMS=darwin linux windows
 ARCHITECTURES=386 amd64 arm
@@ -10,6 +10,9 @@ LDFLAGS=-ldflags "-X main.Version=${VERSION} -X main.Build=${BUILD}"
 default: build
 
 all: clean release install
+
+test:
+	go test ./...
 
 build:
 	go build ${LDFLAGS} -o out/${BINARY} cmd/pcp/pcp.go

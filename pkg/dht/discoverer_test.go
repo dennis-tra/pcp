@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
+
 	"github.com/golang/mock/gomock"
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -182,7 +184,10 @@ func TestDiscoverer_Discover_restartAsSoonAsCurrentTimeSlotIsExpired(t *testing.
 }
 
 func TestDiscoverer_SetOffset(t *testing.T) {
-	d := NewDiscoverer(nil, nil)
+	net := mocknet.New(context.Background())
+	local, err := net.GenPeer()
+	require.NoError(t, err)
+	d := NewDiscoverer(local, nil)
 	id1 := d.DiscoveryID(333)
 	d.SetOffset(TruncateDuration * 3)
 	id2 := d.DiscoveryID(333)
