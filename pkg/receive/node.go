@@ -65,18 +65,22 @@ func (n *Node) StartDiscovering() {
 
 	for _, discoverer := range n.discoverers {
 		go func(d Discoverer) {
-			if err := d.Discover(n.ChanID, n.HandlePeer); err != nil {
-				// If the user is connected to another peer
-				// we don't care about discover errors.
-				if n.GetState() == pcpnode.Connected {
-					return
-				}
+			err := d.Discover(n.ChanID, n.HandlePeer)
+			if err == nil {
+				return
+			}
 
-				if e, ok := err.(dht.ErrConnThresholdNotReached); ok {
-					e.Log()
-				} else {
-					log.Warningln(err)
-				}
+			// If the user is connected to another peer
+			// we don't care about discover errors.
+			if n.GetState() == pcpnode.Connected {
+				return
+			}
+
+			switch e := err.(type) {
+			case dht.ErrConnThresholdNotReached:
+				e.Log()
+			default:
+				log.Warningln(err)
 			}
 		}(discoverer)
 	}

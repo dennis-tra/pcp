@@ -73,18 +73,22 @@ func (n *Node) StartAdvertising() {
 
 	for _, advertiser := range n.advertisers {
 		go func(a Advertiser) {
-			if err := a.Advertise(n.ChanID); err != nil {
-				// If the user is connected to another peer
-				// we don't care about discover errors.
-				if n.GetState() == pcpnode.Connected {
-					return
-				}
+			err := a.Advertise(n.ChanID)
+			if err == nil {
+				return
+			}
 
-				if e, ok := err.(dht.ErrConnThresholdNotReached); ok {
-					e.Log()
-				} else {
-					log.Warningln(err)
-				}
+			// If the user is connected to another peer
+			// we don't care about discover errors.
+			if n.GetState() == pcpnode.Connected {
+				return
+			}
+
+			switch e := err.(type) {
+			case dht.ErrConnThresholdNotReached:
+				e.Log()
+			default:
+				log.Warningln(err)
 			}
 		}(advertiser)
 	}
