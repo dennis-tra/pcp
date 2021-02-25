@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dennis-tra/pcp/internal/app"
+	"github.com/dennis-tra/pcp/internal/wrap"
 )
 
 const (
@@ -20,8 +20,8 @@ const (
 var settingsFile = filepath.Join(Prefix, "settings.json")
 
 var (
-	appIoutil app.Ioutiler = app.Ioutil{}
-	appXdg    app.Xdger    = app.Xdg{}
+	appIoutil wrap.Ioutiler = wrap.Ioutil{}
+	appXdg    wrap.Xdger    = wrap.Xdg{}
 )
 
 // Config contains general user settings and peer identity

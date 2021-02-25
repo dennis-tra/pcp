@@ -9,20 +9,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dennis-tra/pcp/internal/app"
 	"github.com/dennis-tra/pcp/internal/mock"
+	"github.com/dennis-tra/pcp/internal/wrap"
 )
 
 func setup(t *testing.T) *gomock.Controller {
-	appXdg = app.Xdg{}
-	appIoutil = app.Ioutil{}
+	appXdg = wrap.Xdg{}
+	appIoutil = wrap.Ioutil{}
 	return gomock.NewController(t)
 }
 
 func teardown(t *testing.T, ctrl *gomock.Controller) {
 	ctrl.Finish()
-	appXdg = app.Xdg{}
-	appIoutil = app.Ioutil{}
+	appXdg = wrap.Xdg{}
+	appIoutil = wrap.Ioutil{}
 }
 
 func TestLoadSettings_returnsErrorOfConfigFile(t *testing.T) {

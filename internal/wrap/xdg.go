@@ -1,4 +1,4 @@
-package app
+package wrap
 
 import (
 	stdxdg "github.com/adrg/xdg"
