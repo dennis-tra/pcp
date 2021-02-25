@@ -1,23 +1,30 @@
 package dht
 
 import (
+	"context"
+	"time"
+
+	"github.com/dennis-tra/pcp/internal/wrap"
+	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
-
-	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 )
 
+// Discoverer is responsible for reading the DHT for an
+// entry with the channel ID given below.
 type Discoverer struct {
 	*protocol
-	code string
 }
 
-func NewDiscoverer(node *pcpnode.Node, code string) *Discoverer {
-	return &Discoverer{protocol: newProtocol(node), code: code}
+// NewDiscoverer creates a new Discoverer.
+func NewDiscoverer(h host.Host, dht wrap.IpfsDHT) *Discoverer {
+	return &Discoverer{newProtocol(h, dht)}
 }
 
-func (d *Discoverer) Discover(handler pcpnode.PeerHandler) error {
+// Discover establishes a connection to a set of bootstrap peers
+// that we're using to connect to the DHT. It tries to find
+func (d *Discoverer) Discover(chanID int, handler func(info peer.AddrInfo)) error {
 	if err := d.ServiceStarted(); err != nil {
 		return err
 	}
@@ -27,22 +34,23 @@ func (d *Discoverer) Discover(handler pcpnode.PeerHandler) error {
 		return err
 	}
 
-	contentID, err := strToCid(d.code)
-	if err != nil {
-		return err
-	}
-
 	for {
-		for pi := range d.DHT.FindProvidersAsync(
-			d.ServiceContext(),
-			contentID,
-			100,
-		) {
+		cID, err := strToCid(d.DiscoveryID(chanID))
+		if err != nil {
+			return err
+		}
+
+		// Find new provider as soon as the new time slot is reached
+		ctx, cancel := context.WithTimeout(d.ServiceContext(), d.DurNextSlot())
+		for pi := range d.dht.FindProvidersAsync(ctx, cID, 100) {
 			pi.Addrs = onlyPublic(pi.Addrs)
 			if isRoutable(pi) {
-				go handler.HandlePeer(pi)
+				go handler(pi)
 			}
 		}
+
+		// cannot defer cancel in this for loop
+		cancel()
 
 		select {
 		case <-d.SigShutdown():
@@ -50,6 +58,11 @@ func (d *Discoverer) Discover(handler pcpnode.PeerHandler) error {
 		default:
 		}
 	}
+}
+
+func (d *Discoverer) SetOffset(offset time.Duration) *Discoverer {
+	d.offset = offset
+	return d
 }
 
 func (d *Discoverer) Shutdown() {
