@@ -84,8 +84,12 @@ func (n *Node) StartDiscovering() {
 
 	for _, discoverer := range n.discoverers {
 		go func(d Discoverer) {
-			if err := d.Discover(n); err != nil {
-				log.Warningln(err)
+			if err := d.Discover(n.ChanID, n.HandlePeer); err != nil {
+				// If the user is connected to another peer
+				// we don't care about discover errors.
+				if n.getState() != connected {
+					log.Warningln(err)
+				}
 			}
 		}(discoverer)
 	}
