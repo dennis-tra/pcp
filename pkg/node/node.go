@@ -54,7 +54,7 @@ type Node struct {
 	ChanID int
 	Words  []string
 
-	stateLk sync.RWMutex
+	stateLk *sync.RWMutex
 	state   State
 }
 
@@ -68,7 +68,7 @@ func New(ctx context.Context, wrds []string, opts ...libp2p.Option) (*Node, erro
 	node := &Node{
 		Service: service.New(),
 		state:   Idle,
-		stateLk: sync.RWMutex{},
+		stateLk: &sync.RWMutex{},
 		Words:   wrds,
 		ChanID:  ints[0],
 	}

@@ -3,6 +3,8 @@ package dht
 import (
 	"context"
 	"strconv"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +23,7 @@ func setup(t *testing.T) (*gomock.Controller, host.Host, mocknet.Mocknet, func(t
 	wrapDHT = wrap.DHT{}
 	wrapmanet = wrap.Manet{}
 	wraptime = wrap.Time{}
+	bootstrap = map[peer.ID]*sync.Once{}
 
 	ctrl := gomock.NewController(t)
 
@@ -145,8 +148,11 @@ func TestProtocol_Bootstrap_cantConnectToOneLessThanThreshold(t *testing.T) {
 
 	err = newProtocol(local, nil).Bootstrap()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), local.ID().String())
-	assert.Contains(t, err.Error(), peers[0].ID.String())
+
+	errs, ok := err.(ErrConnThresholdNotReached)
+	assert.True(t, ok)
+	assert.Contains(t, errs.BootstrapErrs[0].Error(), local.ID().String())
+	assert.Contains(t, errs.BootstrapErrs[0].Error(), peers[0].ID.String())
 }
 
 func TestProtocol_Bootstrap_cantConnectToMultipleLessThanThreshold(t *testing.T) {
@@ -164,9 +170,13 @@ func TestProtocol_Bootstrap_cantConnectToMultipleLessThanThreshold(t *testing.T)
 
 	err = newProtocol(local, nil).Bootstrap()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), local.ID().String())
-	assert.Contains(t, err.Error(), peers[0].ID.String())
-	assert.Contains(t, err.Error(), peers[1].ID.String())
+
+	errs, ok := err.(ErrConnThresholdNotReached)
+	assert.True(t, ok)
+	assert.Contains(t, errs.BootstrapErrs[0].Error(), local.ID().String())
+	errStr := strings.Join([]string{errs.BootstrapErrs[0].Error(), errs.BootstrapErrs[1].Error()}, " ")
+	assert.Contains(t, errStr, peers[0].ID.String())
+	assert.Contains(t, errStr, peers[1].ID.String())
 }
 
 func TestProtocol_Bootstrap_cantConnectButGreaterThanThreshold(t *testing.T) {

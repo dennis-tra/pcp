@@ -21,7 +21,7 @@ type Node struct {
 	*pcpnode.Node
 
 	discoverers     []Discoverer
-	discoveredPeers sync.Map
+	discoveredPeers *sync.Map
 }
 
 type Discoverer interface {
@@ -37,7 +37,7 @@ func InitNode(ctx context.Context, words []string) (*Node, error) {
 
 	n := &Node{
 		Node:            h,
-		discoveredPeers: sync.Map{},
+		discoveredPeers: &sync.Map{},
 		discoverers:     []Discoverer{},
 	}
 
@@ -73,10 +73,7 @@ func (n *Node) StartDiscovering() {
 				}
 
 				if e, ok := err.(dht.ErrConnThresholdNotReached); ok {
-					log.Warningln(err)
-					for _, bperr := range e.List {
-						log.Warningf("\t%s\n", bperr)
-					}
+					e.Log()
 				} else {
 					log.Warningln(err)
 				}

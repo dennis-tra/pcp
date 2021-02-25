@@ -26,7 +26,7 @@ type Node struct {
 
 	advertisers []Advertiser
 
-	authPeers sync.Map
+	authPeers *sync.Map
 	filepath  string
 }
 
@@ -46,7 +46,7 @@ func InitNode(ctx context.Context, filepath string, words []string) (*Node, erro
 	node := &Node{
 		Node:        h,
 		advertisers: []Advertiser{},
-		authPeers:   sync.Map{},
+		authPeers:   &sync.Map{},
 		filepath:    filepath,
 	}
 
@@ -81,11 +81,7 @@ func (n *Node) StartAdvertising() {
 				}
 
 				if e, ok := err.(dht.ErrConnThresholdNotReached); ok {
-					log.Warningln(err)
-					for _, bperr := range e.List {
-						log.Warningf("\t%s\n", bperr)
-					}
-					log.Warningln("this means you will only be able to transfer files in your local network")
+					e.Log()
 				} else {
 					log.Warningln(err)
 				}

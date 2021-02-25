@@ -14,25 +14,24 @@ import (
 	"github.com/dennis-tra/pcp/pkg/service"
 )
 
+// These wrapped top level functions are here for testing purposes.
 var (
 	wrapDHT   wrap.DHTer   = wrap.DHT{}
 	wraptime  wrap.Timer   = wrap.Time{}
 	wrapmanet wrap.Maneter = wrap.Manet{}
 )
 
-// ConnThreshold represents the minimum number of bootstrap peers we need a connection to.
 var (
-	ConnThreshold    = 3
+	// ConnThreshold represents the minimum number of bootstrap peers we need a connection to.
+	ConnThreshold = 3
+
+	// TruncateDuration represents the time slot to which the current time is truncated.
 	TruncateDuration = 5 * time.Minute
+
+	// bootstrap holds the sync.Onces for each host, so that bootstrap is called for each host
+	// only once.
+	bootstrap = map[peer.ID]*sync.Once{} // may need locking in theory?
 )
-
-type ErrConnThresholdNotReached struct {
-	List []error
-}
-
-func (e ErrConnThresholdNotReached) Error() string {
-	return "could not establish enough connections to bootstrap peers"
-}
 
 // protocol encapsulates the logic for discovering peers
 // through providing it in the IPFS DHT.
@@ -48,59 +47,65 @@ type protocol struct {
 }
 
 func newProtocol(h host.Host, dht wrap.IpfsDHT) *protocol {
+	bootstrap[h.ID()] = &sync.Once{}
 	return &protocol{Host: h, dht: dht, Service: service.New()}
 }
 
 // Bootstrap connects to a set of bootstrap nodes to connect
 // to the DHT.
-func (p *protocol) Bootstrap() error {
-	peers := wrapDHT.GetDefaultBootstrapPeerAddrInfos()
-	peerCount := len(peers)
-	if peerCount == 0 {
-		return fmt.Errorf("no bootstrap peers configured")
-	}
-
-	// Asynchronously connect to all bootstrap peers and send
-	// potential errors to a channel. This channel is used
-	// to capture the errors and check if we have established
-	// enough connections. An error group (errgroup) cannot
-	// be used here as it exits as soon as an error is thrown
-	// in one of the Go-Routines.
-	var wg sync.WaitGroup
-	errChan := make(chan error, peerCount)
-	for _, bp := range peers {
-		wg.Add(1)
-		go func(pi peer.AddrInfo) {
-			defer wg.Done()
-			errChan <- p.Connect(p.ServiceContext(), pi)
-		}(bp)
-	}
-
-	// Close error channel after all connection attempts are done
-	// to signal the for-loop below to stop.
-	go func() {
-		wg.Wait()
-		close(errChan)
-	}()
-
-	// Reading the error channel and collect errors.
-	errs := ErrConnThresholdNotReached{List: []error{}}
-	for {
-		err, ok := <-errChan
-		if !ok {
-			// channel was closed.
-			break
-		} else if err != nil {
-			errs.List = append(errs.List, err)
+func (p *protocol) Bootstrap() (err error) {
+	// The receiving peer looks for the current and previous time slot. So it would call
+	// bootstrap twice. Here we're limiting it to only one call.
+	once := bootstrap[p.ID()]
+	once.Do(func() {
+		peers := wrapDHT.GetDefaultBootstrapPeerAddrInfos()
+		peerCount := len(peers)
+		if peerCount == 0 {
+			err = fmt.Errorf("no bootstrap peers configured")
+			return
 		}
-	}
 
-	// If we could not establish enough connections return an error
-	if peerCount-len(errs.List) < ConnThreshold {
-		return errs
-	}
+		// Asynchronously connect to all bootstrap peers and send
+		// potential errors to a channel. This channel is used
+		// to capture the errors and check if we have established
+		// enough connections. An error group (errgroup) cannot
+		// be used here as it exits as soon as an error is thrown
+		// in one of the Go-Routines.
+		var wg sync.WaitGroup
+		errChan := make(chan error, peerCount)
+		for _, bp := range peers {
+			wg.Add(1)
+			go func(pi peer.AddrInfo) {
+				defer wg.Done()
+				errChan <- p.Connect(p.ServiceContext(), pi)
+			}(bp)
+		}
 
-	return nil
+		// Close error channel after all connection attempts are done
+		// to signal the for-loop below to stop.
+		go func() {
+			wg.Wait()
+			close(errChan)
+		}()
+
+		// Reading the error channel and collect errors.
+		errs := ErrConnThresholdNotReached{BootstrapErrs: []error{}}
+		for {
+			err, ok := <-errChan
+			if !ok {
+				// channel was closed.
+				break
+			} else if err != nil {
+				errs.BootstrapErrs = append(errs.BootstrapErrs, err)
+			}
+		}
+
+		// If we could not establish enough connections return an error
+		if peerCount-len(errs.BootstrapErrs) < ConnThreshold {
+			err = errs
+		}
+	})
+	return
 }
 
 // TimeSlotStart returns the time when the current time slot started.f
