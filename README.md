@@ -147,7 +147,13 @@ Shamelessly copied from `croc`:
   - 🤔 I think that's the case, but I'm not sure about the libp2p internals
 - [ ] can use proxy, like tor
   - ❌ not yet
-  
+
+You can find a project plan in the [project tab](https://github.com/dennis-tra/pcp/projects/2) of this page.
+Some other ideas I would love to work on include:
+
+- [ ] browser interop via the means of [js-libp2p](https://github.com/libp2p/js-libp2p)
+- [ ] experimental decentralised NAT hole punching via DHT signaling servers - [Project Flare](https://github.com/libp2p/go-libp2p/issues/1039)
+
 ## Related Efforts
 
 - [`croc`](https://github.com/schollz/croc) - Easily and securely send things from one computer to another
@@ -176,6 +182,10 @@ Shamelessly copied from `croc`:
 ## Contributing
 
 Feel free to dive in! [Open an issue](https://github.com/dennis-tra/pcp/issues/new) or submit PRs.
+
+## Support
+
+It would really make my day if you supported it through [Buy Me A Coffee](https://www.buymeacoffee.com/dennistra).
 
 ## Other Projects
 
