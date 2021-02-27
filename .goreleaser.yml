@@ -1,0 +1,82 @@
+# This is an example .goreleaser.yml file with some sane defaults.
+# Make sure to check the documentation at http://goreleaser.com
+before:
+  hooks:
+    - go mod download
+    - go install github.com/golang/mock/mockgen@v1.5.0
+    - go generate gen.go
+
+release:
+  # Creat a draft commit that needs manual confirmation
+  draft: true
+  # If set to auto, will mark the release as not ready for
+  # production if suffix contains -rc1 or similar.
+  prerelease: auto
+  name_template: "Release {{.Tag}}"
+
+builds:
+  - main: ./cmd/pcp/pcp.go
+    binary: pcp
+    ldflags: -s -w -X main.RawVersion={{.RawVersion}} -X main.ShortCommit={{.ShortCommit}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+      - freebsd
+      - netbsd
+      - openbsd
+      - dragonfly
+    goarch:
+      - amd64
+      - 386
+      - arm
+      - arm64
+    ignore:
+      - goos: darwin
+        goarch: 386
+    goarm:
+      - 7
+nfpms:
+  - formats:
+      - apk
+      - deb
+      - rpm
+    vendor: "dtrautwein.eu"
+    homepage: "https://github.com/dennis-tra/pcp"
+    maintainer: "Dennis Trautwein <pcp@dtrautwein.eu>"
+    description: "Command line peer-to-peer data transfer tool based on libp2p."
+    license: "Apache License Version 2.0"
+    file_name_template: "{{.ProjectName}}_{{.RawVersion}}_{{.Os}}-{{.Arch}}"
+    replacements:
+      darwin: macos
+archives:
+  - format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    replacements:
+      darwin: macos
+
+checksum:
+  name_template: 'checksums.txt'
+changelog:
+  sort: desc
+brews:
+  - tap:
+      owner: dennis-tra
+      name: homebrew-tap
+    folder: Formulae
+    description: "pcp is a command line peer-to-peer data transfer tool based on libp2p."
+    homepage: "https://github.com/dennis-tra/pcp"
+    license: "Apache License Version 2.0"
+    test: |
+      system "#{bin}/croc --version"
+scoop:
+  bucket:
+    owner: dennis-tra
+    name: scoop-bucket
+  homepage: "https://github.com/dennis-tra/pcp"
+  description: "pcp is a command line peer-to-peer data transfer tool based on libp2p."
+  license: "Apache License Version 2.0"

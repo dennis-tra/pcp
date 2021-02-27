@@ -18,6 +18,8 @@ out/**
 .idea
 pcp
 
+dist
+
 ### Go Patch ###
 /vendor/
 

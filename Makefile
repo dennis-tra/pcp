@@ -1,28 +1,15 @@
-BINARY=pcp
-VERSION=0.3.1
-BUILD=`git rev-parse HEAD`
-PLATFORMS=darwin linux windows
-ARCHITECTURES=386 amd64 arm
-
-# Setup linker flags option for build that interoperate with variable names in src code
-LDFLAGS=-ldflags "-X main.Version=${VERSION} -X main.Build=${BUILD}"
-
 default: build
 
-all: clean release install
+all: clean install
 
 test:
 	go test ./...
 
 build:
-	go build ${LDFLAGS} -o out/${BINARY} cmd/pcp/pcp.go
-
-release:
-	$(foreach GOOS, $(PLATFORMS),\
-	$(foreach GOARCH, $(ARCHITECTURES), $(shell export GOOS=$(GOOS); export GOARCH=$(GOARCH); go build ${LDFLAGS} -o out/$(BINARY)-$(GOOS)-$(GOARCH) cmd/pcp/pcp.go)))
+	go build -o dist/pcp cmd/pcp/pcp.go
 
 install:
-	go install ${LDFLAGS}
+	go install cmd/pcp/pcp.go
 
 format:
 	gofumpt -w -l .
@@ -32,11 +19,12 @@ proto:
 	gofumpt -w -l ./pkg/pb/
 
 tools:
-	go install mvdan.cc/gofumpt
-	go install google.golang.org/protobuf/cmd/protoc-gen-go
+	go install mvdan.cc/gofumpt@v0.1.0
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.25.0
+	go install github.com/golang/mock/mockgen@v1.5.0
 
 # Remove only what we've created
 clean:
-	rm -r out
+	rm -r dist
 
-.PHONY: check clean install release all
+.PHONY: all clean test install release proto format tools
