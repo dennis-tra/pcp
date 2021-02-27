@@ -36,8 +36,6 @@ builds:
     ignore:
       - goos: darwin
         goarch: 386
-    goarm:
-      - 7
 nfpms:
   - formats:
       - apk
