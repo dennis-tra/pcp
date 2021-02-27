@@ -27,9 +27,6 @@ func main() {
 	// ShortCommit version tag
 	verTag := fmt.Sprintf("v%s+%s", RawVersion, ShortCommit)
 
-	// Print disclaimer
-	log.Infof("pcp version %s - if you're experiencing problems, check that your peer runs the same version. The API and protocols are not stable until a 1.0.0 release.\n", verTag)
-
 	app := &cli.App{
 		Name: "pcp",
 		Authors: []*cli.Author{
