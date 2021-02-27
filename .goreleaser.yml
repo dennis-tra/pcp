@@ -65,7 +65,7 @@ brews:
   - tap:
       owner: dennis-tra
       name: homebrew-tap
-    folder: Formulae
+    folder: Formula
     description: "pcp is a command line peer-to-peer data transfer tool based on libp2p."
     homepage: "https://github.com/dennis-tra/pcp"
     license: "Apache License Version 2.0"
