@@ -91,28 +91,26 @@ If you're on different networks the lookup can take quite long (~ 2-3 minutes). 
 
 ### Release download
 
-Head over to the [releases](https://github.com/dennis-tra/pcp/releases) and download the latest binary for
+Head over to the [releases](https://github.com/dennis-tra/pcp/releases) and download the latest archive for
 your platform.
 
 ### From source
 
-To compile it yourself clone the repository:
+To compile it yourself run:
 
 ```shell
-git clone https://github.com/dennis-tra/pcp.git
-```
-
-Navigate into the `pcp` folder and run:
-
-```shell
-go install cmd/pcp/pcp.go # Go 1.13 or higher is required
+go install github.com/dennis-tra/pcp/cmd/pcp@latest # Go 1.13 or higher is required
 ```
 
 Make sure the `$GOPATH/bin` is in your `PATH` variable to access the installed `pcp` executable.
 
 ### Package managers
 
-It's on the roadmap to distribute `pcp` via `apt`, `yum`, `brew`, `scoop` and more ...
+```shell
+brew install dennis-tra/homebrew-tap/pcp
+```
+
+It's on the roadmap to distribute `pcp` via `apt`, `yum`, `scoop` and more ...
 
 ## Development
 
