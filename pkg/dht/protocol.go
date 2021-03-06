@@ -48,7 +48,7 @@ type protocol struct {
 
 func newProtocol(h host.Host, dht wrap.IpfsDHT) *protocol {
 	bootstrap[h.ID()] = &sync.Once{}
-	return &protocol{Host: h, dht: dht, Service: service.New()}
+	return &protocol{Host: h, dht: dht, Service: service.New("DHT")}
 }
 
 // Bootstrap connects to a set of bootstrap nodes to connect

@@ -28,13 +28,13 @@ import (
 	"github.com/dennis-tra/pcp/pkg/words"
 )
 
-type State uint8
+type State string
 
 const (
-	Idle = iota
-	Discovering
-	Advertising
-	Connected
+	Idle        State = "idle"
+	Discovering       = "discovering"
+	Advertising       = "advertising"
+	Connected         = "connected"
 )
 
 // Node encapsulates the logic for sending and receiving messages.
@@ -60,13 +60,14 @@ type Node struct {
 
 // New creates a new, fully initialized node with the given options.
 func New(ctx context.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
+	log.Debugln("Initialising local node...")
 	ints, err := words.ToInts(wrds)
 	if err != nil {
 		return nil, err
 	}
 
 	node := &Node{
-		Service: service.New(),
+		Service: service.New("node"),
 		state:   Idle,
 		stateLk: &sync.RWMutex{},
 		Words:   wrds,
@@ -114,6 +115,7 @@ func (n *Node) Shutdown() {
 }
 
 func (n *Node) SetState(s State) State {
+	log.Debugln("Setting local node state to", s)
 	n.stateLk.Lock()
 	defer n.stateLk.Unlock()
 	n.state = s
@@ -148,6 +150,7 @@ func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
 		Timestamp:  time.Now().Unix(),
 	}
 	msg.SetHeader(hdr)
+	log.Debugf("Sending message %T to %s with request ID %s\n", msg, s.Conn().RemotePeer().String(), hdr.RequestId)
 
 	// Transform msg to binary to calculate the signature.
 	data, err := proto.Marshal(msg)
@@ -245,6 +248,7 @@ func (n *Node) Read(s network.Stream, buf p2p.HeaderMessage) error {
 		return err
 	}
 
+	log.Debugf("Reading message from %s", s.Conn().RemotePeer().String())
 	// Decrypt the data with the PAKE session key if it is found
 	sKey, found := n.GetSessionKey(s.Conn().RemotePeer())
 	if found {
@@ -257,6 +261,7 @@ func (n *Node) Read(s network.Stream, buf p2p.HeaderMessage) error {
 	if err = proto.Unmarshal(data, buf); err != nil {
 		return err
 	}
+	log.Debugf("type %T with request ID %s\n", buf, buf.GetHeader().RequestId)
 
 	valid, err := n.authenticateMessage(buf)
 	if err != nil {
@@ -322,7 +327,8 @@ func (n *Node) ResetOnShutdown(s network.Stream) context.CancelFunc {
 // has received all data and won't read from this stream anymore. Alternatively
 // there is a 10 second timeout.
 func (n *Node) WaitForEOF(s network.Stream) error {
-	timeout := time.After(10 * time.Second)
+	log.Debugln("Waiting for stream reset from peer...")
+	timeout := time.After(time.Minute)
 	done := make(chan error)
 	go func() {
 		buf := make([]byte, 1)

@@ -32,16 +32,19 @@ func (d *Discoverer) Discover(chanID int, handler func(info peer.AddrInfo)) erro
 		entriesCh := make(chan *mdns.ServiceEntry, 16)
 		go d.drainEntriesChan(entriesCh, handler)
 
+		did := d.DiscoveryID(chanID)
+		log.Debugln("mDNS - Discovering", did)
 		qp := &mdns.QueryParam{
 			Domain:  "local",
 			Entries: entriesCh,
-			Service: d.DiscoveryID(chanID),
+			Service: did,
 			Timeout: time.Second * 5,
 		}
 
 		err := mdns.Query(qp)
+		log.Debugln("mDNS - Discovering", did, " done.")
 		if err != nil {
-			log.Warningln("mdns lookup error", err)
+			log.Warningln("mDNS - query error", err)
 		}
 		close(entriesCh)
 
@@ -64,6 +67,8 @@ func (d *Discoverer) drainEntriesChan(entries chan *mdns.ServiceEntry, handler f
 		if err != nil {
 			continue
 		}
+
+		log.Debugln("mDNS - Found peer", pi.ID)
 
 		if pi.ID == d.ID() {
 			continue
@@ -114,6 +119,9 @@ func onlyPrivate(addrs []ma.Multiaddr) []ma.Multiaddr {
 	for _, addr := range addrs {
 		if manet.IsPrivateAddr(addr) {
 			routable = append(routable, addr)
+			log.Debugf("\tprivate - %s\n", addr.String())
+		} else {
+			log.Debugf("\tpublic - %s\n", addr.String())
 		}
 	}
 	return routable

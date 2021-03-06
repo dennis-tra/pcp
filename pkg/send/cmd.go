@@ -1,16 +1,12 @@
 package send
 
 import (
-	"crypto/sha256"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
 	"github.com/dennis-tra/pcp/pkg/words"
 
-	"github.com/ipfs/go-cid"
-	mh "github.com/multiformats/go-multihash"
 	"github.com/urfave/cli/v2"
 
 	"github.com/dennis-tra/pcp/internal/log"
@@ -66,6 +62,7 @@ func Action(c *cli.Context) error {
 		return err
 	}
 
+	log.Debugln("Validating given word count:", c.Int("w"))
 	if c.Int("w") < 3 {
 		return fmt.Errorf("the number of words must not be less than 3")
 	}
@@ -103,6 +100,8 @@ func Action(c *cli.Context) error {
 // checks whether the filepath represents a directory. This is
 // currently not supported.
 func validateFile(filepath string) error {
+	log.Debugln("Validating given file:", filepath)
+
 	if filepath == "" {
 		return fmt.Errorf("please specify the file you want to transfer")
 	}
@@ -123,24 +122,4 @@ func validateFile(filepath string) error {
 	}
 
 	return nil
-}
-
-func calcContentID(filepath string) (cid.Cid, error) {
-	f, err := os.Open(filepath)
-	if err != nil {
-		return cid.Cid{}, err
-	}
-	defer f.Close()
-
-	hasher := sha256.New()
-	if _, err := io.Copy(hasher, f); err != nil {
-		return cid.Cid{}, err
-	}
-
-	mhash, err := mh.Encode(hasher.Sum(nil), mh.SHA2_256)
-	if err != nil {
-		return cid.Cid{}, err
-	}
-
-	return cid.NewCidV1(cid.Raw, mhash), nil
 }

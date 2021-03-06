@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/dennis-tra/pcp/internal/log"
+
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	ma "github.com/multiformats/go-multiaddr"
@@ -36,7 +38,9 @@ func (d *Discoverer) Discover(chanID int, handler func(info peer.AddrInfo)) erro
 	}
 
 	for {
-		cID, err := strToCid(d.DiscoveryID(chanID))
+		did := d.DiscoveryID(chanID)
+		log.Debugln("DHT - Discovering ", did)
+		cID, err := strToCid(did)
 		if err != nil {
 			return err
 		}
@@ -44,11 +48,13 @@ func (d *Discoverer) Discover(chanID int, handler func(info peer.AddrInfo)) erro
 		// Find new provider with a timeout, so the discovery ID is renewed if necessary.
 		ctx, cancel := context.WithTimeout(d.ServiceContext(), provideTimeout)
 		for pi := range d.dht.FindProvidersAsync(ctx, cID, 100) {
+			log.Debugln("DHT - Found peer ", pi.ID)
 			pi.Addrs = onlyPublic(pi.Addrs)
 			if isRoutable(pi) {
 				go handler(pi)
 			}
 		}
+		log.Debugln("DHT - Discovering", did, " done.")
 
 		// cannot defer cancel in this for loop
 		cancel()
@@ -76,6 +82,9 @@ func onlyPublic(addrs []ma.Multiaddr) []ma.Multiaddr {
 	for _, addr := range addrs {
 		if manet.IsPublicAddr(addr) {
 			routable = append(routable, addr)
+			log.Debugf("\tpublic - %s\n", addr.String())
+		} else {
+			log.Debugf("\tprivate - %s\n", addr.String())
 		}
 	}
 	return routable

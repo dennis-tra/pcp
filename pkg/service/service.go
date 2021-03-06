@@ -5,6 +5,8 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
+
+	"github.com/dennis-tra/pcp/internal/log"
 )
 
 // State represents the lifecycle states of a service.
@@ -26,6 +28,9 @@ var ErrServiceAlreadyStarted = errors.New("the service was already started in th
 // separate go routine and where its lifecycle
 // needs to be handled externally.
 type Service struct {
+	// The name of the service for logging purposes
+	name string
+
 	// A context that can be used for long running
 	// io operations of the service. This context
 	// gets cancelled when the service receives a
@@ -54,10 +59,11 @@ type Service struct {
 // cycle handling with contexts as a bad practice.
 // Contexts belong in request/response paths and
 // Services should be handled via channels.
-func New() *Service {
+func New(name string) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Service{
 		ctx:      ctx,
+		name:     name,
 		cancel:   cancel,
 		state:    Idle,
 		shutdown: make(chan struct{}),
@@ -67,6 +73,8 @@ func New() *Service {
 
 // ServiceStarted marks this service as started.
 func (s *Service) ServiceStarted() error {
+	log.Debugln(s.name, "- Service has started")
+
 	s.lk.Lock()
 	defer s.lk.Unlock()
 
@@ -110,6 +118,7 @@ func (s *Service) ServiceStopped() {
 	s.state = Stopped
 
 	close(s.done)
+	log.Debugln(s.name, "- Service has stopped")
 }
 
 // ServiceContext returns the context associated with this
@@ -125,6 +134,8 @@ func (s *Service) ServiceContext() context.Context {
 // This function blocks until the done channel was closed
 // which happens when ServiceStopped is called.
 func (s *Service) Shutdown() {
+	log.Debugln(s.name, "- Service shutting down...")
+
 	s.lk.Lock()
 	if s.state != Started {
 		s.lk.Unlock()
@@ -135,4 +146,5 @@ func (s *Service) Shutdown() {
 
 	close(s.shutdown)
 	<-s.done
+	log.Debugln(s.name, "- Service was shut down")
 }

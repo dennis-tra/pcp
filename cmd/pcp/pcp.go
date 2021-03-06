@@ -42,6 +42,18 @@ func main() {
 			receive.Command,
 			send.Command,
 		},
+		Before: func(c *cli.Context) error {
+			if c.Bool("debug") {
+				log.SetLevel(log.DebugLevel)
+			}
+			return nil
+		},
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "debug",
+				Usage: "enables debug log output",
+			},
+		},
 	}
 
 	sigs := make(chan os.Signal, 1)

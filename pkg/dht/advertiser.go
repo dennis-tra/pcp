@@ -53,6 +53,7 @@ func (a *Advertiser) Advertise(chanID int) error {
 	}
 	defer a.ServiceStopped()
 
+	log.Debugln("DHT - Waiting for public IP...")
 	for {
 		// Only advertise in the DHT if we have a public addr.
 		if !a.HasPublicAddr() {
@@ -63,7 +64,11 @@ func (a *Advertiser) Advertise(chanID int) error {
 				continue
 			}
 		}
+		log.Debugln("DHT - Identified a public IP in", a.Addrs())
+		break
+	}
 
+	for {
 		err := a.provide(a.ServiceContext(), a.DiscoveryID(chanID))
 		if err == context.Canceled {
 			break
@@ -97,6 +102,8 @@ func (a *Advertiser) Shutdown() {
 // closest peers to the key/CID before it goes on to provide the record to them.
 // Not setting a timeout here will make the DHT wander forever.
 func (a *Advertiser) provide(ctx context.Context, id string) error {
+	log.Debugln("DHT - Advertising", id)
+	defer log.Debugln("DHT - Advertising", id, "done")
 	cID, err := strToCid(id)
 	if err != nil {
 		return err

@@ -32,6 +32,7 @@ type TransferHandler interface {
 }
 
 func (t *TransferProtocol) RegisterTransferHandler(th TransferHandler) {
+	log.Debugln("Registering transfer handler")
 	t.lk.Lock()
 	defer t.lk.Unlock()
 	t.th = th
@@ -39,6 +40,7 @@ func (t *TransferProtocol) RegisterTransferHandler(th TransferHandler) {
 }
 
 func (t *TransferProtocol) UnregisterTransferHandler() {
+	log.Debugln("Unregistering transfer handler")
 	t.lk.Lock()
 	defer t.lk.Unlock()
 	t.node.RemoveStreamHandler(ProtocolTransfer)

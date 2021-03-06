@@ -32,7 +32,7 @@ func newProtocol(h host.Host) *protocol {
 	return &protocol{
 		Host:     h,
 		interval: time.Second,
-		Service:  service.New(),
+		Service:  service.New("mDNS"),
 	}
 }
 

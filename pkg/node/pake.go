@@ -59,6 +59,7 @@ func NewPakeProtocol(node *Node, words []string) (*PakeProtocol, error) {
 // obtained via the password authenticated peer exchange (PAKE) to
 // a local peer store.
 func (p *PakeProtocol) AddAuthenticatedPeer(peerID peer.ID, key []byte) {
+	log.Debugf("Adding authenticated peer %s to known peers\n", peerID)
 	p.authedPeers.Store(peerID, key)
 }
 
@@ -66,6 +67,7 @@ func (p *PakeProtocol) AddAuthenticatedPeer(peerID peer.ID, key []byte) {
 // passed a password authenticated key exchange.
 func (p *PakeProtocol) IsAuthenticated(peerID peer.ID) bool {
 	_, found := p.authedPeers.Load(peerID)
+	log.Debugf("Is peer %s authenticated: %s\n", peerID, found)
 	return found
 }
 
@@ -89,6 +91,7 @@ type KeyExchangeHandler interface {
 }
 
 func (p *PakeProtocol) RegisterKeyExchangeHandler(keh KeyExchangeHandler) {
+	log.Debugln("Registering key exchange handler")
 	p.lk.Lock()
 	defer p.lk.Unlock()
 	p.keh = keh
@@ -96,6 +99,7 @@ func (p *PakeProtocol) RegisterKeyExchangeHandler(keh KeyExchangeHandler) {
 }
 
 func (p *PakeProtocol) UnregisterKeyExchangeHandler() {
+	log.Debugln("Unregistering key exchange handler")
 	p.lk.Lock()
 	defer p.lk.Unlock()
 	p.node.RemoveStreamHandler(ProtocolPake)

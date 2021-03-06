@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/dennis-tra/pcp/internal/log"
+
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p/p2p/discovery"
 )
@@ -26,17 +28,22 @@ func (a *Advertiser) Advertise(chanID int) error {
 	defer a.ServiceStopped()
 
 	for {
+		did := a.DiscoveryID(chanID)
+		log.Debugln("mDNS - Advertising ", did)
 		ctx, cancel := context.WithTimeout(a.ServiceContext(), time.Minute)
-		mdns, err := discovery.NewMdnsService(ctx, a, a.interval, a.DiscoveryID(chanID))
+		mdns, err := discovery.NewMdnsService(ctx, a, a.interval, did)
 		if err != nil {
+			cancel()
 			return err
 		}
 
 		select {
 		case <-a.SigShutdown():
+			log.Debugln("mDNS - Advertising", did, " done - shutdown signal")
 			cancel()
 			return mdns.Close()
 		case <-ctx.Done():
+			log.Debugln("mDNS - Advertising", did, "done -", ctx.Err())
 			cancel()
 			if ctx.Err() == context.DeadlineExceeded {
 				_ = mdns.Close()

@@ -30,6 +30,7 @@ func NewPushProtocol(node *Node) *PushProtocol {
 }
 
 func (p *PushProtocol) RegisterPushRequestHandler(prh PushRequestHandler) {
+	log.Debugln("Registering push request handler")
 	p.lk.Lock()
 	defer p.lk.Unlock()
 	p.prh = prh
@@ -37,6 +38,7 @@ func (p *PushProtocol) RegisterPushRequestHandler(prh PushRequestHandler) {
 }
 
 func (p *PushProtocol) UnregisterPushRequestHandler() {
+	log.Debugln("Unregistering push request handler")
 	p.lk.Lock()
 	defer p.lk.Unlock()
 	p.node.RemoveStreamHandler(ProtocolPushRequest)
@@ -57,6 +59,7 @@ func (p *PushProtocol) onPushRequest(s network.Stream) {
 		log.Infoln(err)
 		return
 	}
+	log.Debugln("Received push request", req.Filename, req.Size)
 
 	p.lk.RLock()
 	defer p.lk.RUnlock()
@@ -85,6 +88,7 @@ func (p *PushProtocol) SendPushRequest(ctx context.Context, peerID peer.ID, file
 	}
 	defer s.Close()
 
+	log.Debugln("Sending push request", filename, size)
 	if err = p.node.Send(s, p2p.NewPushRequest(filename, size)); err != nil {
 		return false, err
 	}
