@@ -109,12 +109,13 @@ func (n *Node) HandlePeer(pi peer.AddrInfo) {
 	// TODO: Check if the multi addresses have changed
 	_, loaded := n.discoveredPeers.LoadOrStore(pi.ID, pi)
 	if loaded {
+		log.Debugln("Skipping peer as we tried to connect previously:", pi.ID)
 		return
 	}
 
+	log.Debugln("Connecting to peer:", pi.ID)
 	if err := n.Connect(n.ServiceContext(), pi); err != nil {
-		// stale entry in DHT?
-		// log.Debugln(err)
+		log.Debugln("Error connecting to peer:", pi.ID, err)
 		return
 	}
 
