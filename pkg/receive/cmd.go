@@ -17,7 +17,7 @@ import (
 var Command = &cli.Command{
 	Name:      "receive",
 	Usage:     "search for peers in your local network and the DHT",
-	Aliases:   []string{"r"},
+	Aliases:   []string{"r", "get"},
 	Action:    Action,
 	ArgsUsage: "[WORD-CODE]",
 	Description: `The receive subcommand starts searching for peers in your local 
