@@ -158,7 +158,7 @@ func (n *Node) Transfer(peerID peer.ID) error {
 		return errors.Wrap(err, "could not transfer file to peer")
 	}
 
-	log.Infoln("Successfully sent file!")
+	log.Infoln("Successfully sent file/directory!")
 	return nil
 }
 
