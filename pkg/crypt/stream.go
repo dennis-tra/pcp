@@ -18,7 +18,7 @@ import (
 // StreamEncrypter implements the Reader interface to be used in
 // streaming scenarios.
 type StreamEncrypter struct {
-	src    io.Reader
+	dest   io.Writer
 	block  cipher.Block
 	stream cipher.Stream
 	mac    hash.Hash
@@ -26,7 +26,7 @@ type StreamEncrypter struct {
 }
 
 // NewStreamEncrypter initializes a stream encrypter.
-func NewStreamEncrypter(key []byte, src io.Reader) (*StreamEncrypter, error) {
+func NewStreamEncrypter(key []byte, dest io.Writer) (*StreamEncrypter, error) {
 	// Create a new AES cipher
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -39,12 +39,24 @@ func NewStreamEncrypter(key []byte, src io.Reader) (*StreamEncrypter, error) {
 	}
 
 	return &StreamEncrypter{
-		src:    src,
+		dest:   dest,
 		block:  block,
 		stream: cipher.NewCTR(block, iv),
 		mac:    hmac.New(sha256.New, key),
 		iv:     iv,
 	}, nil
+}
+
+// Write writes bytes encrypted to the writer interface.
+func (s *StreamEncrypter) Write(p []byte) (int, error) {
+	buf := make([]byte, len(p)) // Could we get rid of this allocation?
+	s.stream.XORKeyStream(buf, p)
+	n, writeErr := s.dest.Write(buf)
+	if err := writeHash(s.mac, buf[:n]); err != nil {
+		return n, err
+	}
+
+	return n, writeErr
 }
 
 func (s *StreamEncrypter) InitializationVector() []byte {
@@ -55,21 +67,6 @@ func (s *StreamEncrypter) InitializationVector() []byte {
 // returns the SHA-256 hash of the payload.
 func (s *StreamEncrypter) Hash() []byte {
 	return s.mac.Sum(nil)
-}
-
-// Read reads bytes from the underlying reader and encrypts them.
-func (s *StreamEncrypter) Read(p []byte) (int, error) {
-	n, readErr := s.src.Read(p)
-	if n == 0 {
-		return 0, io.EOF
-	}
-
-	s.stream.XORKeyStream(p[:n], p[:n])
-	if err := writeHash(s.mac, p[:n]); err != nil {
-		return n, err
-	}
-
-	return n, readErr
 }
 
 // StreamDecrypter is a decrypter for a stream of data with authentication

@@ -63,7 +63,7 @@ func Action(c *cli.Context) error {
 
 	// Search for identifier
 	log.Infof("Looking for peer %s... \n", c.Args().First())
-	local.StartDiscovering()
+	local.StartDiscovering(c)
 
 	// Wait for the user to stop the tool or the transfer to finish.
 	select {
@@ -78,7 +78,7 @@ func Action(c *cli.Context) error {
 func printInformation(data *p2p.PushRequest) {
 	log.Infoln("Sending request information:")
 	log.Infoln("\tPeer:\t", data.Header.NodeId)
-	log.Infoln("\tName:\t", data.Filename)
+	log.Infoln("\tName:\t", data.Name)
 	log.Infoln("\tSize:\t", data.Size)
 	log.Infoln("\tSign:\t", hex.EncodeToString(data.Header.Signature))
 	log.Infoln("\tPubKey:\t", hex.EncodeToString(data.Header.GetNodePubKey()))

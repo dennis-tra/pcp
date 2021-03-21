@@ -149,9 +149,13 @@ func (n *Node) HandlePeer(pi peer.AddrInfo) {
 }
 
 func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {
-	log.Infof("File: %s (%s)\n", pr.Filename, format.Bytes(pr.Size))
+	obj := "File"
+	if pr.IsDir {
+		obj = "Directory"
+	}
+	log.Infof("%s: %s (%s)\n", obj, pr.Name, format.Bytes(pr.Size))
 	for {
-		log.Infof("Do you want to receive this file? [y,n,i,?] ")
+		log.Infof("Do you want to receive this %s? [y,n,i,?] ", strings.ToLower(obj))
 		scanner := bufio.NewScanner(os.Stdin)
 		if !scanner.Scan() {
 			return true, errors.Wrap(scanner.Err(), "failed reading from stdin")
@@ -180,7 +184,7 @@ func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {
 		// Accept the file transfer
 		if input == "y" {
 			done := n.TransferFinishHandler(pr.Size)
-			th, err := NewTransferHandler(pr.Filename, pr.Size, done)
+			th, err := NewTransferHandler(pr.Name, done)
 			if err != nil {
 				return true, err
 			}
@@ -210,7 +214,7 @@ func (n *Node) TransferFinishHandler(size int64) chan int64 {
 		}
 
 		if received == size {
-			log.Infoln("Successfully received file!")
+			log.Infoln("Successfully received file/directory!")
 		} else {
 			log.Infof("WARNING: Only received %d of %d bytes!\n", received, size)
 		}

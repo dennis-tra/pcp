@@ -248,7 +248,7 @@ func (n *Node) Read(s network.Stream, buf p2p.HeaderMessage) error {
 		return err
 	}
 
-	log.Debugf("Reading message from %s", s.Conn().RemotePeer().String())
+	log.Debugf("Reading message from %s\n", s.Conn().RemotePeer().String())
 	// Decrypt the data with the PAKE session key if it is found
 	sKey, found := n.GetSessionKey(s.Conn().RemotePeer())
 	if found {
@@ -278,34 +278,22 @@ func (n *Node) Read(s network.Stream, buf p2p.HeaderMessage) error {
 // WriteBytes writes the given bytes to the destination writer and
 // prefixes it with a uvarint indicating the length of the data.
 func (n *Node) WriteBytes(w io.Writer, data []byte) (int, error) {
-	hdr := varint.ToUvarint(uint64(len(data)))
-	nhdr, err := w.Write(hdr)
-	if err != nil {
-		return nhdr, err
-	}
-
-	ndata, err := w.Write(data)
-	if err != nil {
-		return ndata, err
-	}
-
-	return nhdr + ndata, nil
+	size := varint.ToUvarint(uint64(len(data)))
+	return w.Write(append(size, data...))
 }
 
 // ReadBytes reads an uvarint from the source reader to know how
 // much data is following.
 func (n *Node) ReadBytes(r io.Reader) ([]byte, error) {
-	l, err := varint.ReadUvarint(bufio.NewReader(r))
+	br := bufio.NewReader(r) // init byte reader
+	l, err := varint.ReadUvarint(br)
 	if err != nil {
 		return nil, err
 	}
 
 	buf := make([]byte, l)
-	if _, err = r.Read(buf); err != nil {
-		return nil, err
-	}
-
-	return buf, nil
+	_, err = br.Read(buf)
+	return buf, err
 }
 
 // ResetOnShutdown resets the given stream if the node receives a shutdown

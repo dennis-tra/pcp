@@ -59,7 +59,7 @@ func (p *PushProtocol) onPushRequest(s network.Stream) {
 		log.Infoln(err)
 		return
 	}
-	log.Debugln("Received push request", req.Filename, req.Size)
+	log.Debugln("Received push request", req.Name, req.Size)
 
 	p.lk.RLock()
 	defer p.lk.RUnlock()
@@ -81,7 +81,7 @@ func (p *PushProtocol) onPushRequest(s network.Stream) {
 	}
 }
 
-func (p *PushProtocol) SendPushRequest(ctx context.Context, peerID peer.ID, filename string, size int64) (bool, error) {
+func (p *PushProtocol) SendPushRequest(ctx context.Context, peerID peer.ID, filename string, size int64, isDir bool) (bool, error) {
 	s, err := p.node.NewStream(ctx, peerID, ProtocolPushRequest)
 	if err != nil {
 		return false, err
@@ -89,7 +89,7 @@ func (p *PushProtocol) SendPushRequest(ctx context.Context, peerID peer.ID, file
 	defer s.Close()
 
 	log.Debugln("Sending push request", filename, size)
-	if err = p.node.Send(s, p2p.NewPushRequest(filename, size)); err != nil {
+	if err = p.node.Send(s, p2p.NewPushRequest(filename, size, isDir)); err != nil {
 		return false, err
 	}
 

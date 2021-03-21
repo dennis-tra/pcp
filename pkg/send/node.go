@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"sync"
-
-	"github.com/dennis-tra/pcp/pkg/progress"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
+	"github.com/urfave/cli/v2"
 
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/dht"
@@ -136,20 +136,14 @@ func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
 }
 
 func (n *Node) Transfer(peerID peer.ID) error {
-	f, err := os.Open(n.filepath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	filename := path.Base(f.Name())
-	fstat, err := f.Stat()
+	filename := path.Base(n.filepath)
+	size, err := totalSize(n.filepath)
 	if err != nil {
 		return err
 	}
 
 	log.Infof("Asking for confirmation... ")
-	accepted, err := n.SendPushRequest(n.ServiceContext(), peerID, filename, fstat.Size())
+	accepted, err := n.SendPushRequest(n.ServiceContext(), peerID, filename, size, false)
 	if err != nil {
 		return err
 	}
@@ -160,11 +154,26 @@ func (n *Node) Transfer(peerID peer.ID) error {
 	}
 	log.Infoln("Accepted!")
 
-	bar := progress.DefaultBytes(fstat.Size(), filename)
-	if err = n.Node.Transfer(n.ServiceContext(), peerID, bar, f); err != nil {
+	if err = n.Node.Transfer(n.ServiceContext(), peerID, n.filepath); err != nil {
 		return errors.Wrap(err, "could not transfer file to peer")
 	}
 
 	log.Infoln("Successfully sent file!")
 	return nil
+}
+
+func totalSize(path string) (int64, error) {
+	// TODO: Add file count
+	var size int64
+	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		size += info.Size()
+		return nil
+	})
+	return size, err
 }
