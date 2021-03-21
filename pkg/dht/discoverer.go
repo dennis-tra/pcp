@@ -39,7 +39,7 @@ func (d *Discoverer) Discover(chanID int, handler func(info peer.AddrInfo)) erro
 
 	for {
 		did := d.DiscoveryID(chanID)
-		log.Debugln("DHT - Discovering ", did)
+		log.Debugln("DHT - Discovering", did)
 		cID, err := strToCid(did)
 		if err != nil {
 			return err

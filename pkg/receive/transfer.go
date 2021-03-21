@@ -47,7 +47,7 @@ func (th *TransferHandler) HandleFile(hdr *tar.Header, src io.Reader) {
 			return
 		}
 
-		bar := progress.DefaultBytes(hdr.Size, hdr.Name)
+		bar := progress.DefaultBytes(hdr.Size, filepath.Base(hdr.Name))
 		n, err := io.Copy(io.MultiWriter(newFile, bar), src)
 		th.received += n
 		if err != nil {
