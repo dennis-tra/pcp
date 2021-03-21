@@ -53,14 +53,26 @@ func (n *Node) Shutdown() {
 	n.Node.Shutdown()
 }
 
-func (n *Node) StartDiscovering() {
+func (n *Node) StartDiscovering(c *cli.Context) {
 	n.SetState(pcpnode.Discovering)
 
-	n.discoverers = []Discoverer{
-		dht.NewDiscoverer(n, n.DHT),
-		dht.NewDiscoverer(n, n.DHT).SetOffset(-dht.TruncateDuration),
-		mdns.NewDiscoverer(n.Node),
-		mdns.NewDiscoverer(n.Node).SetOffset(-dht.TruncateDuration),
+	if c.Bool("mdns") == c.Bool("dht") {
+		n.discoverers = []Discoverer{
+			dht.NewDiscoverer(n, n.DHT),
+			dht.NewDiscoverer(n, n.DHT).SetOffset(-dht.TruncateDuration),
+			mdns.NewDiscoverer(n.Node),
+			mdns.NewDiscoverer(n.Node).SetOffset(-dht.TruncateDuration),
+		}
+	} else if c.Bool("mdns") {
+		n.discoverers = []Discoverer{
+			mdns.NewDiscoverer(n.Node),
+			mdns.NewDiscoverer(n.Node).SetOffset(-dht.TruncateDuration),
+		}
+	} else if c.Bool("dht") {
+		n.discoverers = []Discoverer{
+			dht.NewDiscoverer(n, n.DHT),
+			dht.NewDiscoverer(n, n.DHT).SetOffset(-dht.TruncateDuration),
+		}
 	}
 
 	for _, discoverer := range n.discoverers {
