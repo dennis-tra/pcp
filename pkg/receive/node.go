@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/urfave/cli/v2"
+
 	"github.com/dennis-tra/pcp/internal/format"
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/dht"
@@ -17,11 +19,21 @@ import (
 	"github.com/pkg/errors"
 )
 
+type PeerState uint8
+
+const (
+	NotConnected PeerState = iota
+	Connecting
+	Connected
+	FailedConnecting
+	FailedAuthentication
+)
+
 type Node struct {
 	*pcpnode.Node
 
-	discoverers     []Discoverer
-	discoveredPeers *sync.Map
+	discoverers []Discoverer
+	peerStates  *sync.Map // TODO: Use PeerStore?
 }
 
 type Discoverer interface {
@@ -36,9 +48,9 @@ func InitNode(ctx context.Context, words []string) (*Node, error) {
 	}
 
 	n := &Node{
-		Node:            h,
-		discoveredPeers: &sync.Map{},
-		discoverers:     []Discoverer{},
+		Node:        h,
+		peerStates:  &sync.Map{},
+		discoverers: []Discoverer{},
 	}
 
 	n.RegisterPushRequestHandler(n)
@@ -118,24 +130,35 @@ func (n *Node) HandlePeer(pi peer.AddrInfo) {
 	}
 
 	// Check if we have already seen the peer and exit early to not connect again.
-	// TODO: Check if the multi addresses have changed
-	_, loaded := n.discoveredPeers.LoadOrStore(pi.ID, pi)
-	if loaded {
-		log.Debugln("Skipping peer as we tried to connect previously:", pi.ID)
+	peerState, _ := n.peerStates.LoadOrStore(pi.ID, NotConnected)
+	switch peerState.(PeerState) {
+	case NotConnected:
+	case Connecting:
+		log.Debugln("Skipping node as we're already trying to connect", pi.ID)
+		return
+	case FailedConnecting:
+		// TODO: Check if multiaddrs have changed and only connect if that's the case
+		log.Debugln("We tried to connect previously but couldn't establish a connection, try again", pi.ID)
+	case FailedAuthentication:
+		log.Debugln("We tried to connect previously but the node didn't pass authentication  -> skipping", pi.ID)
 		return
 	}
 
 	log.Debugln("Connecting to peer:", pi.ID)
+	n.peerStates.Store(pi.ID, Connecting)
 	if err := n.Connect(n.ServiceContext(), pi); err != nil {
 		log.Debugln("Error connecting to peer:", pi.ID, err)
+		n.peerStates.Store(pi.ID, FailedConnecting)
 		return
 	}
 
 	// Negotiate PAKE
 	if _, err := n.StartKeyExchange(n.ServiceContext(), pi.ID); err != nil {
-		log.Errorln(err)
+		log.Errorln("Peer didn't pass authentication:", err)
+		n.peerStates.Store(pi.ID, FailedAuthentication)
 		return
 	}
+	n.peerStates.Store(pi.ID, Connected)
 
 	// We're authenticated so can initiate a transfer
 	if n.GetState() == pcpnode.Connected {
