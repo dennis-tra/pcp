@@ -60,6 +60,7 @@ func NewTransferProtocol(node *Node) *TransferProtocol {
 
 // onTransfer is called when the peer initiates a file transfer.
 func (t *TransferProtocol) onTransfer(s network.Stream) {
+	defer t.th.Done()
 	defer t.node.ResetOnShutdown(s)()
 
 	// Get PAKE session key for stream decryption
@@ -105,7 +106,6 @@ func (t *TransferProtocol) onTransfer(s network.Stream) {
 		}
 		t.th.HandleFile(hdr, tr)
 	}
-	defer t.th.Done()
 
 	// Read file hash from the stream and check if it matches
 	hash, err := t.node.ReadBytes(s)

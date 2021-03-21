@@ -49,8 +49,8 @@ func TestTransferProtocol_onTransfer(t *testing.T) {
 			ctx := context.Background()
 			net := mocknet.New(ctx)
 
-			node1 := setupNode(t, net)
-			node2 := setupNode(t, net)
+			node1, _ := setupNode(t, net)
+			node2, done := setupNode(t, net)
 			authNodes(t, node1, node2)
 
 			err := net.LinkAll()
@@ -60,6 +60,8 @@ func TestTransferProtocol_onTransfer(t *testing.T) {
 			require.NoError(t, err)
 
 			assertTmpIntegrity(t, tt.testObj, tt.isDir)
+
+			<-done
 
 			node1.UnregisterTransferHandler()
 			node2.UnregisterTransferHandler()
@@ -73,8 +75,8 @@ func TestTransferProtocol_onTransfer_senderNotAuthenticatedAtReceiver(t *testing
 	ctx := context.Background()
 	net := mocknet.New(ctx)
 
-	node1 := setupNode(t, net)
-	node2 := setupNode(t, net)
+	node1, _ := setupNode(t, net)
+	node2, _ := setupNode(t, net)
 
 	// Simulate that the receiver is authenticated (from the perspective of the sender)
 	key, err := crypt.DeriveKey([]byte{}, []byte{})
@@ -92,8 +94,8 @@ func TestTransferProtocol_onTransfer_peersDifferentKeys(t *testing.T) {
 	ctx := context.Background()
 	net := mocknet.New(ctx)
 
-	node1 := setupNode(t, net)
-	node2 := setupNode(t, net)
+	node1, _ := setupNode(t, net)
+	node2, _ := setupNode(t, net)
 
 	// Simulate that the receiver is authenticated (from the perspective of the sender)
 	key1, err := crypt.DeriveKey([]byte{1}, []byte{1})
@@ -115,8 +117,8 @@ func TestTransferProtocol_onTransfer_provokeErrCases(t *testing.T) {
 	ctx := context.Background()
 	net := mocknet.New(ctx)
 
-	node1 := setupNode(t, net)
-	node2 := setupNode(t, net)
+	node1, _ := setupNode(t, net)
+	node2, _ := setupNode(t, net)
 
 	// Can't create stream
 	err := node1.Transfer(ctx, "some-non-existing-node", "")
@@ -144,14 +146,15 @@ func TestTransferProtocol_onTransfer_provokeErrCases(t *testing.T) {
 }
 
 // setupNode builds a node ready to handle a transfer.
-func setupNode(t *testing.T, net mocknet.Mocknet) *Node {
+func setupNode(t *testing.T, net mocknet.Mocknet) (*Node, chan struct{}) {
 	p, err := net.GenPeer()
 	require.NoError(t, err)
 	n := &Node{Service: service.New("node"), Host: p}
 	n.PakeProtocol = &PakeProtocol{}
 	n.TransferProtocol = NewTransferProtocol(n)
-	n.RegisterTransferHandler(&TestTransferHandler{handler: tmpWriter(t), done: func() {}})
-	return n
+	done := make(chan struct{})
+	n.RegisterTransferHandler(&TestTransferHandler{handler: tmpWriter(t), done: func() { close(done) }})
+	return n, done
 }
 
 // authNodes generates a key and uses it to simulate that the two given nodes have a shared key aka are authenticated.
