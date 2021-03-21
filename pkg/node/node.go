@@ -316,7 +316,7 @@ func (n *Node) ResetOnShutdown(s network.Stream) context.CancelFunc {
 // there is a 10 second timeout.
 func (n *Node) WaitForEOF(s network.Stream) error {
 	log.Debugln("Waiting for stream reset from peer...")
-	timeout := time.After(time.Minute)
+	timeout := time.After(3 * time.Minute)
 	done := make(chan error)
 	go func() {
 		buf := make([]byte, 1)
