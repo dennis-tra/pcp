@@ -83,7 +83,7 @@ func Action(c *cli.Context) error {
 	log.Infoln("Code is: ", strings.Join(local.Words, "-"))
 	log.Infoln("On the other machine run:\n\tpcp receive", strings.Join(local.Words, "-"))
 
-	local.StartAdvertising()
+	local.StartAdvertising(c)
 
 	// Wait for the user to stop the tool or the transfer to finish.
 	select {
@@ -111,15 +111,6 @@ func validateFile(filepath string) error {
 		return err
 	}
 	defer f.Close()
-
-	stat, err := f.Stat()
-	if err != nil {
-		return err
-	}
-
-	if stat.IsDir() {
-		return fmt.Errorf("transferring directories is not supported yet :/")
-	}
 
 	return nil
 }

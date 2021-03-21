@@ -14,17 +14,15 @@ func TestStreamEncrypterDecrypter(t *testing.T) {
 	key, err := DeriveKey(pw, salt)
 	assert.Nil(t, err)
 
-	payload := []byte("some text")
-	src := bytes.NewReader(payload)
-	se, err := NewStreamEncrypter(key, src)
+	var buf bytes.Buffer
+	se, err := NewStreamEncrypter(key, &buf)
 	assert.Nil(t, err)
 	assert.NotNil(t, se)
 
-	encrypted, err := ioutil.ReadAll(se)
-	assert.Nil(t, err)
-	assert.NotNil(t, encrypted)
+	payload := []byte("some text")
+	_, _ = se.Write(payload)
 
-	sd, err := NewStreamDecrypter(key, se.InitializationVector(), bytes.NewReader(encrypted))
+	sd, err := NewStreamDecrypter(key, se.InitializationVector(), &buf)
 	assert.Nil(t, err)
 	assert.NotNil(t, sd)
 

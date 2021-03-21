@@ -32,9 +32,10 @@ func NewPushResponse(accept bool) *PushResponse {
 	return &PushResponse{Accept: accept}
 }
 
-func NewPushRequest(filename string, size int64) *PushRequest {
+func NewPushRequest(name string, size int64, isDir bool) *PushRequest {
 	return &PushRequest{
-		Filename: filename,
-		Size:     size,
+		Name:  name,
+		Size:  size,
+		IsDir: isDir,
 	}
 }

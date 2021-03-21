@@ -67,7 +67,7 @@ func (p *PakeProtocol) AddAuthenticatedPeer(peerID peer.ID, key []byte) {
 // passed a password authenticated key exchange.
 func (p *PakeProtocol) IsAuthenticated(peerID peer.ID) bool {
 	_, found := p.authedPeers.Load(peerID)
-	log.Debugf("Is peer %s authenticated: %s\n", peerID, found)
+	log.Debugf("Is peer %s authenticated: %v\n", peerID, found)
 	return found
 }
 

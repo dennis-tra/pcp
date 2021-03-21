@@ -31,10 +31,16 @@ message PushRequest {
   // The name of the file that is about to be transferred.
   // This will also be the name that the receiving peer
   // uses upon save.
-  string filename = 2;
+  string name = 2;
 
   // The size of the file to be transmitted.
   int64 size = 3;
+
+  // Whether or not the file is a directory.
+  bool is_dir = 4;
+
+  // The number of files to be transferred.
+  bool file_count = 5;
 }
 
 // PushResponse is sent as a reply to the PushRequest message.

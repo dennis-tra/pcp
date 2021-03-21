@@ -1,65 +1,58 @@
 package receive
 
 import (
+	"archive/tar"
 	"io"
 	"os"
 	"path/filepath"
 
-	"github.com/pkg/errors"
+	"github.com/dennis-tra/pcp/pkg/progress"
 
 	"github.com/dennis-tra/pcp/internal/log"
-	"github.com/dennis-tra/pcp/pkg/progress"
 )
 
 type TransferHandler struct {
 	filename string
-	size     int64
+	received int64
 	done     chan int64
 }
 
-func NewTransferHandler(filename string, size int64, done chan int64) (*TransferHandler, error) {
-	th := &TransferHandler{
-		filename: filename,
-		size:     size,
-		done:     done,
-	}
-
-	return th, nil
+func NewTransferHandler(filename string, done chan int64) (*TransferHandler, error) {
+	return &TransferHandler{filename: filename, done: done}, nil
 }
 
-func (th *TransferHandler) HandleTransfer(src io.Reader) {
-	var received int64
-	defer func() {
-		th.done <- received
-		close(th.done)
-	}()
+func (th *TransferHandler) Done() {
+	th.done <- th.received
+	close(th.done)
+}
 
+func (th *TransferHandler) HandleFile(hdr *tar.Header, src io.Reader) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return
+		log.Warningln("error determining current working directory:", err)
+		cwd = "."
 	}
 
-	filename := filepath.Base(th.filename)
-
-	log.Infoln("Saving file to: ", filepath.Join(cwd, filename))
-	f, err := os.Create(filepath.Join(cwd, filename))
-	if err != nil {
-		return
-	}
-	defer func() {
-		if err := f.Close(); err != nil {
-			log.Infoln(err)
+	finfo := hdr.FileInfo()
+	joined := filepath.Join(cwd, hdr.Name)
+	if finfo.IsDir() {
+		err := os.MkdirAll(joined, finfo.Mode())
+		if err != nil {
+			log.Warningln("error creating directory:", joined, err)
 		}
-	}()
+	} else {
+		newFile, err := os.OpenFile(joined, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, finfo.Mode().Perm())
+		if err != nil {
+			log.Warningln("error creating file:", joined, err)
+			return
+		}
 
-	bar := progress.DefaultBytes(th.size, th.filename)
-	// Receive and persist the actual data.
-	received, err = io.Copy(io.MultiWriter(f, bar), src)
-	if err != nil {
-		log.Infoln(errors.Wrap(err, "error receiving or writing bytes"))
+		bar := progress.DefaultBytes(hdr.Size, hdr.Name)
+		n, err := io.Copy(io.MultiWriter(newFile, bar), src)
+		th.received += n
+		if err != nil {
+			log.Warningln("error writing file content:", joined, err)
+			return
+		}
 	}
-}
-
-func (th *TransferHandler) GetLimit() int64 {
-	return th.size
 }
