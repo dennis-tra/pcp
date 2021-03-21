@@ -63,12 +63,22 @@ func (n *Node) Shutdown() {
 
 // StartAdvertising asynchronously advertises the given code through the means of all
 // registered advertisers. Currently these are multicast DNS and DHT.
-func (n *Node) StartAdvertising() {
+func (n *Node) StartAdvertising(c *cli.Context) {
 	n.SetState(pcpnode.Advertising)
 
-	n.advertisers = []Advertiser{
-		dht.NewAdvertiser(n, n.DHT),
-		mdns.NewAdvertiser(n.Node),
+	if c.Bool("mdns") == c.Bool("dht") {
+		n.advertisers = []Advertiser{
+			dht.NewAdvertiser(n, n.DHT),
+			mdns.NewAdvertiser(n.Node),
+		}
+	} else if c.Bool("mdns") {
+		n.advertisers = []Advertiser{
+			mdns.NewAdvertiser(n.Node),
+		}
+	} else if c.Bool("dht") {
+		n.advertisers = []Advertiser{
+			dht.NewAdvertiser(n, n.DHT),
+		}
 	}
 
 	for _, advertiser := range n.advertisers {

@@ -53,6 +53,14 @@ func main() {
 				Name:  "debug",
 				Usage: "enables debug log output",
 			},
+			&cli.BoolFlag{
+				Name:  "dht",
+				Usage: "if set only advertises via the DHT",
+			},
+			&cli.BoolFlag{
+				Name:  "mdns",
+				Usage: "if set only advertises via mDNS",
+			},
 		},
 	}
 
