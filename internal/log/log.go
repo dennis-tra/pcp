@@ -78,7 +78,7 @@ func Infor(format string, a ...interface{}) {
 		fmt.Fprint(Out, fmt.Sprintf("%s%s", blank, fmt.Sprintf(format, a...)))
 	} else {
 		printTimestamp()
-		fmt.Fprintln(Out, fmt.Sprintf(format, a...))
+		fmt.Fprintln(Out, fmt.Sprintf(strings.TrimSpace(format), a...))
 	}
 }
 
