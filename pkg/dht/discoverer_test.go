@@ -145,7 +145,7 @@ func TestDiscoverer_Discover_restartAsSoonAsCurrentTimeSlotIsExpired(t *testing.
 	ctrl, local, net, teardown := setup(t)
 	defer teardown(t)
 
-	provideTimeout = 100 * time.Millisecond
+	provideTimeout = 20 * time.Millisecond
 
 	mockDefaultBootstrapPeers(t, ctrl, net, local)
 

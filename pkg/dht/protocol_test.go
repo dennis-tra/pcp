@@ -104,7 +104,7 @@ func TestProtocol_Bootstrap_connectsBootstrapPeersInParallel(t *testing.T) {
 	peers := genPeers(t, net, local, 100)
 	mockGetDefaultBootstrapPeerAddrInfos(ctrl, peers)
 
-	latency := 100 * time.Millisecond
+	latency := 50 * time.Millisecond
 	for _, p := range peers {
 		links := net.LinksBetweenPeers(local.ID(), p.ID)
 		for _, l := range links {
