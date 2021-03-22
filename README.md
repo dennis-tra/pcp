@@ -3,6 +3,7 @@
 [![standard-readme compliant](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg)](https://github.com/RichardLitt/standard-readme)
 [![Go Report Card](https://goreportcard.com/badge/github.com/dennis-tra/pcp)](https://goreportcard.com/report/github.com/dennis-tra/pcp)
 [![Maintainability](https://api.codeclimate.com/v1/badges/de64b09a3731b8a8842b/maintainability)](https://codeclimate.com/github/dennis-tra/pcp/maintainability)
+[![Latest CI run result](https://github.com/dennis-tra/pcp/actions/workflows/pull-request.yml/badge.svg)](https://github.com/dennis-tra/pcp/actions)
 [![Github Releases Download Count](https://img.shields.io/github/downloads/dennis-tra/pcp/total.svg)]()
 
 [comment]: <> ([![Test Coverage]&#40;https://api.codeclimate.com/v1/badges/de64b09a3731b8a8842b/test_coverage&#41;]&#40;https://codeclimate.com/github/dennis-tra/pcp/test_coverage&#41;)
