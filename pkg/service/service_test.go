@@ -9,7 +9,7 @@ import (
 )
 
 func TestNewService_lifecycle(t *testing.T) {
-	s := New()
+	s := New("test")
 
 	s.ServiceStopped()
 	err := s.ServiceStarted()
@@ -19,7 +19,7 @@ func TestNewService_lifecycle(t *testing.T) {
 }
 
 func TestNewService_shutdown(t *testing.T) {
-	s := New()
+	s := New("test")
 
 	err := s.ServiceStarted()
 	require.NoError(t, err)
@@ -35,7 +35,7 @@ func TestNewService_shutdown(t *testing.T) {
 }
 
 func TestNewService_contexts_stopped(t *testing.T) {
-	s := New()
+	s := New("test")
 	err := s.ServiceStarted()
 	require.NoError(t, err)
 
@@ -52,7 +52,7 @@ func TestNewService_contexts_stopped(t *testing.T) {
 }
 
 func TestNewService_contexts_shutdown(t *testing.T) {
-	s := New()
+	s := New("test")
 	err := s.ServiceStarted()
 	require.NoError(t, err)
 
@@ -69,7 +69,7 @@ func TestNewService_contexts_shutdown(t *testing.T) {
 }
 
 func TestNewService_restart(t *testing.T) {
-	s := New()
+	s := New("test")
 	err := s.ServiceStarted()
 	require.NoError(t, err)
 
@@ -95,7 +95,7 @@ func TestNewService_restart(t *testing.T) {
 }
 
 func TestService_SigDone(t *testing.T) {
-	s := New()
+	s := New("test")
 	err := s.ServiceStarted()
 	require.NoError(t, err)
 	s.ServiceStopped()
@@ -103,7 +103,7 @@ func TestService_SigDone(t *testing.T) {
 }
 
 func TestService_SigShutdown(t *testing.T) {
-	s := New()
+	s := New("test")
 	err := s.ServiceStarted()
 	require.NoError(t, err)
 	go s.Shutdown()
