@@ -141,7 +141,11 @@ func TestDiscoverer_Discover_callsFindProviderWithMutatingDiscoveryIDs(t *testin
 	assert.NotEqual(t, cIDs[0], cIDs[1])
 }
 
-func TestDiscoverer_Discover_restartAsSoonAsCurrentTimeSlotIsExpired(t *testing.T) {
+func TestTimeCriticalDiscoverer_Discover_restartAsSoonAsCurrentTimeSlotIsExpired(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping time critical test") // They are flaky on GitHub actions
+	}
+
 	ctrl, local, net, teardown := setup(t)
 	defer teardown(t)
 

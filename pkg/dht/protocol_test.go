@@ -97,7 +97,11 @@ func TestProtocol_Bootstrap_connectsBootstrapPeers(t *testing.T) {
 	assert.Len(t, net.Net(local.ID()).Peers(), ConnThreshold)
 }
 
-func TestProtocol_Bootstrap_connectsBootstrapPeersInParallel(t *testing.T) {
+func TestTimeCriticalProtocol_Bootstrap_connectsBootstrapPeersInParallel(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping time critical test") // They are flaky on GitHub actions
+	}
+
 	ctrl, local, net, teardown := setup(t)
 	defer teardown(t)
 
