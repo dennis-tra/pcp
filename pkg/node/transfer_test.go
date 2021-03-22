@@ -25,7 +25,9 @@ type TestTransferHandler struct {
 
 func (tth *TestTransferHandler) HandleFile(hdr *tar.Header, r io.Reader) { tth.handler(hdr, r) }
 
-func (tth *TestTransferHandler) Done() { tth.done() }
+func (tth *TestTransferHandler) Done() {
+	tth.done()
+}
 
 func TestTransferProtocol_onTransfer(t *testing.T) {
 	// The test sets up two nodes to simulate a file transfer. In every run node1 send a particular file or whole
@@ -120,6 +122,9 @@ func TestTransferProtocol_onTransfer_provokeErrCases(t *testing.T) {
 	node1, _ := setupNode(t, net)
 	node2, _ := setupNode(t, net)
 
+	node1.RegisterTransferHandler(&TestTransferHandler{handler: tmpWriter(t), done: func() {}})
+	node2.RegisterTransferHandler(&TestTransferHandler{handler: tmpWriter(t), done: func() {}})
+
 	// Can't create stream
 	err := node1.Transfer(ctx, "some-non-existing-node", "")
 	require.Error(t, err)
@@ -154,6 +159,7 @@ func setupNode(t *testing.T, net mocknet.Mocknet) (*Node, chan struct{}) {
 	n.TransferProtocol = NewTransferProtocol(n)
 	done := make(chan struct{})
 	n.RegisterTransferHandler(&TestTransferHandler{handler: tmpWriter(t), done: func() { close(done) }})
+	n.PushProtocol = NewPushProtocol(n)
 	return n, done
 }
 

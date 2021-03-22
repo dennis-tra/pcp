@@ -28,6 +28,10 @@ import (
 	"github.com/dennis-tra/pcp/pkg/words"
 )
 
+// Is set to true during test runs because the
+// generated peers won't have proper keys
+var skipMessageAuth = false
+
 type State string
 
 const (
@@ -195,6 +199,12 @@ func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
 // It takes the given signature and verifies it against the given public
 // key.
 func (n *Node) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
+	// This will be set to true during unit test runs as the
+	// generated peers from mocknet won't have proper keys.
+	if skipMessageAuth {
+		return true, nil
+	}
+
 	// store a temp ref to signature and remove it from message msg
 	// sign is a string to allow easy reset to zero-value (empty string)
 	signature := msg.GetHeader().Signature
