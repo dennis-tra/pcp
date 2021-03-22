@@ -74,6 +74,17 @@ ListLoop:
 	return nil, fmt.Errorf("could not find all words in a single wordlist")
 }
 
+// HomebrewList returns a hard coded list of words, so that a full functional
+// test can be carried out after a homebrew installation.
+func HomebrewList() []string {
+	return []string{
+		wordlists.English[0],
+		wordlists.English[0],
+		wordlists.English[0],
+		wordlists.English[0],
+	}
+}
+
 // Tried sort.SearchStrings
 func wordInList(word string, list []string) int {
 	for i, w := range list {

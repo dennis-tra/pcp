@@ -20,6 +20,7 @@ import (
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/multiformats/go-varint"
 	"github.com/pkg/errors"
+	"github.com/urfave/cli/v2"
 
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/crypt"
@@ -63,8 +64,12 @@ type Node struct {
 }
 
 // New creates a new, fully initialized node with the given options.
-func New(ctx context.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
+func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 	log.Debugln("Initialising local node...")
+
+	if c.Bool("homebrew") {
+		wrds = words.HomebrewList()
+	}
 	ints, err := words.ToInts(wrds)
 	if err != nil {
 		return nil, err
@@ -97,12 +102,12 @@ func New(ctx context.Context, wrds []string, opts ...libp2p.Option) (*Node, erro
 	opts = append(opts,
 		libp2p.Identity(key),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
-			node.DHT, err = kaddht.New(ctx, h)
+			node.DHT, err = kaddht.New(c.Context, h)
 			return node.DHT, err
 		}),
 	)
 
-	node.Host, err = libp2p.New(ctx, opts...)
+	node.Host, err = libp2p.New(c.Context, opts...)
 	if err != nil {
 		return nil, err
 	}

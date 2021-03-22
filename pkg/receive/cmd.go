@@ -49,14 +49,14 @@ will contain the partial written bytes.`,
 
 // Action is the function that is called when running pcp receive.
 func Action(c *cli.Context) error {
-	ctx, err := config.FillContext(c.Context)
+	c, err := config.FillContext(c)
 	if err != nil {
 		return errors.Wrap(err, "failed loading configuration")
 	}
 
 	words := strings.Split(c.Args().First(), "-") // transfer words
 
-	local, err := InitNode(ctx, words)
+	local, err := InitNode(c, words)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("failed to initialize node"))
 	}
@@ -67,7 +67,7 @@ func Action(c *cli.Context) error {
 
 	// Wait for the user to stop the tool or the transfer to finish.
 	select {
-	case <-ctx.Done():
+	case <-c.Done():
 		local.Shutdown()
 		return nil
 	case <-local.SigDone():

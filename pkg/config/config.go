@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/urfave/cli/v2"
+
 	"github.com/dennis-tra/pcp/internal/wrap"
 )
 
@@ -56,13 +58,13 @@ func LoadConfig() (*Config, error) {
 	return c, nil
 }
 
-func FillContext(ctx context.Context) (context.Context, error) {
+func FillContext(c *cli.Context) (*cli.Context, error) {
 	conf, err := LoadConfig()
 	if err != nil {
-		return ctx, err
+		return c, err
 	}
-
-	return context.WithValue(ctx, ContextKey, conf), nil
+	c.Context = context.WithValue(c.Context, ContextKey, conf)
+	return c, nil
 }
 
 func FromContext(ctx context.Context) (*Config, error) {

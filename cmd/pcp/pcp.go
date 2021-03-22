@@ -61,6 +61,11 @@ func main() {
 				Name:  "mdns",
 				Usage: "if set only advertises via mDNS",
 			},
+			&cli.BoolFlag{
+				Name:   "homebrew",
+				Usage:  "if set transfers a hard coded file with a hard coded word sequence",
+				Hidden: true,
+			},
 		},
 	}
 

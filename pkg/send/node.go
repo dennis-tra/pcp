@@ -1,7 +1,6 @@
 package send
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path"
@@ -37,8 +36,8 @@ type Advertiser interface {
 
 // InitNode returns a fully configured node ready to start
 // advertising that we want to send a specific file.
-func InitNode(ctx context.Context, filepath string, words []string) (*Node, error) {
-	h, err := pcpnode.New(ctx, words, libp2p.EnableAutoRelay())
+func InitNode(c *cli.Context, filepath string, words []string) (*Node, error) {
+	h, err := pcpnode.New(c, words, libp2p.EnableAutoRelay())
 	if err != nil {
 		return nil, err
 	}

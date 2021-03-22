@@ -2,7 +2,6 @@ package receive
 
 import (
 	"bufio"
-	"context"
 	"os"
 	"strings"
 	"sync"
@@ -41,8 +40,8 @@ type Discoverer interface {
 	Shutdown()
 }
 
-func InitNode(ctx context.Context, words []string) (*Node, error) {
-	h, err := pcpnode.New(ctx, words)
+func InitNode(c *cli.Context, words []string) (*Node, error) {
+	h, err := pcpnode.New(c, words)
 	if err != nil {
 		return nil, err
 	}

@@ -51,7 +51,7 @@ the file transfer the transmission is started.
 // mainly responsible for input parsing and service initialisation.
 func Action(c *cli.Context) error {
 	// Read config file and fill context with it.
-	ctx, err := config.FillContext(c.Context)
+	c, err := config.FillContext(c)
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func Action(c *cli.Context) error {
 	}
 
 	log.Debugln("Validating given word count:", c.Int("w"))
-	if c.Int("w") < 3 {
+	if c.Int("w") < 3 && !c.Bool("homebrew") {
 		return fmt.Errorf("the number of words must not be less than 3")
 	}
 
@@ -73,8 +73,13 @@ func Action(c *cli.Context) error {
 		return err
 	}
 
+	// If homebrew flag is set, overwrite generated words with well known list
+	if c.Bool("homebrew") {
+		wrds = words.HomebrewList()
+	}
+
 	// Initialize node
-	local, err := InitNode(ctx, filepath, wrds)
+	local, err := InitNode(c, filepath, wrds)
 	if err != nil {
 		return err
 	}
@@ -87,7 +92,7 @@ func Action(c *cli.Context) error {
 
 	// Wait for the user to stop the tool or the transfer to finish.
 	select {
-	case <-ctx.Done():
+	case <-c.Done():
 		local.Shutdown()
 		return nil
 	case <-local.SigDone():
