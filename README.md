@@ -134,7 +134,7 @@ Shamelessly copied from `croc`:
 - [x] provides end-to-end encryption (using PAKE)
   - ✅ yup, it uses [`pake/v2`](https://github.com/schollz/pake/tree/v2.0.6) from `croc`
 - [x] enables easy cross-platform transfers (Windows, Linux, Mac)
-  - 🤔✅ only tested Linux <-> Mac
+  - ✅ Linux <-> Mac, ❌ Windows, but it's planned!
 - [ ] allows multiple file transfers
   - ❌ not yet
 - [ ] allows resuming transfers that are interrupted
