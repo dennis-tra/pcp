@@ -1,9 +1,9 @@
 on:
-  pull_request:
+  push:
     branches:
       - main
 
-name: Pull Request
+name: Tests
 jobs:
   test:
     strategy:
