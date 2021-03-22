@@ -13,10 +13,10 @@ import (
 
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
+	progress "github.com/schollz/progressbar/v3"
 
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/crypt"
-	"github.com/dennis-tra/pcp/pkg/progress"
 )
 
 // pattern: /protocol-name/request-or-response-message/version

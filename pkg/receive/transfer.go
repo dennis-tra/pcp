@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dennis-tra/pcp/pkg/progress"
+	progress "github.com/schollz/progressbar/v3"
 
 	"github.com/dennis-tra/pcp/internal/log"
 )
