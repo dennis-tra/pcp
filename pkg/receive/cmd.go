@@ -20,6 +20,14 @@ var Command = &cli.Command{
 	Aliases:   []string{"r", "get"},
 	Action:    Action,
 	ArgsUsage: "[WORD-CODE]",
+	Flags: []cli.Flag{
+		&cli.BoolFlag{
+			Name:    "auto-accept",
+			Aliases: []string{"yes", "y"},
+			Usage:   "automatically accept the file transfer",
+			EnvVars: []string{"PCP_AUTO_ACCEPT"},
+		},
+	},
 	Description: `The receive subcommand starts searching for peers in your local 
 network by sending out multicast DNS queries. These queries are
 based on the current time and the first word of the given list. It

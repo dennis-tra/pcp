@@ -31,6 +31,7 @@ const (
 type Node struct {
 	*pcpnode.Node
 
+	autoAccept  bool
 	discoverers []Discoverer
 	peerStates  *sync.Map // TODO: Use PeerStore?
 }
@@ -48,6 +49,7 @@ func InitNode(c *cli.Context, words []string) (*Node, error) {
 
 	n := &Node{
 		Node:        h,
+		autoAccept:  c.Bool("auto-accept"),
 		peerStates:  &sync.Map{},
 		discoverers: []Discoverer{},
 	}
@@ -171,6 +173,10 @@ func (n *Node) HandlePeer(pi peer.AddrInfo) {
 }
 
 func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {
+	if n.autoAccept {
+		return n.handleAccept(pr)
+	}
+
 	obj := "File"
 	if pr.IsDir {
 		obj = "Directory"
@@ -205,14 +211,7 @@ func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {
 
 		// Accept the file transfer
 		if input == "y" {
-			done := n.TransferFinishHandler(pr.Size)
-			th, err := NewTransferHandler(pr.Name, done)
-			if err != nil {
-				return true, err
-			}
-			n.RegisterTransferHandler(th)
-
-			return true, nil
+			return n.handleAccept(pr)
 		}
 
 		// Reject the file transfer
@@ -223,6 +222,18 @@ func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {
 
 		log.Infoln("Invalid input")
 	}
+}
+
+// handleAccept handles the case when the user accepted the transfer or provided
+// the corresponding command line flag.
+func (n *Node) handleAccept(pr *p2p.PushRequest) (bool, error) {
+	done := n.TransferFinishHandler(pr.Size)
+	th, err := NewTransferHandler(pr.Name, done)
+	if err != nil {
+		return true, err
+	}
+	n.RegisterTransferHandler(th)
+	return true, nil
 }
 
 func (n *Node) TransferFinishHandler(size int64) chan int64 {

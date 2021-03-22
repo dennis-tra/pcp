@@ -55,11 +55,11 @@ func main() {
 			},
 			&cli.BoolFlag{
 				Name:  "dht",
-				Usage: "if set only advertises via the DHT",
+				Usage: "Only advertise via the DHT",
 			},
 			&cli.BoolFlag{
 				Name:  "mdns",
-				Usage: "if set only advertises via mDNS",
+				Usage: "Only advertise via multicast DNS",
 			},
 			&cli.BoolFlag{
 				Name:   "homebrew",
