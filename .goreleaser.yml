@@ -23,7 +23,7 @@ builds:
     goos:
       - darwin
       - linux
-      - windows
+#      - windows
       - freebsd
       - netbsd
       - openbsd
@@ -51,9 +51,9 @@ nfpms:
       darwin: macos
 archives:
   - format: tar.gz
-    format_overrides:
-      - goos: windows
-        format: zip
+#    format_overrides:
+#      - goos: windows
+#        format: zip
     replacements:
       darwin: macos
 
@@ -71,10 +71,10 @@ brews:
     license: "Apache License Version 2.0"
     test: |
       system "#{bin}/croc --version"
-scoop:
-  bucket:
-    owner: dennis-tra
-    name: scoop-bucket
-  homepage: "https://github.com/dennis-tra/pcp"
-  description: "pcp is a command line peer-to-peer data transfer tool based on libp2p."
-  license: "Apache License Version 2.0"
+#scoop:
+#  bucket:
+#    owner: dennis-tra
+#    name: scoop-bucket
+#  homepage: "https://github.com/dennis-tra/pcp"
+#  description: "pcp is a command line peer-to-peer data transfer tool based on libp2p."
+#  license: "Apache License Version 2.0"
