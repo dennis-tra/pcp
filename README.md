@@ -136,14 +136,14 @@ Shamelessly copied from `croc`:
   - ✅ yup, it uses [`pake/v2`](https://github.com/schollz/pake/tree/v2.0.6) from `croc`
 - [x] enables easy cross-platform transfers (Windows, Linux, Mac)
   - ✅ Linux <-> Mac, ❌ Windows, but it's planned!
-- [ ] allows multiple file transfers
-  - ❌ not yet
+- [x] allows multiple file transfers
+  - ✅ it allows transferring directories
 - [ ] allows resuming transfers that are interrupted
   - ❌ not yet
 - [x] local server or port-forwarding not needed
   - ✅ thanks to [AutoNat](https://docs.libp2p.io/concepts/nat/#autonat)
 - [ ] ipv6-first with ipv4 fallback
-  - 🤔 I think that's the case, but I'm not sure about the libp2p internals
+  - ✅ thanks to [libp2p](https://libp2p.io/)
 - [ ] can use proxy, like tor
   - ❌ not yet
 
