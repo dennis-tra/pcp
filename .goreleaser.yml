@@ -17,7 +17,7 @@ release:
 builds:
   - main: ./cmd/pcp/pcp.go
     binary: pcp
-    ldflags: -s -w -X main.RawVersion={{.RawVersion}} -X main.ShortCommit={{.ShortCommit}}
+    ldflags: -X main.RawVersion={{.RawVersion}} -X main.ShortCommit={{.ShortCommit}}
     env:
       - CGO_ENABLED=0
     goos:
