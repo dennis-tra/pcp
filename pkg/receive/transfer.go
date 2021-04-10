@@ -40,19 +40,18 @@ func (th *TransferHandler) HandleFile(hdr *tar.Header, src io.Reader) {
 		if err != nil {
 			log.Warningln("error creating directory:", joined, err)
 		}
-	} else {
-		newFile, err := os.OpenFile(joined, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, finfo.Mode().Perm())
-		if err != nil {
-			log.Warningln("error creating file:", joined, err)
-			return
-		}
+	}
+	newFile, err := os.OpenFile(joined, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, finfo.Mode().Perm())
+	if err != nil {
+		log.Warningln("error creating file:", joined, err)
+		return
+	}
 
-		bar := progress.DefaultBytes(hdr.Size, filepath.Base(hdr.Name))
-		n, err := io.Copy(io.MultiWriter(newFile, bar), src)
-		th.received += n
-		if err != nil {
-			log.Warningln("error writing file content:", joined, err)
-			return
-		}
+	bar := progress.DefaultBytes(hdr.Size, filepath.Base(hdr.Name))
+	n, err := io.Copy(io.MultiWriter(newFile, bar), src)
+	th.received += n
+	if err != nil {
+		log.Warningln("error writing file content:", joined, err)
+		return
 	}
 }
