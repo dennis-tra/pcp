@@ -90,6 +90,14 @@ If you're on different networks the lookup can take quite long (~ 2-3 minutes). 
 
 ## Install
 
+### Package managers
+
+```shell
+brew install pcp
+```
+
+It's on the roadmap to also distribute `pcp` via `apt`, `yum`, `scoop` and more ...
+
 ### Release download
 
 Head over to the [releases](https://github.com/dennis-tra/pcp/releases) and download the latest archive for
@@ -104,14 +112,6 @@ go install github.com/dennis-tra/pcp/cmd/pcp@latest # Go 1.13 or higher is requi
 ```
 
 Make sure the `$GOPATH/bin` is in your `PATH` variable to access the installed `pcp` executable.
-
-### Package managers
-
-```shell
-brew install dennis-tra/homebrew-tap/pcp
-```
-
-It's on the roadmap to distribute `pcp` via `apt`, `yum`, `scoop` and more ...
 
 ## Development
 
