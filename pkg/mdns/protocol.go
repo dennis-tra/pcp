@@ -10,11 +10,23 @@ import (
 	"github.com/dennis-tra/pcp/pkg/service"
 )
 
-var wraptime wrap.Timer = wrap.Time{}
-
-// ConnThreshold represents the minimum number of bootstrap peers we need a connection to.
+// These wrapped top level functions are here for testing purposes.
 var (
-	ConnThreshold    = 3
+	wraptime      wrap.Timer      = wrap.Time{}
+	wrapdiscovery wrap.Discoverer = wrap.Discovery{}
+)
+
+var (
+	// Interval is the frequency with which the pcp
+	// service is advertised in the local network
+	Interval = time.Second
+
+	// Timeout is the time until a new advertisement
+	// with a potentially new discovery ID is started.
+	Timeout = time.Minute
+
+	// TruncateDuration represents the time slot to which
+	// the current time is truncated.
 	TruncateDuration = 5 * time.Minute
 )
 
@@ -31,7 +43,7 @@ type protocol struct {
 func newProtocol(h host.Host) *protocol {
 	return &protocol{
 		Host:     h,
-		interval: time.Second,
+		interval: Interval,
 		Service:  service.New("mDNS"),
 	}
 }

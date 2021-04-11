@@ -5,35 +5,36 @@
 package mock
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
 	time "time"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
-// MockTimer is a mock of Timer interface
+// MockTimer is a mock of Timer interface.
 type MockTimer struct {
 	ctrl     *gomock.Controller
 	recorder *MockTimerMockRecorder
 }
 
-// MockTimerMockRecorder is the mock recorder for MockTimer
+// MockTimerMockRecorder is the mock recorder for MockTimer.
 type MockTimerMockRecorder struct {
 	mock *MockTimer
 }
 
-// NewMockTimer creates a new mock instance
+// NewMockTimer creates a new mock instance.
 func NewMockTimer(ctrl *gomock.Controller) *MockTimer {
 	mock := &MockTimer{ctrl: ctrl}
 	mock.recorder = &MockTimerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockTimer) EXPECT() *MockTimerMockRecorder {
 	return m.recorder
 }
 
-// AfterFunc mocks base method
+// AfterFunc mocks base method.
 func (m *MockTimer) AfterFunc(d time.Duration, f func()) *time.Timer {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AfterFunc", d, f)
@@ -41,13 +42,13 @@ func (m *MockTimer) AfterFunc(d time.Duration, f func()) *time.Timer {
 	return ret0
 }
 
-// AfterFunc indicates an expected call of AfterFunc
+// AfterFunc indicates an expected call of AfterFunc.
 func (mr *MockTimerMockRecorder) AfterFunc(d, f interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AfterFunc", reflect.TypeOf((*MockTimer)(nil).AfterFunc), d, f)
 }
 
-// NewTimer mocks base method
+// NewTimer mocks base method.
 func (m *MockTimer) NewTimer(d time.Duration) *time.Timer {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewTimer", d)
@@ -55,13 +56,13 @@ func (m *MockTimer) NewTimer(d time.Duration) *time.Timer {
 	return ret0
 }
 
-// NewTimer indicates an expected call of NewTimer
+// NewTimer indicates an expected call of NewTimer.
 func (mr *MockTimerMockRecorder) NewTimer(d interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewTimer", reflect.TypeOf((*MockTimer)(nil).NewTimer), d)
 }
 
-// Now mocks base method
+// Now mocks base method.
 func (m *MockTimer) Now() time.Time {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Now")
@@ -69,19 +70,19 @@ func (m *MockTimer) Now() time.Time {
 	return ret0
 }
 
-// Now indicates an expected call of Now
+// Now indicates an expected call of Now.
 func (mr *MockTimerMockRecorder) Now() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Now", reflect.TypeOf((*MockTimer)(nil).Now))
 }
 
-// Sleep mocks base method
+// Sleep mocks base method.
 func (m *MockTimer) Sleep(d time.Duration) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Sleep", d)
 }
 
-// Sleep indicates an expected call of Sleep
+// Sleep indicates an expected call of Sleep.
 func (mr *MockTimerMockRecorder) Sleep(d interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sleep", reflect.TypeOf((*MockTimer)(nil).Sleep), d)

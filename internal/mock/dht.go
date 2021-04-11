@@ -6,36 +6,37 @@ package mock
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	cid "github.com/ipfs/go-cid"
 	peer "github.com/libp2p/go-libp2p-core/peer"
-	reflect "reflect"
 )
 
-// MockDHTer is a mock of DHTer interface
+// MockDHTer is a mock of DHTer interface.
 type MockDHTer struct {
 	ctrl     *gomock.Controller
 	recorder *MockDHTerMockRecorder
 }
 
-// MockDHTerMockRecorder is the mock recorder for MockDHTer
+// MockDHTerMockRecorder is the mock recorder for MockDHTer.
 type MockDHTerMockRecorder struct {
 	mock *MockDHTer
 }
 
-// NewMockDHTer creates a new mock instance
+// NewMockDHTer creates a new mock instance.
 func NewMockDHTer(ctrl *gomock.Controller) *MockDHTer {
 	mock := &MockDHTer{ctrl: ctrl}
 	mock.recorder = &MockDHTerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockDHTer) EXPECT() *MockDHTerMockRecorder {
 	return m.recorder
 }
 
-// GetDefaultBootstrapPeerAddrInfos mocks base method
+// GetDefaultBootstrapPeerAddrInfos mocks base method.
 func (m *MockDHTer) GetDefaultBootstrapPeerAddrInfos() []peer.AddrInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDefaultBootstrapPeerAddrInfos")
@@ -43,50 +44,36 @@ func (m *MockDHTer) GetDefaultBootstrapPeerAddrInfos() []peer.AddrInfo {
 	return ret0
 }
 
-// GetDefaultBootstrapPeerAddrInfos indicates an expected call of GetDefaultBootstrapPeerAddrInfos
+// GetDefaultBootstrapPeerAddrInfos indicates an expected call of GetDefaultBootstrapPeerAddrInfos.
 func (mr *MockDHTerMockRecorder) GetDefaultBootstrapPeerAddrInfos() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDefaultBootstrapPeerAddrInfos", reflect.TypeOf((*MockDHTer)(nil).GetDefaultBootstrapPeerAddrInfos))
 }
 
-// MockIpfsDHT is a mock of IpfsDHT interface
+// MockIpfsDHT is a mock of IpfsDHT interface.
 type MockIpfsDHT struct {
 	ctrl     *gomock.Controller
 	recorder *MockIpfsDHTMockRecorder
 }
 
-// MockIpfsDHTMockRecorder is the mock recorder for MockIpfsDHT
+// MockIpfsDHTMockRecorder is the mock recorder for MockIpfsDHT.
 type MockIpfsDHTMockRecorder struct {
 	mock *MockIpfsDHT
 }
 
-// NewMockIpfsDHT creates a new mock instance
+// NewMockIpfsDHT creates a new mock instance.
 func NewMockIpfsDHT(ctrl *gomock.Controller) *MockIpfsDHT {
 	mock := &MockIpfsDHT{ctrl: ctrl}
 	mock.recorder = &MockIpfsDHTMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockIpfsDHT) EXPECT() *MockIpfsDHTMockRecorder {
 	return m.recorder
 }
 
-// Provide mocks base method
-func (m *MockIpfsDHT) Provide(arg0 context.Context, arg1 cid.Cid, arg2 bool) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Provide", arg0, arg1, arg2)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Provide indicates an expected call of Provide
-func (mr *MockIpfsDHTMockRecorder) Provide(arg0, arg1, arg2 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Provide", reflect.TypeOf((*MockIpfsDHT)(nil).Provide), arg0, arg1, arg2)
-}
-
-// FindProvidersAsync mocks base method
+// FindProvidersAsync mocks base method.
 func (m *MockIpfsDHT) FindProvidersAsync(arg0 context.Context, arg1 cid.Cid, arg2 int) <-chan peer.AddrInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindProvidersAsync", arg0, arg1, arg2)
@@ -94,8 +81,22 @@ func (m *MockIpfsDHT) FindProvidersAsync(arg0 context.Context, arg1 cid.Cid, arg
 	return ret0
 }
 
-// FindProvidersAsync indicates an expected call of FindProvidersAsync
+// FindProvidersAsync indicates an expected call of FindProvidersAsync.
 func (mr *MockIpfsDHTMockRecorder) FindProvidersAsync(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindProvidersAsync", reflect.TypeOf((*MockIpfsDHT)(nil).FindProvidersAsync), arg0, arg1, arg2)
+}
+
+// Provide mocks base method.
+func (m *MockIpfsDHT) Provide(arg0 context.Context, arg1 cid.Cid, arg2 bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Provide", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Provide indicates an expected call of Provide.
+func (mr *MockIpfsDHTMockRecorder) Provide(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Provide", reflect.TypeOf((*MockIpfsDHT)(nil).Provide), arg0, arg1, arg2)
 }

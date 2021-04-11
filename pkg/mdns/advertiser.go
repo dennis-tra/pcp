@@ -2,12 +2,10 @@ package mdns
 
 import (
 	"context"
-	"time"
 
 	"github.com/dennis-tra/pcp/internal/log"
 
 	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p/p2p/discovery"
 )
 
 type Advertiser struct {
@@ -30,8 +28,8 @@ func (a *Advertiser) Advertise(chanID int) error {
 	for {
 		did := a.DiscoveryID(chanID)
 		log.Debugln("mDNS - Advertising ", did)
-		ctx, cancel := context.WithTimeout(a.ServiceContext(), time.Minute)
-		mdns, err := discovery.NewMdnsService(ctx, a, a.interval, did)
+		ctx, cancel := context.WithTimeout(a.ServiceContext(), Timeout)
+		mdns, err := wrapdiscovery.NewMdnsService(ctx, a, a.interval, did)
 		if err != nil {
 			cancel()
 			return err
