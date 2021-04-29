@@ -12,6 +12,7 @@ Command line peer-to-peer data transfer tool based on [libp2p](https://github.co
 
 ![Demo animation](./docs/demo-2021-02-13.gif)
 
+_This tool will be published research at the [IFIP 2021](https://networking.ifip.org/2021/). You can find the preprint [below](#research)._
 ## Table of Contents
 
 - [Motivation](#motivation)
@@ -26,7 +27,7 @@ Command line peer-to-peer data transfer tool based on [libp2p](https://github.co
 - [Related Efforts](#related-efforts)
 - [Maintainers](#maintainers)
 - [Acknowledgments](#acknowledgments)
-- [Contributing](#contributing)
+- [Research](#research)
 - [License](#license)
 
 ## Motivation
@@ -182,9 +183,31 @@ Some other ideas I would love to work on include:
 
 Feel free to dive in! [Open an issue](https://github.com/dennis-tra/pcp/issues/new) or submit PRs.
 
+## Research
+
+This tool was submitted to the [International Federation for Information Processing 2021 (IFIP '21)](https://networking.ifip.org/2021/) conference and accepted for publication. You can find the preprint [here](docs/trautwein2021.pdf).
+
+<details>
+ <summary>Cite the paper with this BibTeX entry:</summary>
+  <img src="docs/jesse-pinkman.jpg" alt="Jesse Pinkman" width="300">
+</details>
+
+```bibtex
+@inproceedings{Trautwein2021,
+  author    = {Trautwein, Dennis and Schubotz, Moritz and Gipp, Bela},
+  title     = {Introducing Peer Copy -- A Fully Decentralized Peer-to-Peer File Transfer Tool},
+  booktitle = {International Federation for Information Processing (IFIP) Networking 2021 Conference (IFIP '21), June 21--24, 2020, Helsinki, Finland},
+  year      = {2021},
+  address   = {Helsinki, Finland},
+  month     = {June},
+  note      = {ISBN 978-3-903176-39-3},
+  publisher = {IEEE}
+}
+```
+
 ## Support
 
-It would really make my day if you supported it through [Buy Me A Coffee](https://www.buymeacoffee.com/dennistra).
+It would really make my day if you supported this project through [Buy Me A Coffee](https://www.buymeacoffee.com/dennistra).
 
 ## Other Projects
 
