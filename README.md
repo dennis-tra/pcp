@@ -143,7 +143,7 @@ Shamelessly copied from `croc`:
   - ❌ not yet
 - [x] local server or port-forwarding not needed
   - ✅ thanks to [AutoNat](https://docs.libp2p.io/concepts/nat/#autonat)
-- [ ] ipv6-first with ipv4 fallback
+- [x] ipv6-first with ipv4 fallback
   - ✅ thanks to [libp2p](https://libp2p.io/)
 - [ ] can use proxy, like tor
   - ❌ not yet
