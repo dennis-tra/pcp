@@ -23,8 +23,11 @@ tools:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.26.0
 	go install github.com/golang/mock/mockgen@v1.5.0
 
+gen:
+	go generate ./...
+
 # Remove only what we've created
 clean:
 	rm -r dist
 
-.PHONY: all clean test install release proto format tools
+.PHONY: all clean test install release proto format tools gen
