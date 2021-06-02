@@ -14,11 +14,11 @@ import (
 
 const NonceLength = 12
 
-// DeriveKey uses scrypt to generated a fixed size key for further
-// encryption/decryption steps aka. to initialise the block cipher.
+// DeriveKey uses scrypt to generate a fixed size key for further
+// encryption/decryption steps aka to initialise the block cipher.
 // After minimal research I chose scrypt over pbkdf2 as apparently
 // scrypt contains pbkdf2? Which is a good thing I guess. The
-// parameters below are taken from example test in the scrypt
+// parameters below are taken from an example test in the scrypt
 // package.
 func DeriveKey(pw []byte, salt []byte) ([]byte, error) {
 	return scrypt.Key(pw, salt, 1<<15, 8, 1, 32)
