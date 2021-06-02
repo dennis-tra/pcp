@@ -19,8 +19,8 @@ proto:
 	gofumpt -w -l ./pkg/pb/
 
 tools:
-	go install mvdan.cc/gofumpt@v0.1.0
-	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.25.0
+	go install mvdan.cc/gofumpt@v0.1.1
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.26.0
 	go install github.com/golang/mock/mockgen@v1.5.0
 
 # Remove only what we've created
