@@ -3,8 +3,10 @@ package receive
 import (
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"strings"
 
+	"github.com/ipfs/go-cid"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 
@@ -62,7 +64,14 @@ func Action(c *cli.Context) error {
 		return errors.Wrap(err, "failed loading configuration")
 	}
 
-	words := strings.Split(c.Args().First(), "-") // transfer words
+	// first user provided command line argument
+	arg := c.Args().First()
+
+	if contentID := parseCID(arg); contentID != cid.Undef {
+		return handleContentID(c.Context, contentID.String())
+	}
+
+	words := strings.Split(arg, "-") // transfer words
 
 	local, err := InitNode(c, words)
 	if err != nil {
@@ -70,7 +79,7 @@ func Action(c *cli.Context) error {
 	}
 
 	// Search for identifier
-	log.Infof("Looking for peer %s... \n", c.Args().First())
+	log.Infof("Looking for peer %s... \n", arg)
 	local.StartDiscovering(c)
 
 	// Wait for the user to stop the tool or the transfer to finish.
@@ -97,4 +106,31 @@ func help() {
 	log.Infoln("n: reject the file transfer")
 	log.Infoln("i: show information about the sender and file to be received")
 	log.Infoln("?: this help message")
+}
+
+// parseCid returns a non empty string if the given string can't be
+// parsed to a CID. This function identifies a plain CID and a
+// share.ipfs.io share link.
+func parseCID(str string) cid.Cid {
+	str = strings.TrimSpace(str)
+	c, err := cid.Decode(str)
+	if err == nil {
+		return c
+	}
+
+	u, err := url.Parse(str)
+	if err != nil {
+		return cid.Undef
+	}
+
+	fragment := strings.TrimFunc(u.Fragment, func(r rune) bool {
+		return r == '/'
+	})
+
+	c, err = cid.Decode(fragment)
+	if err != nil {
+		return cid.Undef
+	}
+
+	return c
 }
