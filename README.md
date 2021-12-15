@@ -195,14 +195,16 @@ This tool was submitted to the [International Federation for Information Process
 
 ```bibtex
 @inproceedings{Trautwein2021,
-  author    = {Trautwein, Dennis and Schubotz, Moritz and Gipp, Bela},
-  title     = {Introducing Peer Copy -- A Fully Decentralized Peer-to-Peer File Transfer Tool},
-  booktitle = {International Federation for Information Processing (IFIP) Networking 2021 Conference (IFIP '21), June 21--24, 2020, Helsinki, Finland},
-  year      = {2021},
-  address   = {Helsinki, Finland},
-  month     = {June},
-  note      = {ISBN 978-3-903176-39-3},
-  publisher = {IEEE}
+  title        = {Introducing Peer Copy - A Fully Decentralized Peer-to-Peer File Transfer Tool},
+  author       = {Trautwein, Dennis and Schubotz, Moritz and Gipp, Bela},
+  year         = 2021,
+  month        = {June},
+  booktitle    = {2021 IFIP Networking Conference (IFIP Networking)},
+  publisher    = {IEEE},
+  address      = {Espoo and Helsinki, Finland},
+  doi          = {10.23919/IFIPNetworking52078.2021.9472842},
+  note         = {ISBN 978-3-9031-7639-3},
+  topic        = {misc}
 }
 ```
 
