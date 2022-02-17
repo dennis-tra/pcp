@@ -11,7 +11,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	host "github.com/libp2p/go-libp2p-core/host"
-	discovery "github.com/libp2p/go-libp2p/p2p/discovery"
+	discovery "github.com/libp2p/go-libp2p-core/discovery"
 )
 
 // MockDiscoverer is a mock of Discoverer interface.

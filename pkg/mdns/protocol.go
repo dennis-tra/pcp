@@ -17,10 +17,6 @@ var (
 )
 
 var (
-	// Interval is the frequency with which the pcp
-	// service is advertised in the local network
-	Interval = time.Second
-
 	// Timeout is the time until a new advertisement
 	// with a potentially new discovery ID is started.
 	Timeout = time.Minute
@@ -35,16 +31,14 @@ var (
 type protocol struct {
 	host.Host
 	*service.Service
-	interval time.Duration
 
 	offset time.Duration
 }
 
 func newProtocol(h host.Host) *protocol {
 	return &protocol{
-		Host:     h,
-		interval: Interval,
-		Service:  service.New("mDNS"),
+		Host:    h,
+		Service: service.New("mDNS"),
 	}
 }
 

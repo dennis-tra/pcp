@@ -18,6 +18,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/routing"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
+
 	"github.com/multiformats/go-varint"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -101,13 +102,19 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 
 	opts = append(opts,
 		libp2p.Identity(key),
+		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"),
+		libp2p.ListenAddrStrings("/ip4/0.0.0.0/udp/0/quic"),
+		libp2p.ListenAddrStrings("/ip6/::/tcp/0"),
+		libp2p.ListenAddrStrings("/ip6/::/udp/0/quic"),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
 			node.DHT, err = kaddht.New(c.Context, h)
 			return node.DHT, err
 		}),
+
+		libp2p.EnableHolePunching(),
 	)
 
-	node.Host, err = libp2p.New(c.Context, opts...)
+	node.Host, err = libp2p.New(opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +154,7 @@ func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
 	}()
 
 	// Get own public key.
-	pub, err := n.Host.Peerstore().PubKey(n.Host.ID()).Bytes()
+	pub, err := crypto.MarshalPublicKey(n.Host.Peerstore().PubKey(n.Host.ID()))
 	if err != nil {
 		return err
 	}

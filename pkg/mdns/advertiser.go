@@ -29,11 +29,13 @@ func (a *Advertiser) Advertise(chanID int) error {
 		did := a.DiscoveryID(chanID)
 		log.Debugln("mDNS - Advertising ", did)
 		ctx, cancel := context.WithTimeout(a.ServiceContext(), Timeout)
-		mdns, err := wrapdiscovery.NewMdnsService(ctx, a, a.interval, did)
+		mdns, err := wrapdiscovery.NewMdnsService(ctx, a, did)
 		if err != nil {
 			cancel()
 			return err
 		}
+
+		mdns.Start()
 
 		select {
 		case <-a.SigShutdown():
