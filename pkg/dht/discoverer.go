@@ -48,7 +48,7 @@ func (d *Discoverer) Discover(chanID int, handler func(info peer.AddrInfo)) erro
 		ctx, cancel := context.WithTimeout(d.ServiceContext(), provideTimeout)
 		for pi := range d.dht.FindProvidersAsync(ctx, cID, 100) {
 			log.Debugln("DHT - Found peer ", pi.ID)
-			//pi.Addrs = onlyPublic(pi.Addrs)
+			pi.Addrs = onlyPublic(pi.Addrs)
 			if isRoutable(pi) {
 				go handler(pi)
 			}

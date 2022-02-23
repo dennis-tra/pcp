@@ -18,7 +18,6 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/routing"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
-
 	"github.com/multiformats/go-varint"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -38,9 +37,9 @@ type State string
 
 const (
 	Idle        State = "idle"
-	Discovering       = "discovering"
-	Advertising       = "advertising"
-	Connected         = "connected"
+	Discovering State = "discovering"
+	Advertising State = "advertising"
+	Connected   State = "connected"
 )
 
 // Node encapsulates the logic for sending and receiving messages.
@@ -102,15 +101,10 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 
 	opts = append(opts,
 		libp2p.Identity(key),
-		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"),
-		libp2p.ListenAddrStrings("/ip4/0.0.0.0/udp/0/quic"),
-		libp2p.ListenAddrStrings("/ip6/::/tcp/0"),
-		libp2p.ListenAddrStrings("/ip6/::/udp/0/quic"),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
 			node.DHT, err = kaddht.New(c.Context, h)
 			return node.DHT, err
 		}),
-
 		libp2p.EnableHolePunching(),
 	)
 
