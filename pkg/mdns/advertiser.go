@@ -3,9 +3,10 @@ package mdns
 import (
 	"context"
 
-	"github.com/dennis-tra/pcp/internal/log"
-
 	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/peer"
+
+	"github.com/dennis-tra/pcp/internal/log"
 )
 
 type Advertiser struct {
@@ -25,37 +26,38 @@ func (a *Advertiser) Advertise(chanID int) error {
 	}
 	defer a.ServiceStopped()
 
-	for {
-		did := a.DiscoveryID(chanID)
-		log.Debugln("mDNS - Advertising ", did)
-		ctx, cancel := context.WithTimeout(a.ServiceContext(), Timeout)
-		mdns, err := wrapdiscovery.NewMdnsService(ctx, a, did)
-		if err != nil {
-			cancel()
-			return err
-		}
+	ctx := a.ServiceContext()
 
-		mdns.Start()
+	did := a.DiscoveryID(chanID)
+	log.Debugln("mDNS - Advertising ", did)
+	mdns := wrapdiscovery.NewMdnsService(a, did, a)
+	if err := mdns.Start(); err != nil {
+		return err
+	}
 
-		select {
-		case <-a.SigShutdown():
-			log.Debugln("mDNS - Advertising", did, " done - shutdown signal")
-			cancel()
-			return mdns.Close()
-		case <-ctx.Done():
-			log.Debugln("mDNS - Advertising", did, "done -", ctx.Err())
-			cancel()
-			if ctx.Err() == context.DeadlineExceeded {
-				_ = mdns.Close()
-				continue
-			} else if ctx.Err() == context.Canceled {
-				_ = mdns.Close()
-				return nil
-			}
+	select {
+	case <-a.SigShutdown():
+		log.Debugln("mDNS - Advertising", did, " done - shutdown signal")
+		if err := mdns.Close(); err != nil {
+			log.Warningln("Error closing mdns service", err)
 		}
+		return nil
+	case <-ctx.Done():
+		log.Debugln("mDNS - Advertising", did, "done -", ctx.Err())
+		if err := mdns.Close(); err != nil {
+			log.Warningln("Error closing mdns service", err)
+		}
+		if ctx.Err() == context.Canceled {
+			return nil
+		}
+		return ctx.Err()
 	}
 }
 
 func (a *Advertiser) Shutdown() {
 	a.Service.Shutdown()
+}
+
+func (a *Advertiser) HandlePeerFound(info peer.AddrInfo) {
+	// no-op
 }

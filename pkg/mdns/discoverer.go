@@ -1,25 +1,23 @@
 package mdns
 
 import (
-	"net"
-	"time"
+	"context"
 
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
-	"github.com/pkg/errors"
-	"github.com/whyrusleeping/mdns"
 
 	"github.com/dennis-tra/pcp/internal/log"
 )
 
 type Discoverer struct {
 	*protocol
+	peerFoundHandler func(info peer.AddrInfo)
 }
 
 func NewDiscoverer(h host.Host) *Discoverer {
-	return &Discoverer{newProtocol(h)}
+	return &Discoverer{protocol: newProtocol(h)}
 }
 
 func (d *Discoverer) Discover(chanID int, handler func(info peer.AddrInfo)) error {
@@ -28,85 +26,59 @@ func (d *Discoverer) Discover(chanID int, handler func(info peer.AddrInfo)) erro
 	}
 	defer d.ServiceStopped()
 
-	for {
-		entriesCh := make(chan *mdns.ServiceEntry, 16)
-		go d.drainEntriesChan(entriesCh, handler)
+	// TODO: locking? probably not as it's guarded by the service abstraction.
+	d.peerFoundHandler = handler
+	defer func() { d.peerFoundHandler = nil }()
 
-		did := d.DiscoveryID(chanID)
-		log.Debugln("mDNS - Discovering", did)
-		qp := &mdns.QueryParam{
-			Domain:  "local",
-			Entries: entriesCh,
-			Service: did,
-			Timeout: time.Second * 5,
-		}
+	ctx := d.ServiceContext()
 
-		err := mdns.Query(qp)
-		log.Debugln("mDNS - Discovering", did, " done.")
-		if err != nil {
-			log.Warningln("mDNS - query error", err)
-		}
-		close(entriesCh)
-
-		select {
-		case <-d.SigShutdown():
-			return nil
-		default:
-		}
+	did := d.DiscoveryID(chanID)
+	log.Debugln("mDNS - Discovering", did)
+	mdns := wrapdiscovery.NewMdnsService(d, did, d)
+	if err := mdns.Start(); err != nil {
+		return err
 	}
+
+	select {
+	case <-d.SigShutdown():
+		log.Debugln("mDNS - Discovering", did, " done - shutdown signal")
+		if err := mdns.Close(); err != nil {
+			log.Warningln("Error closing mdns service", err)
+		}
+		return nil
+	case <-ctx.Done():
+		log.Debugln("mDNS - Discovering", did, "done -", ctx.Err())
+		if err := mdns.Close(); err != nil {
+			log.Warningln("Error closing mdns service", err)
+		}
+		if ctx.Err() == context.Canceled {
+			return nil
+		}
+		return ctx.Err()
+	}
+}
+
+func (d *Discoverer) HandlePeerFound(pi peer.AddrInfo) {
+	if d.peerFoundHandler == nil {
+		return
+	}
+
+	log.Debugln("mDNS - Found peer", pi.ID)
+
+	if pi.ID == d.ID() {
+		return
+	}
+
+	pi.Addrs = onlyPrivate(pi.Addrs)
+	if !isRoutable(pi) {
+		return
+	}
+
+	go d.peerFoundHandler(pi)
 }
 
 func (d *Discoverer) Shutdown() {
 	d.Service.Shutdown()
-}
-
-func (d *Discoverer) drainEntriesChan(entries chan *mdns.ServiceEntry, handler func(info peer.AddrInfo)) {
-	for entry := range entries {
-
-		pi, err := parseServiceEntry(entry)
-		if err != nil {
-			continue
-		}
-
-		log.Debugln("mDNS - Found peer", pi.ID)
-
-		if pi.ID == d.ID() {
-			continue
-		}
-
-		pi.Addrs = onlyPrivate(pi.Addrs)
-		if !isRoutable(pi) {
-			continue
-		}
-
-		go handler(pi)
-	}
-}
-
-func parseServiceEntry(entry *mdns.ServiceEntry) (peer.AddrInfo, error) {
-	p, err := peer.Decode(entry.Info)
-	if err != nil {
-		return peer.AddrInfo{}, errors.Wrap(err, "error parsing peer ID from mdns entry")
-	}
-
-	var addr net.IP
-	if entry.AddrV4 != nil {
-		addr = entry.AddrV4
-	} else if entry.AddrV6 != nil {
-		addr = entry.AddrV6
-	} else {
-		return peer.AddrInfo{}, errors.Wrap(err, "error parsing multiaddr from mdns entry: no IP address found")
-	}
-
-	maddr, err := manet.FromNetAddr(&net.TCPAddr{IP: addr, Port: entry.Port})
-	if err != nil {
-		return peer.AddrInfo{}, errors.Wrap(err, "error parsing multiaddr from mdns entry")
-	}
-
-	return peer.AddrInfo{
-		ID:    p,
-		Addrs: []ma.Multiaddr{maddr},
-	}, nil
 }
 
 func isRoutable(pi peer.AddrInfo) bool {
