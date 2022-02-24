@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -130,6 +131,19 @@ func (t *TransferProtocol) onTransfer(s network.Stream) {
 // the progress to the user. This function returns when the bytes where transmitted and we have received an
 // acknowledgment.
 func (t *TransferProtocol) Transfer(ctx context.Context, peerID peer.ID, basePath string) error {
+
+	ctx = network.WithForceDirectDial(ctx, "hole-punching")
+	for i := 0; i < 3; i++ {
+		if _, err := t.node.Network().DialPeer(ctx, peerID); err == nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(5 * time.Second):
+		}
+	}
+
 	// Open a new stream to our peer.
 	s, err := t.node.NewStream(ctx, peerID, ProtocolTransfer)
 	if err != nil {
