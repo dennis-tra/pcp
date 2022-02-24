@@ -11,8 +11,6 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
-	ds "github.com/ipfs/go-datastore"
-	dssync "github.com/ipfs/go-datastore/sync"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/host"
@@ -101,8 +99,6 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 		return nil, err
 	}
 
-	ds := dssync.MutexWrap(ds.NewMapDatastore())
-
 	opts = append(opts,
 		libp2p.Identity(key),
 		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"),
@@ -110,7 +106,7 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 		libp2p.ListenAddrStrings("/ip6/::/tcp/0"),
 		libp2p.ListenAddrStrings("/ip6/::/udp/0/quic"),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
-			node.DHT = kaddht.NewDHTClient(c.Context, h, ds)
+			node.DHT, err = kaddht.New(c.Context, h, kaddht.Mode(kaddht.ModeClient))
 			return node.DHT, nil
 		}),
 		libp2p.EnableHolePunching(),
