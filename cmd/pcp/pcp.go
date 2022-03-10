@@ -12,6 +12,7 @@ import (
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/receive"
 	"github.com/dennis-tra/pcp/pkg/send"
+	logging "github.com/ipfs/go-log/v2"
 )
 
 var (
@@ -45,6 +46,7 @@ func main() {
 		Before: func(c *cli.Context) error {
 			if c.Bool("debug") {
 				log.SetLevel(log.DebugLevel)
+				logging.SetLogLevel("p2p-holepunch", "debug")
 			}
 			return nil
 		},
