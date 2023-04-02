@@ -6,7 +6,7 @@ test:
 	go test ./...
 
 build:
-	go build -o dist/pcp cmd/pcp/pcp.go
+	go build -o dist/pcp github.com/dennis-tra/pcp/cmd/pcp
 
 install:
 	go install cmd/pcp/pcp.go
