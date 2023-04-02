@@ -12,15 +12,14 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-core/crypto"
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/routing"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/routing"
 
 	"github.com/multiformats/go-varint"
-	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 
 	"github.com/dennis-tra/pcp/internal/log"
@@ -265,7 +264,7 @@ func (n *Node) Read(s network.Stream, buf p2p.HeaderMessage) error {
 	data, err := ioutil.ReadAll(s)
 	if err != nil {
 		if err2 := s.Reset(); err2 != nil {
-			err = errors.Wrap(err, err2.Error())
+			err = fmt.Errorf("%s: %w", err2.Error(), err)
 		}
 		return err
 	}

@@ -2,9 +2,8 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"sync"
-
-	"github.com/pkg/errors"
 
 	"github.com/dennis-tra/pcp/internal/log"
 )
@@ -22,7 +21,7 @@ const (
 
 // ErrServiceAlreadyStarted is returned if there are multiple calls to ServiceStarted.
 // If this happens somethings wrong :/
-var ErrServiceAlreadyStarted = errors.New("the service was already started in the past")
+var ErrServiceAlreadyStarted = fmt.Errorf("the service was already started in the past")
 
 // Service represents an entity that runs in a
 // separate go routine and where its lifecycle

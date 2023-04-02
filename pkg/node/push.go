@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/dennis-tra/pcp/internal/log"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"

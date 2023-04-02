@@ -1,14 +1,14 @@
 package mdns
 
 import (
+	"fmt"
 	"net"
 	"time"
 
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
-	"github.com/pkg/errors"
 	"github.com/whyrusleeping/mdns"
 
 	"github.com/dennis-tra/pcp/internal/log"
@@ -86,7 +86,7 @@ func (d *Discoverer) drainEntriesChan(entries chan *mdns.ServiceEntry, handler f
 func parseServiceEntry(entry *mdns.ServiceEntry) (peer.AddrInfo, error) {
 	p, err := peer.Decode(entry.Info)
 	if err != nil {
-		return peer.AddrInfo{}, errors.Wrap(err, "error parsing peer ID from mdns entry")
+		return peer.AddrInfo{}, fmt.Errorf("error parsing peer ID from mdns entry: %w", err)
 	}
 
 	var addr net.IP
@@ -95,12 +95,12 @@ func parseServiceEntry(entry *mdns.ServiceEntry) (peer.AddrInfo, error) {
 	} else if entry.AddrV6 != nil {
 		addr = entry.AddrV6
 	} else {
-		return peer.AddrInfo{}, errors.Wrap(err, "error parsing multiaddr from mdns entry: no IP address found")
+		return peer.AddrInfo{}, fmt.Errorf("error parsing multiaddr from mdns entry: no IP address found: %w", err)
 	}
 
 	maddr, err := manet.FromNetAddr(&net.TCPAddr{IP: addr, Port: entry.Port})
 	if err != nil {
-		return peer.AddrInfo{}, errors.Wrap(err, "error parsing multiaddr from mdns entry")
+		return peer.AddrInfo{}, fmt.Errorf("error parsing multiaddr from mdns entry: %w", err)
 	}
 
 	return peer.AddrInfo{

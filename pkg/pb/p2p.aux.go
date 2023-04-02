@@ -2,7 +2,7 @@ package proto
 
 import (
 	"github.com/golang/protobuf/proto"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type HeaderMessage interface {

@@ -2,6 +2,7 @@ package receive
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -14,8 +15,7 @@ import (
 	"github.com/dennis-tra/pcp/pkg/mdns"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/pkg/errors"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type PeerState uint8
@@ -186,7 +186,7 @@ func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {
 		log.Infof("Do you want to receive this %s? [y,n,i,?] ", strings.ToLower(obj))
 		scanner := bufio.NewScanner(os.Stdin)
 		if !scanner.Scan() {
-			return true, errors.Wrap(scanner.Err(), "failed reading from stdin")
+			return true, fmt.Errorf("failed reading from stdin: %w", scanner.Err())
 		}
 
 		// sanitize user input

@@ -8,8 +8,7 @@ import (
 	"sync"
 
 	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/pkg/errors"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/urfave/cli/v2"
 
 	"github.com/dennis-tra/pcp/internal/log"
@@ -154,7 +153,7 @@ func (n *Node) Transfer(peerID peer.ID) error {
 	log.Infoln("Accepted!")
 
 	if err = n.Node.Transfer(n.ServiceContext(), peerID, n.filepath); err != nil {
-		return errors.Wrap(err, "could not transfer file to peer")
+		return fmt.Errorf("could not transfer file to peer: %w", err)
 	}
 
 	log.Infoln("Successfully sent file/directory!")

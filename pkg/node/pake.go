@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/schollz/pake/v2"
 
 	"github.com/dennis-tra/pcp/internal/log"

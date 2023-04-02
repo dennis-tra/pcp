@@ -1,7 +1,6 @@
 package dht
 
 import (
-	"context"
 	"strconv"
 	"strings"
 	"sync"
@@ -9,8 +8,8 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,7 +26,7 @@ func setup(t *testing.T) (*gomock.Controller, host.Host, mocknet.Mocknet, func(t
 
 	ctrl := gomock.NewController(t)
 
-	net := mocknet.New(context.Background())
+	net := mocknet.New()
 
 	tmpTruncateDuration := TruncateDuration
 	tmpPubAddrInter := pubAddrInter

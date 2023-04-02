@@ -9,10 +9,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/pkg/errors"
-
-	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	progress "github.com/schollz/progressbar/v3"
 
@@ -178,17 +176,17 @@ func (t *TransferProtocol) Transfer(ctx context.Context, peerID peer.ID, basePat
 
 		hdr, err := tar.FileInfoHeader(info, "")
 		if err != nil {
-			return errors.Wrapf(err, "error writing tar file info header %s: %s", path, err)
+			return fmt.Errorf("error writing tar file info header %s: %w", path, err)
 		}
 
 		// To preserve directory structure in the tar ball.
 		hdr.Name, err = relPath(basePath, base.IsDir(), path)
 		if err != nil {
-			return errors.Wrapf(err, "error building relative path: %s (%v) %s", basePath, base.IsDir(), path)
+			return fmt.Errorf("error building relative path: %s (%v) %s: %w", basePath, base.IsDir(), path, err)
 		}
 
 		if err = tw.WriteHeader(hdr); err != nil {
-			return errors.Wrap(err, "error writing tar header")
+			return fmt.Errorf("error writing tar header: %w", err)
 		}
 
 		// Continue as all information was written above with WriteHeader.
@@ -198,7 +196,7 @@ func (t *TransferProtocol) Transfer(ctx context.Context, peerID peer.ID, basePat
 
 		f, err := os.Open(path)
 		if err != nil {
-			return errors.Wrapf(err, "error opening file for taring at: %s", path)
+			return fmt.Errorf("error opening file for taring at %s: %w", path, err)
 		}
 		defer f.Close()
 
@@ -220,7 +218,7 @@ func (t *TransferProtocol) Transfer(ctx context.Context, peerID peer.ID, basePat
 	// Send the hash of all sent data, so our recipient can check the data.
 	_, err = t.node.WriteBytes(s, se.Hash())
 	if err != nil {
-		return errors.Wrap(err, "error writing final hash to stream")
+		return fmt.Errorf("error writing final hash to stream: %w", err)
 	}
 
 	return t.node.WaitForEOF(s)

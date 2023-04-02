@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p/core/host"
 
 	"github.com/dennis-tra/pcp/internal/wrap"
 	"github.com/dennis-tra/pcp/pkg/service"

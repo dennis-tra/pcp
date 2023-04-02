@@ -5,7 +5,7 @@ import (
 
 	"github.com/dennis-tra/pcp/internal/log"
 
-	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p/core/host"
 )
 
 type Advertiser struct {

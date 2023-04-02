@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 
 	"github.com/dennis-tra/pcp/internal/log"
@@ -59,14 +58,14 @@ will contain the partial written bytes.`,
 func Action(c *cli.Context) error {
 	c, err := config.FillContext(c)
 	if err != nil {
-		return errors.Wrap(err, "failed loading configuration")
+		return fmt.Errorf("failed loading configuration: %w", err)
 	}
 
 	words := strings.Split(c.Args().First(), "-") // transfer words
 
 	local, err := InitNode(c, words)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to initialize node"))
+		return fmt.Errorf("failed to initialize node: %w", err)
 	}
 
 	// Search for identifier

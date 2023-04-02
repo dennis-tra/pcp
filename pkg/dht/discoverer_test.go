@@ -10,7 +10,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/ipfs/go-cid"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -188,7 +188,7 @@ func TestTimeCriticalDiscoverer_Discover_restartAsSoonAsCurrentTimeSlotIsExpired
 }
 
 func TestDiscoverer_SetOffset(t *testing.T) {
-	net := mocknet.New(context.Background())
+	net := mocknet.New()
 	local, err := net.GenPeer()
 	require.NoError(t, err)
 	d := NewDiscoverer(local, nil)

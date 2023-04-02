@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/pkg/errors"
 	"github.com/tyler-smith/go-bip39/wordlists"
 )
 
@@ -35,7 +34,7 @@ var Lists = map[Language][]string{
 	Spanish:            wordlists.Spanish,
 }
 
-var ErrUnsupportedLanguage = errors.New("unsupported language")
+var ErrUnsupportedLanguage = fmt.Errorf("unsupported language")
 
 // Random returns a slice of random words and their respective
 // integer values from the BIP39 wordlist of that given language.
