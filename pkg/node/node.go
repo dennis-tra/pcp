@@ -101,10 +101,6 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 
 	opts = append(opts,
 		libp2p.Identity(key),
-		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"),
-		libp2p.ListenAddrStrings("/ip4/0.0.0.0/udp/0/quic"),
-		libp2p.ListenAddrStrings("/ip6/::/tcp/0"),
-		libp2p.ListenAddrStrings("/ip6/::/udp/0/quic"),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
 			node.DHT, err = kaddht.New(c.Context, h)
 			return node.DHT, err
