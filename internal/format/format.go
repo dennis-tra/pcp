@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Bytes attaches a unit to the bytes value and makes it human readable.
+// Bytes attaches a unit to the bytes value and makes it human-readable.
 func Bytes(bytes int64) string {
 	if bytes >= 1e12 {
 		return fmt.Sprintf("%dTB", bytes/1e12)
