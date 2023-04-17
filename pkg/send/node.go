@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/urfave/cli/v2"
 
@@ -36,7 +35,7 @@ type Advertiser interface {
 // InitNode returns a fully configured node ready to start
 // advertising that we want to send a specific file.
 func InitNode(c *cli.Context, filepath string, words []string) (*Node, error) {
-	h, err := pcpnode.New(c, words, libp2p.EnableAutoRelay())
+	h, err := pcpnode.New(c, words)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +59,7 @@ func (n *Node) Shutdown() {
 }
 
 // StartAdvertising asynchronously advertises the given code through the means of all
-// registered advertisers. Currently these are multicast DNS and DHT.
+// registered advertisers. Currently, these are multicast DNS and DHT.
 func (n *Node) StartAdvertising(c *cli.Context) {
 	n.SetState(pcpnode.Advertising)
 

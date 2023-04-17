@@ -1,11 +1,9 @@
 package dht
 
 import (
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -16,9 +14,10 @@ import (
 
 	"github.com/dennis-tra/pcp/internal/mock"
 	"github.com/dennis-tra/pcp/internal/wrap"
+	"github.com/dennis-tra/pcp/pkg/discovery"
 )
 
-func setup(t *testing.T) (*gomock.Controller, host.Host, mocknet.Mocknet, func(t *testing.T)) {
+func setup(t *testing.T) (*gomock.Controller, host.Host, mocknet.Mocknet) {
 	wrapDHT = wrap.DHT{}
 	wrapmanet = wrap.Manet{}
 	wraptime = wrap.Time{}
@@ -28,24 +27,26 @@ func setup(t *testing.T) (*gomock.Controller, host.Host, mocknet.Mocknet, func(t
 
 	net := mocknet.New()
 
-	tmpTruncateDuration := TruncateDuration
+	tmpTruncateDuration := discovery.TruncateDuration
 	tmpPubAddrInter := pubAddrInter
 	tmpProvideTimeout := provideTimeout
 
 	local, err := net.GenPeer()
 	require.NoError(t, err)
 
-	return ctrl, local, net, func(t *testing.T) {
+	t.Cleanup(func() {
 		ctrl.Finish()
 
-		TruncateDuration = tmpTruncateDuration
+		discovery.TruncateDuration = tmpTruncateDuration
 		pubAddrInter = tmpPubAddrInter
 		provideTimeout = tmpProvideTimeout
 
 		wrapDHT = wrap.DHT{}
 		wrapmanet = wrap.Manet{}
 		wraptime = wrap.Time{}
-	}
+	})
+
+	return ctrl, local, net
 }
 
 func mockGetDefaultBootstrapPeerAddrInfos(ctrl *gomock.Controller, pis []peer.AddrInfo) {
@@ -83,8 +84,7 @@ func genPeers(t *testing.T, net mocknet.Mocknet, h host.Host, count int) []peer.
 }
 
 func TestProtocol_Bootstrap_connectsBootstrapPeers(t *testing.T) {
-	ctrl, local, net, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local, net := setup(t)
 
 	peers := genPeers(t, net, local, ConnThreshold)
 	mockGetDefaultBootstrapPeerAddrInfos(ctrl, peers)
@@ -96,42 +96,8 @@ func TestProtocol_Bootstrap_connectsBootstrapPeers(t *testing.T) {
 	assert.Len(t, net.Net(local.ID()).Peers(), ConnThreshold)
 }
 
-func TestTimeCriticalProtocol_Bootstrap_connectsBootstrapPeersInParallel(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping time critical test") // They are flaky on GitHub actions
-	}
-
-	ctrl, local, net, teardown := setup(t)
-	defer teardown(t)
-
-	peers := genPeers(t, net, local, 100)
-	mockGetDefaultBootstrapPeerAddrInfos(ctrl, peers)
-
-	latency := 50 * time.Millisecond
-	for _, p := range peers {
-		links := net.LinksBetweenPeers(local.ID(), p.ID)
-		for _, l := range links {
-			l.SetOptions(mocknet.LinkOptions{
-				Latency: latency,
-			})
-		}
-	}
-
-	start := time.Now()
-	err := newProtocol(local, nil).Bootstrap()
-	end := time.Now()
-
-	require.NoError(t, err)
-
-	assert.InDelta(t, latency, end.Sub(start), float64(latency)/2)
-
-	// Check if they are connected.
-	assert.Len(t, net.Net(local.ID()).Peers(), 100)
-}
-
 func TestProtocol_Bootstrap_errorOnNoConfiguredBootstrapPeers(t *testing.T) {
-	ctrl, local, _, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local, _ := setup(t)
 
 	mockGetDefaultBootstrapPeerAddrInfos(ctrl, []peer.AddrInfo{})
 
@@ -140,8 +106,7 @@ func TestProtocol_Bootstrap_errorOnNoConfiguredBootstrapPeers(t *testing.T) {
 }
 
 func TestProtocol_Bootstrap_cantConnectToOneLessThanThreshold(t *testing.T) {
-	ctrl, local, net, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local, net := setup(t)
 
 	peers := genPeers(t, net, local, ConnThreshold)
 	mockGetDefaultBootstrapPeerAddrInfos(ctrl, peers)
@@ -159,8 +124,7 @@ func TestProtocol_Bootstrap_cantConnectToOneLessThanThreshold(t *testing.T) {
 }
 
 func TestProtocol_Bootstrap_cantConnectToMultipleLessThanThreshold(t *testing.T) {
-	ctrl, local, net, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local, net := setup(t)
 
 	peers := genPeers(t, net, local, ConnThreshold)
 	mockGetDefaultBootstrapPeerAddrInfos(ctrl, peers)
@@ -183,8 +147,7 @@ func TestProtocol_Bootstrap_cantConnectToMultipleLessThanThreshold(t *testing.T)
 }
 
 func TestProtocol_Bootstrap_cantConnectButGreaterThanThreshold(t *testing.T) {
-	ctrl, local, net, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local, net := setup(t)
 
 	peers := genPeers(t, net, local, ConnThreshold+1)
 	mockGetDefaultBootstrapPeerAddrInfos(ctrl, peers)
@@ -194,21 +157,4 @@ func TestProtocol_Bootstrap_cantConnectButGreaterThanThreshold(t *testing.T) {
 
 	err = newProtocol(local, nil).Bootstrap()
 	assert.NoError(t, err)
-}
-
-func TestProtocol_DiscoveryIdentifier_returnsCorrect(t *testing.T) {
-	ctrl, local, _, teardown := setup(t)
-	defer teardown(t)
-
-	now := time.Now()
-
-	m := mock.NewMockTimer(ctrl)
-	m.EXPECT().Now().Return(now)
-	wraptime = m
-
-	p := newProtocol(local, nil)
-	id := p.DiscoveryID(333)
-
-	unixNow := now.Truncate(TruncateDuration).UnixNano()
-	assert.Equal(t, "/pcp/"+strconv.Itoa(int(unixNow))+"/333", id)
 }

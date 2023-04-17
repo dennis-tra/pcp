@@ -6,8 +6,6 @@ import (
 	"testing"
 	"time"
 
-	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
-
 	"github.com/golang/mock/gomock"
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -15,16 +13,30 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dennis-tra/pcp/internal/mock"
+	"github.com/dennis-tra/pcp/pkg/discovery"
 )
 
+type DummyNotifee struct {
+	handler func(pi peer.AddrInfo)
+}
+
+func (d *DummyNotifee) HandlePeerFound(pi peer.AddrInfo) {
+	if d.handler == nil {
+		return
+	}
+
+	d.handler(pi)
+}
+
 func TestDiscoverer_Discover_happyPath(t *testing.T) {
-	ctrl, local, net, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local, net := setup(t)
 
 	mockDefaultBootstrapPeers(t, ctrl, net, local)
 
+	dn := &DummyNotifee{}
+
 	dht := mock.NewMockIpfsDHT(ctrl)
-	d := NewDiscoverer(local, dht)
+	d := NewDiscoverer(local, dht, dn)
 
 	piChan := make(chan peer.AddrInfo)
 	dht.EXPECT().
@@ -58,7 +70,7 @@ func TestDiscoverer_Discover_happyPath(t *testing.T) {
 		}
 	}()
 
-	handler := func(pi peer.AddrInfo) {
+	dn.handler = func(pi peer.AddrInfo) {
 		assert.True(t, pi.ID == provider1.ID() || pi.ID == provider2.ID())
 		wg.Done()
 	}
@@ -68,18 +80,19 @@ func TestDiscoverer_Discover_happyPath(t *testing.T) {
 		d.Shutdown()
 	}()
 
-	err = d.Discover(333, handler)
+	err = d.Discover(333)
 	assert.NoError(t, err)
 }
 
 func TestDiscoverer_Discover_reschedulesFindProvider(t *testing.T) {
-	ctrl, local, net, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local, net := setup(t)
 
 	mockDefaultBootstrapPeers(t, ctrl, net, local)
 
+	dn := &DummyNotifee{}
+
 	dht := mock.NewMockIpfsDHT(ctrl)
-	d := NewDiscoverer(local, dht)
+	d := NewDiscoverer(local, dht, dn)
 
 	var wg sync.WaitGroup
 	wg.Add(5)
@@ -98,20 +111,21 @@ func TestDiscoverer_Discover_reschedulesFindProvider(t *testing.T) {
 		d.Shutdown()
 	}()
 
-	err := d.Discover(333, nil)
+	err := d.Discover(333)
 	assert.NoError(t, err)
 }
 
 func TestDiscoverer_Discover_callsFindProviderWithMutatingDiscoveryIDs(t *testing.T) {
-	ctrl, local, net, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local, net := setup(t)
 
-	TruncateDuration = 10 * time.Millisecond
+	discovery.TruncateDuration = 10 * time.Millisecond
 
 	mockDefaultBootstrapPeers(t, ctrl, net, local)
 
+	dn := &DummyNotifee{}
+
 	dht := mock.NewMockIpfsDHT(ctrl)
-	d := NewDiscoverer(local, dht)
+	d := NewDiscoverer(local, dht, dn)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -123,7 +137,7 @@ func TestDiscoverer_Discover_callsFindProviderWithMutatingDiscoveryIDs(t *testin
 			cIDs = append(cIDs, cID.String())
 			piChan := make(chan peer.AddrInfo)
 			go func() {
-				time.Sleep(2 * TruncateDuration)
+				time.Sleep(2 * discovery.TruncateDuration)
 				close(piChan)
 			}()
 			wg.Done()
@@ -135,7 +149,7 @@ func TestDiscoverer_Discover_callsFindProviderWithMutatingDiscoveryIDs(t *testin
 		d.Shutdown()
 	}()
 
-	err := d.Discover(333, nil)
+	err := d.Discover(333)
 	assert.NoError(t, err)
 
 	assert.NotEqual(t, cIDs[0], cIDs[1])
@@ -146,15 +160,16 @@ func TestTimeCriticalDiscoverer_Discover_restartAsSoonAsCurrentTimeSlotIsExpired
 		t.Skip("skipping time critical test") // They are flaky on GitHub actions
 	}
 
-	ctrl, local, net, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local, net := setup(t)
 
 	provideTimeout = 20 * time.Millisecond
 
 	mockDefaultBootstrapPeers(t, ctrl, net, local)
 
+	dn := &DummyNotifee{}
+
 	dht := mock.NewMockIpfsDHT(ctrl)
-	d := NewDiscoverer(local, dht)
+	d := NewDiscoverer(local, dht, dn)
 
 	rounds := 5
 	var wg sync.WaitGroup
@@ -178,22 +193,11 @@ func TestTimeCriticalDiscoverer_Discover_restartAsSoonAsCurrentTimeSlotIsExpired
 	}()
 
 	start := time.Now()
-	err := d.Discover(333, nil)
+	err := d.Discover(333)
 	end := time.Now()
 
 	assert.NoError(t, err)
 
 	// Only 4 because last round is immediately termianated by d.Shutdown()
 	assert.InDelta(t, 4*provideTimeout, end.Sub(start), float64(provideTimeout))
-}
-
-func TestDiscoverer_SetOffset(t *testing.T) {
-	net := mocknet.New()
-	local, err := net.GenPeer()
-	require.NoError(t, err)
-	d := NewDiscoverer(local, nil)
-	id1 := d.DiscoveryID(333)
-	d.SetOffset(TruncateDuration * 3)
-	id2 := d.DiscoveryID(333)
-	assert.NotEqual(t, id1, id2)
 }

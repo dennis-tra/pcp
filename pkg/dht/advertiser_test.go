@@ -14,12 +14,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dennis-tra/pcp/internal/mock"
+	"github.com/dennis-tra/pcp/pkg/discovery"
 	"github.com/dennis-tra/pcp/pkg/service"
 )
 
 func TestAdvertiser_Advertise(t *testing.T) {
-	ctrl, local, net, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local, net := setup(t)
 
 	mockDefaultBootstrapPeers(t, ctrl, net, local)
 
@@ -51,8 +51,7 @@ func TestAdvertiser_Advertise(t *testing.T) {
 }
 
 func TestAdvertiser_Advertise_deadlineExceeded(t *testing.T) {
-	ctrl, local, net, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local, net := setup(t)
 
 	provideTimeout = 10 * time.Millisecond
 
@@ -82,8 +81,7 @@ func TestAdvertiser_Advertise_deadlineExceeded(t *testing.T) {
 }
 
 func TestAdvertiser_Advertise_provideAfterPublicAddr(t *testing.T) {
-	ctrl, local, net, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local, net := setup(t)
 
 	pubAddrInter = 10 * time.Millisecond
 
@@ -122,8 +120,7 @@ func TestAdvertiser_Advertise_provideAfterPublicAddr(t *testing.T) {
 }
 
 func TestAdvertiser_Advertise_listensOnShutdownIfNoPublicAddr(t *testing.T) {
-	ctrl, local, net, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local, net := setup(t)
 
 	mockDefaultBootstrapPeers(t, ctrl, net, local)
 
@@ -157,8 +154,7 @@ func TestAdvertiser_Advertise_listensOnShutdownIfNoPublicAddr(t *testing.T) {
 }
 
 func TestAdvertiser_Advertise_propagatesServiceAlreadyStarted(t *testing.T) {
-	ctrl, local, net, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local, net := setup(t)
 
 	mockDefaultBootstrapPeers(t, ctrl, net, local)
 
@@ -172,10 +168,9 @@ func TestAdvertiser_Advertise_propagatesServiceAlreadyStarted(t *testing.T) {
 }
 
 func TestAdvertiser_Advertise_continuesToProvideOnError(t *testing.T) {
-	ctrl, local, net, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local, net := setup(t)
 
-	TruncateDuration = 10 * time.Millisecond
+	discovery.TruncateDuration = 10 * time.Millisecond
 
 	mockDefaultBootstrapPeers(t, ctrl, net, local)
 	dht := mock.NewMockIpfsDHT(ctrl)
@@ -210,10 +205,9 @@ func TestAdvertiser_Advertise_continuesToProvideOnError(t *testing.T) {
 }
 
 func TestAdvertiser_Advertise_mutatesDiscoveryIdentifier(t *testing.T) {
-	ctrl, local, net, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local, net := setup(t)
 
-	TruncateDuration = 10 * time.Millisecond
+	discovery.TruncateDuration = 10 * time.Millisecond
 
 	mockDefaultBootstrapPeers(t, ctrl, net, local)
 	dht := mock.NewMockIpfsDHT(ctrl)

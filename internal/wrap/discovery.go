@@ -1,25 +1,16 @@
 package wrap
 
 import (
-	"context"
-
 	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 )
 
 type Discoverer interface {
-	NewMdnsService(ctx context.Context, peerhost host.Host, serviceTag string) (mdns.Service, error)
+	NewMdnsService(peerhost host.Host, serviceTag string, notifee mdns.Notifee) mdns.Service
 }
 
 type Discovery struct{}
 
-func (d Discovery) HandlePeerFound(peer.AddrInfo) {}
-func (d Discovery) NewMdnsService(ctx context.Context, peerhost host.Host, serviceTag string) (mdns.Service, error) {
-	mdnsSvc := mdns.NewMdnsService(peerhost, serviceTag, &d)
-	if err := mdnsSvc.Start(); err != nil {
-		mdnsSvc.Close()
-		return nil, err
-	}
-	return mdnsSvc, nil
+func (d Discovery) NewMdnsService(peerhost host.Host, serviceTag string, notifee mdns.Notifee) mdns.Service {
+	return mdns.NewMdnsService(peerhost, serviceTag, notifee)
 }

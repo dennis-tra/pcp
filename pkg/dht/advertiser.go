@@ -12,7 +12,7 @@ import (
 
 var (
 	// Timeout for pushing our data to the DHT.
-	provideTimeout = time.Minute
+	provideTimeout = 30 * time.Second
 
 	// Interval between two checks whether we know our public
 	// IP address. This can take time until e.g. the identify
@@ -41,8 +41,8 @@ func NewAdvertiser(h host.Host, dht wrap.IpfsDHT) *Advertiser {
 // would find the new and the stale entry. To avoid finding the stale entry
 // we use the current time truncated to 5 minute intervals (TruncateDuration).
 // When pcp is advertising its own channel-id + time slot it can happen that
-// it rolls over to the next time slot. Than pcp just advertises the new time slot
-// as well. It can still be found with the old one.
+// it rolls over to the next time slot. Then, pcp just advertises the new
+// time slot as well. It can still be found with the old one.
 func (a *Advertiser) Advertise(chanID int) error {
 	if err := a.Bootstrap(); err != nil {
 		return err
@@ -69,7 +69,7 @@ func (a *Advertiser) Advertise(chanID int) error {
 	}
 
 	for {
-		err := a.provide(a.ServiceContext(), a.DiscoveryID(chanID))
+		err := a.provide(a.ServiceContext(), a.did.DiscoveryID(chanID))
 		if err == context.Canceled {
 			break
 		} else if err != nil && err != context.DeadlineExceeded {
@@ -93,7 +93,7 @@ func (a *Advertiser) HasPublicAddr() bool {
 	return false
 }
 
-// Shutdown stops the advertise mechanics.
+// Shutdown stops the advertisement mechanics.
 func (a *Advertiser) Shutdown() {
 	a.Service.Shutdown()
 }
@@ -101,15 +101,16 @@ func (a *Advertiser) Shutdown() {
 // the context requires a timeout; it determines how long the DHT looks for
 // closest peers to the key/CID before it goes on to provide the record to them.
 // Not setting a timeout here will make the DHT wander forever.
-func (a *Advertiser) provide(ctx context.Context, id string) error {
-	log.Debugln("DHT - Advertising", id)
-	defer log.Debugln("DHT - Advertising", id, "done")
-	cID, err := strToCid(id)
+func (a *Advertiser) provide(ctx context.Context, did string) error {
+	log.Debugln("DHT - Advertising", did)
+	defer log.Debugln("DHT - Advertising", did, "done")
+	cID, err := a.did.ContentID(did)
 	if err != nil {
 		return err
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, provideTimeout)
 	defer cancel()
+
 	return a.dht.Provide(ctx, cID, true)
 }

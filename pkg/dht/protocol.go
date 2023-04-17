@@ -3,15 +3,13 @@ package dht
 import (
 	"fmt"
 	"sync"
-	"time"
 
-	"github.com/ipfs/go-cid"
-	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/peer"
-	mh "github.com/multiformats/go-multihash"
+	"github.com/dennis-tra/pcp/pkg/discovery"
 
 	"github.com/dennis-tra/pcp/internal/wrap"
 	"github.com/dennis-tra/pcp/pkg/service"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // These wrapped top level functions are here for testing purposes.
@@ -24,9 +22,6 @@ var (
 var (
 	// ConnThreshold represents the minimum number of bootstrap peers we need a connection to.
 	ConnThreshold = 3
-
-	// TruncateDuration represents the time slot to which the current time is truncated.
-	TruncateDuration = 5 * time.Minute
 
 	// bootstrap holds the sync.Onces for each host, so that bootstrap is called for each host
 	// only once.
@@ -42,13 +37,17 @@ type protocol struct {
 	// service that is started and stopped externally.
 	service.Service
 	dht wrap.IpfsDHT
-
-	offset time.Duration
+	did discovery.ID
 }
 
 func newProtocol(h host.Host, dht wrap.IpfsDHT) *protocol {
 	bootstrap[h.ID()] = &sync.Once{}
-	return &protocol{Host: h, dht: dht, Service: service.New("DHT")}
+	return &protocol{
+		Host:    h,
+		dht:     dht,
+		Service: service.New("DHT"),
+		did:     discovery.ID{},
+	}
 }
 
 // Bootstrap connects to a set of bootstrap nodes to connect
@@ -106,30 +105,4 @@ func (p *protocol) Bootstrap() (err error) {
 		}
 	})
 	return
-}
-
-// TimeSlotStart returns the time when the current time slot started.f
-func (p *protocol) TimeSlotStart() time.Time {
-	return p.refTime().Truncate(TruncateDuration)
-}
-
-// refTime returns the reference time to calculate the time slot from.
-func (p *protocol) refTime() time.Time {
-	return wraptime.Now().Add(p.offset)
-}
-
-// DiscoveryID returns the string, that we use to advertise
-// via mDNS and the DHT. See chanID above for more information.
-// Using UnixNano for testing.
-func (p *protocol) DiscoveryID(chanID int) string {
-	return fmt.Sprintf("/pcp/%d/%d", p.TimeSlotStart().UnixNano(), chanID)
-}
-
-// strToCid hashes the given string (SHA256) and produces a CID from that hash.
-func strToCid(str string) (cid.Cid, error) {
-	h, err := mh.Sum([]byte(str), mh.SHA2_256, -1)
-	if err != nil {
-		return cid.Undef, err
-	}
-	return cid.NewCidV1(cid.Raw, h), nil
 }

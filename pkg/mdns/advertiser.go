@@ -1,12 +1,13 @@
 package mdns
 
 import (
-	"context"
 	"fmt"
-
-	"github.com/dennis-tra/pcp/internal/log"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
+
+	"github.com/dennis-tra/pcp/internal/log"
 )
 
 type Advertiser struct {
@@ -17,9 +18,7 @@ func NewAdvertiser(h host.Host) *Advertiser {
 	return &Advertiser{newProtocol(h)}
 }
 
-// Advertise broadcasts that we're providing data for the given code.
-//
-// TODO: NewMdnsService also polls for peers. This is quite chatty, so we could extract the server-only logic.
+// Advertise broadcasts that we're providing data for the given channel ID in the local network.
 func (a *Advertiser) Advertise(chanID int) error {
 	if err := a.ServiceStarted(); err != nil {
 		return err
@@ -27,37 +26,28 @@ func (a *Advertiser) Advertise(chanID int) error {
 	defer a.ServiceStopped()
 
 	for {
-		did := a.DiscoveryID(chanID)
+		did := a.did.DiscoveryID(chanID)
 		log.Debugln("mDNS - Advertising ", did)
-		ctx, cancel := context.WithTimeout(a.ServiceContext(), Timeout)
-		mdns, err := wrapdiscovery.NewMdnsService(ctx, a, did)
-		if err != nil {
-			cancel()
-			return fmt.Errorf("new mdns service: %w", err)
-		}
-
-		if err = mdns.Start(); err != nil {
-			cancel()
+		mdns := wrapdiscovery.NewMdnsService(a, did, a)
+		if err := mdns.Start(); err != nil {
 			return fmt.Errorf("start mdns service: %w", err)
 		}
 
 		select {
 		case <-a.SigShutdown():
 			log.Debugln("mDNS - Advertising", did, " done - shutdown signal")
-			cancel()
 			return mdns.Close()
-		case <-ctx.Done():
-			log.Debugln("mDNS - Advertising", did, "done -", ctx.Err())
-			cancel()
-			if ctx.Err() == context.DeadlineExceeded {
-				_ = mdns.Close()
-				continue
-			} else if ctx.Err() == context.Canceled {
-				_ = mdns.Close()
-				return nil
-			}
+		case <-time.After(Timeout):
+		}
+
+		log.Debugln("mDNS - Advertising", did, "done")
+		if err := mdns.Close(); err != nil {
+			log.Warningf("Error closing MDNS service: %s", err)
 		}
 	}
+}
+
+func (a *Advertiser) HandlePeerFound(info peer.AddrInfo) {
 }
 
 func (a *Advertiser) Shutdown() {

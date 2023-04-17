@@ -37,7 +37,7 @@ type Node struct {
 }
 
 type Discoverer interface {
-	Discover(chanID int, handler func(info peer.AddrInfo)) error
+	Discover(chanID int) error
 	Shutdown()
 }
 
@@ -71,26 +71,26 @@ func (n *Node) StartDiscovering(c *cli.Context) {
 
 	if c.Bool("mdns") == c.Bool("dht") {
 		n.discoverers = []Discoverer{
-			dht.NewDiscoverer(n, n.DHT),
-			dht.NewDiscoverer(n, n.DHT).SetOffset(-dht.TruncateDuration),
-			mdns.NewDiscoverer(n.Node),
-			mdns.NewDiscoverer(n.Node).SetOffset(-dht.TruncateDuration),
+			dht.NewDiscoverer(n, n.DHT, n),
+			dht.NewDiscoverer(n, n.DHT, n).SetOffset(-dht.TruncateDuration),
+			mdns.NewDiscoverer(n.Node, n),
+			mdns.NewDiscoverer(n.Node, n).SetOffset(-dht.TruncateDuration),
 		}
 	} else if c.Bool("mdns") {
 		n.discoverers = []Discoverer{
-			mdns.NewDiscoverer(n.Node),
-			mdns.NewDiscoverer(n.Node).SetOffset(-dht.TruncateDuration),
+			mdns.NewDiscoverer(n.Node, n),
+			mdns.NewDiscoverer(n.Node, n).SetOffset(-dht.TruncateDuration),
 		}
 	} else if c.Bool("dht") {
 		n.discoverers = []Discoverer{
-			dht.NewDiscoverer(n, n.DHT),
-			dht.NewDiscoverer(n, n.DHT).SetOffset(-dht.TruncateDuration),
+			dht.NewDiscoverer(n, n.DHT, n),
+			dht.NewDiscoverer(n, n.DHT, n).SetOffset(-dht.TruncateDuration),
 		}
 	}
 
 	for _, discoverer := range n.discoverers {
 		go func(d Discoverer) {
-			err := d.Discover(n.ChanID, n.HandlePeer)
+			err := d.Discover(n.ChanID)
 			if err == nil {
 				return
 			}
@@ -124,7 +124,7 @@ func (n *Node) StopDiscovering() {
 }
 
 // HandlePeer is called async from the discoverers. It's okay to have long running tasks here.
-func (n *Node) HandlePeer(pi peer.AddrInfo) {
+func (n *Node) HandlePeerFound(pi peer.AddrInfo) {
 	if n.GetState() != pcpnode.Discovering {
 		log.Debugln("Received a peer from the discoverer although we're not discovering")
 		return

@@ -51,7 +51,7 @@ func (t *TransferProtocol) UnregisterTransferHandler() {
 	t.th = nil
 }
 
-// New TransferProtocol initializes a new TransferProtocol object with all
+// NewTransferProtocol initializes a new TransferProtocol object with all
 // fields set to their default values.
 func NewTransferProtocol(node *Node) TransferProtocol {
 	return TransferProtocol{node: node, lk: sync.RWMutex{}}

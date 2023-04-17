@@ -5,7 +5,6 @@
 package mock
 
 import (
-	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -37,16 +36,15 @@ func (m *MockDiscoverer) EXPECT() *MockDiscovererMockRecorder {
 }
 
 // NewMdnsService mocks base method.
-func (m *MockDiscoverer) NewMdnsService(ctx context.Context, peerhost host.Host, serviceTag string) (mdns.Service, error) {
+func (m *MockDiscoverer) NewMdnsService(peerhost host.Host, serviceTag string, notifee mdns.Notifee) mdns.Service {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewMdnsService", ctx, peerhost, serviceTag)
+	ret := m.ctrl.Call(m, "NewMdnsService", peerhost, serviceTag, notifee)
 	ret0, _ := ret[0].(mdns.Service)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // NewMdnsService indicates an expected call of NewMdnsService.
-func (mr *MockDiscovererMockRecorder) NewMdnsService(ctx, peerhost, serviceTag interface{}) *gomock.Call {
+func (mr *MockDiscovererMockRecorder) NewMdnsService(peerhost, serviceTag, notifee interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewMdnsService", reflect.TypeOf((*MockDiscoverer)(nil).NewMdnsService), ctx, peerhost, serviceTag)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewMdnsService", reflect.TypeOf((*MockDiscoverer)(nil).NewMdnsService), peerhost, serviceTag, notifee)
 }

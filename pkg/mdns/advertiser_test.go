@@ -1,7 +1,6 @@
 package mdns
 
 import (
-	"context"
 	"sync"
 	"testing"
 	"time"
@@ -50,21 +49,23 @@ func TestAdvertiser_Advertise(t *testing.T) {
 	d := mock.NewMockDiscoverer(ctrl)
 	wrapdiscovery = d
 
+	chanID := 333
+
 	a := NewAdvertiser(local)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 
 	d.EXPECT().
-		NewMdnsService(gomock.Any(), a, gomock.Any()).
-		DoAndReturn(func(ctx context.Context, peerhost host.Host, serviceTag string) (mdns.Service, error) {
+		NewMdnsService(gomock.Any(), a.did.DiscoveryID(chanID), gomock.Any()).
+		DoAndReturn(func(peerhost host.Host, serviceTag string, notifee mdns.Notifee) (mdns.Service, error) {
 			wg.Done()
 			return DummyMDNSService{}, nil
 		}).
 		Times(1)
 
 	go func() {
-		err := a.Advertise(333)
+		err := a.Advertise(chanID)
 		assert.NoError(t, err)
 		wg.Done()
 	}()
@@ -83,14 +84,16 @@ func TestAdvertiser_Advertise_multipleTimes(t *testing.T) {
 	d := mock.NewMockDiscoverer(ctrl)
 	wrapdiscovery = d
 
+	chanID := 333
+
 	a := NewAdvertiser(local)
 
 	var wg sync.WaitGroup
 	wg.Add(5)
 
 	d.EXPECT().
-		NewMdnsService(gomock.Any(), a, gomock.Any()).
-		DoAndReturn(func(ctx context.Context, peerhost host.Host, serviceTag string) (mdns.Service, error) {
+		NewMdnsService(gomock.Any(), a.did.DiscoveryID(chanID), gomock.Any()).
+		DoAndReturn(func(peerhost host.Host, serviceTag string, notifee mdns.Notifee) (mdns.Service, error) {
 			wg.Done()
 			return DummyMDNSService{}, nil
 		}).
