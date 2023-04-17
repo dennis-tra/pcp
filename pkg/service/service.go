@@ -58,9 +58,9 @@ type Service struct {
 // cycle handling with contexts as a bad practice.
 // Contexts belong in request/response paths and
 // Services should be handled via channels.
-func New(name string) *Service {
+func New(name string) Service {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Service{
+	return Service{
 		ctx:      ctx,
 		name:     name,
 		cancel:   cancel,

@@ -44,8 +44,9 @@ const (
 
 // Node encapsulates the logic for sending and receiving messages.
 type Node struct {
+	service.Service
 	host.Host
-	*service.Service
+
 	PushProtocol
 	TransferProtocol
 	PakeProtocol

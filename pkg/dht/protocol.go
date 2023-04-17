@@ -38,9 +38,9 @@ var (
 type protocol struct {
 	host.Host
 
-	// Service holds an abstraction of a long running
+	// Service holds an abstraction of a long-running
 	// service that is started and stopped externally.
-	*service.Service
+	service.Service
 	dht wrap.IpfsDHT
 
 	offset time.Duration

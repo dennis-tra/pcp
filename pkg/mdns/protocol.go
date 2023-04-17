@@ -30,7 +30,7 @@ var (
 // via multicast DNS in the local network.
 type protocol struct {
 	host.Host
-	*service.Service
+	service.Service
 
 	offset time.Duration
 }
