@@ -6,49 +6,46 @@ import (
 	"testing"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/discovery"
-
-	"github.com/dennis-tra/pcp/internal/wrap"
-	"github.com/libp2p/go-libp2p/core/host"
-	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
-
 	"github.com/golang/mock/gomock"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
+	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dennis-tra/pcp/internal/mock"
+	"github.com/dennis-tra/pcp/internal/wrap"
 )
 
-func setup(t *testing.T) (*gomock.Controller, host.Host, func(t *testing.T)) {
+func setup(t *testing.T) (*gomock.Controller, host.Host) {
 	wrapdiscovery = wrap.Discovery{}
 	wraptime = wrap.Time{}
 
 	ctrl := gomock.NewController(t)
 
-	net := mocknet.New(context.Background())
+	net := mocknet.New()
 
 	tmpTruncateDuration := TruncateDuration
-	tmpInterval := Interval
 	tmpTimeout := Timeout
 
 	local, err := net.GenPeer()
 	require.NoError(t, err)
 
-	return ctrl, local, func(t *testing.T) {
+	t.Cleanup(func() {
 		ctrl.Finish()
 
 		TruncateDuration = tmpTruncateDuration
-		Interval = tmpInterval
 		Timeout = tmpTimeout
 
 		wrapdiscovery = wrap.Discovery{}
 		wraptime = wrap.Time{}
-	}
+	})
+
+	return ctrl, local
 }
 
 func TestAdvertiser_Advertise(t *testing.T) {
-	ctrl, local, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local := setup(t)
 
 	d := mock.NewMockDiscoverer(ctrl)
 	wrapdiscovery = d
@@ -59,8 +56,8 @@ func TestAdvertiser_Advertise(t *testing.T) {
 	wg.Add(1)
 
 	d.EXPECT().
-		NewMdnsService(gomock.Any(), a, Interval, gomock.Any()).
-		DoAndReturn(func(ctx context.Context, peerhost host.Host, interval time.Duration, serviceTag string) (discovery.Service, error) {
+		NewMdnsService(gomock.Any(), a, gomock.Any()).
+		DoAndReturn(func(ctx context.Context, peerhost host.Host, serviceTag string) (mdns.Service, error) {
 			wg.Done()
 			return DummyMDNSService{}, nil
 		}).
@@ -79,10 +76,9 @@ func TestAdvertiser_Advertise(t *testing.T) {
 }
 
 func TestAdvertiser_Advertise_multipleTimes(t *testing.T) {
-	ctrl, local, teardown := setup(t)
-	defer teardown(t)
+	ctrl, local := setup(t)
 
-	Timeout = 20 * time.Millisecond
+	Timeout = time.Millisecond
 
 	d := mock.NewMockDiscoverer(ctrl)
 	wrapdiscovery = d
@@ -93,8 +89,8 @@ func TestAdvertiser_Advertise_multipleTimes(t *testing.T) {
 	wg.Add(5)
 
 	d.EXPECT().
-		NewMdnsService(gomock.Any(), a, Interval, gomock.Any()).
-		DoAndReturn(func(ctx context.Context, peerhost host.Host, interval time.Duration, serviceTag string) (discovery.Service, error) {
+		NewMdnsService(gomock.Any(), a, gomock.Any()).
+		DoAndReturn(func(ctx context.Context, peerhost host.Host, serviceTag string) (mdns.Service, error) {
 			wg.Done()
 			return DummyMDNSService{}, nil
 		}).
@@ -114,8 +110,10 @@ func TestAdvertiser_Advertise_multipleTimes(t *testing.T) {
 
 type DummyMDNSService struct{}
 
+func (mdns DummyMDNSService) Start() error {
+	return nil
+}
+
 func (mdns DummyMDNSService) Close() error {
 	return nil
 }
-func (mdns DummyMDNSService) RegisterNotifee(notifee discovery.Notifee)   {}
-func (mdns DummyMDNSService) UnregisterNotifee(notifee discovery.Notifee) {}

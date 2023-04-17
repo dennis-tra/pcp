@@ -2,6 +2,7 @@ package mdns
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/dennis-tra/pcp/internal/log"
 
@@ -32,10 +33,13 @@ func (a *Advertiser) Advertise(chanID int) error {
 		mdns, err := wrapdiscovery.NewMdnsService(ctx, a, did)
 		if err != nil {
 			cancel()
-			return err
+			return fmt.Errorf("new mdns service: %w", err)
 		}
 
-		mdns.Start()
+		if err = mdns.Start(); err != nil {
+			cancel()
+			return fmt.Errorf("start mdns service: %w", err)
+		}
 
 		select {
 		case <-a.SigShutdown():

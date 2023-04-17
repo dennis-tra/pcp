@@ -16,10 +16,10 @@ type Discovery struct{}
 
 func (d Discovery) HandlePeerFound(peer.AddrInfo) {}
 func (d Discovery) NewMdnsService(ctx context.Context, peerhost host.Host, serviceTag string) (mdns.Service, error) {
-	mdns := mdns.NewMdnsService(peerhost, serviceTag, &d)
-	if err := mdns.Start(); err != nil {
-		mdns.Close()
+	mdnsSvc := mdns.NewMdnsService(peerhost, serviceTag, &d)
+	if err := mdnsSvc.Start(); err != nil {
+		mdnsSvc.Close()
 		return nil, err
 	}
-	return mdns, nil
+	return mdnsSvc, nil
 }

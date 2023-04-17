@@ -2,7 +2,7 @@ package crypt
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,7 +26,7 @@ func TestStreamEncrypterDecrypter(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, sd)
 
-	decrypted, err := ioutil.ReadAll(sd)
+	decrypted, err := io.ReadAll(sd)
 	assert.Nil(t, err)
 	assert.Equal(t, payload, decrypted)
 
