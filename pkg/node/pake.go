@@ -40,14 +40,14 @@ type PakeProtocol struct {
 	keh KeyExchangeHandler
 }
 
-func NewPakeProtocol(node *Node, words []string) (*PakeProtocol, error) {
+func NewPakeProtocol(node *Node, words []string) (PakeProtocol, error) {
 	pw := []byte(strings.Join(words, ""))
 	key, err := crypt.DeriveKey(pw, node.pubKey)
 	if err != nil {
-		return nil, err
+		return PakeProtocol{}, err
 	}
 
-	return &PakeProtocol{
+	return PakeProtocol{
 		node:        node,
 		pwKey:       key,
 		authedPeers: sync.Map{},

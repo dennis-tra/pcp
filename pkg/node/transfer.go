@@ -53,8 +53,8 @@ func (t *TransferProtocol) UnregisterTransferHandler() {
 
 // New TransferProtocol initializes a new TransferProtocol object with all
 // fields set to their default values.
-func NewTransferProtocol(node *Node) *TransferProtocol {
-	return &TransferProtocol{node: node, lk: sync.RWMutex{}}
+func NewTransferProtocol(node *Node) TransferProtocol {
+	return TransferProtocol{node: node, lk: sync.RWMutex{}}
 }
 
 // onTransfer is called when the peer initiates a file transfer.

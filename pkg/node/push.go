@@ -25,8 +25,8 @@ type PushRequestHandler interface {
 	HandlePushRequest(*p2p.PushRequest) (bool, error)
 }
 
-func NewPushProtocol(node *Node) *PushProtocol {
-	return &PushProtocol{node: node, lk: sync.RWMutex{}}
+func NewPushProtocol(node *Node) PushProtocol {
+	return PushProtocol{node: node, lk: sync.RWMutex{}}
 }
 
 func (p *PushProtocol) RegisterPushRequestHandler(prh PushRequestHandler) {

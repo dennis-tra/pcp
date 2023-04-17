@@ -45,10 +45,10 @@ const (
 // Node encapsulates the logic for sending and receiving messages.
 type Node struct {
 	host.Host
-	*PushProtocol
-	*TransferProtocol
-	*PakeProtocol
 	*service.Service
+	PushProtocol
+	TransferProtocol
+	PakeProtocol
 
 	// The public key of this node for easy access
 	pubKey []byte
