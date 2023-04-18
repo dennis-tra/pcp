@@ -90,6 +90,7 @@ func version() string {
 		shortCommit string
 	)
 
+	// read git commit sha and modified flag from go build information
 	bi, ok := debug.ReadBuildInfo()
 	if ok {
 		for _, bs := range bi.Settings {
