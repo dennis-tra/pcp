@@ -16,15 +16,9 @@ var (
 	wrapdiscovery wrap.Discoverer = wrap.Discovery{}
 )
 
-var (
-	// Timeout is the time until a new advertisement
-	// with a potentially new discovery ID is started.
-	Timeout = time.Minute
-
-	// TruncateDuration represents the time slot to which
-	// the current time is truncated.
-	TruncateDuration = 5 * time.Minute
-)
+// Timeout is the time until a new advertisement
+// with a potentially new discovery ID is started.
+var Timeout = time.Minute
 
 // protocol encapsulates the logic for discovering peers
 // via multicast DNS in the local network.

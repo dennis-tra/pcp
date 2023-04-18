@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dennis-tra/pcp/pkg/discovery"
+
 	"github.com/golang/mock/gomock"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
@@ -24,7 +26,7 @@ func setup(t *testing.T) (*gomock.Controller, host.Host) {
 
 	net := mocknet.New()
 
-	tmpTruncateDuration := TruncateDuration
+	tmpTruncateDuration := discovery.TruncateDuration
 	tmpTimeout := Timeout
 
 	local, err := net.GenPeer()
@@ -33,7 +35,7 @@ func setup(t *testing.T) (*gomock.Controller, host.Host) {
 	t.Cleanup(func() {
 		ctrl.Finish()
 
-		TruncateDuration = tmpTruncateDuration
+		discovery.TruncateDuration = tmpTruncateDuration
 		Timeout = tmpTimeout
 
 		wrapdiscovery = wrap.Discovery{}

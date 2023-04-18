@@ -7,15 +7,16 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/urfave/cli/v2"
 
 	"github.com/dennis-tra/pcp/internal/format"
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/dht"
+	disc "github.com/dennis-tra/pcp/pkg/discovery"
 	"github.com/dennis-tra/pcp/pkg/mdns"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
-	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type PeerState uint8
@@ -72,19 +73,19 @@ func (n *Node) StartDiscovering(c *cli.Context) {
 	if c.Bool("mdns") == c.Bool("dht") {
 		n.discoverers = []Discoverer{
 			dht.NewDiscoverer(n, n.DHT, n),
-			dht.NewDiscoverer(n, n.DHT, n).SetOffset(-dht.TruncateDuration),
+			dht.NewDiscoverer(n, n.DHT, n).SetOffset(-disc.TruncateDuration),
 			mdns.NewDiscoverer(n.Node, n),
-			mdns.NewDiscoverer(n.Node, n).SetOffset(-dht.TruncateDuration),
+			mdns.NewDiscoverer(n.Node, n).SetOffset(-disc.TruncateDuration),
 		}
 	} else if c.Bool("mdns") {
 		n.discoverers = []Discoverer{
 			mdns.NewDiscoverer(n.Node, n),
-			mdns.NewDiscoverer(n.Node, n).SetOffset(-dht.TruncateDuration),
+			mdns.NewDiscoverer(n.Node, n).SetOffset(-disc.TruncateDuration),
 		}
 	} else if c.Bool("dht") {
 		n.discoverers = []Discoverer{
 			dht.NewDiscoverer(n, n.DHT, n),
-			dht.NewDiscoverer(n, n.DHT, n).SetOffset(-dht.TruncateDuration),
+			dht.NewDiscoverer(n, n.DHT, n).SetOffset(-disc.TruncateDuration),
 		}
 	}
 
