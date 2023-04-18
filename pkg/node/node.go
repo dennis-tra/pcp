@@ -18,7 +18,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
-
+	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
 	"github.com/multiformats/go-varint"
 	"github.com/urfave/cli/v2"
 
@@ -106,8 +106,7 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 			node.DHT, err = kaddht.New(c.Context, h)
 			return node.DHT, err
 		}),
-
-		libp2p.EnableHolePunching(),
+		libp2p.EnableHolePunching(holepunch.WithTracer(node)),
 	)
 
 	node.Host, err = libp2p.New(opts...)
@@ -353,4 +352,9 @@ func (n *Node) WaitForEOF(s network.Stream) error {
 	case err := <-done:
 		return err
 	}
+}
+
+func (n *Node) Trace(evt *holepunch.Event) {
+	// TODO implement me
+	panic("implement me")
 }
