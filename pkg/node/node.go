@@ -157,7 +157,7 @@ func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
 
 	hdr := &p2p.Header{
 		RequestId:  uuid.New().String(),
-		NodeId:     peer.Encode(n.Host.ID()),
+		NodeId:     n.Host.ID().String(),
 		NodePubKey: pub,
 		Timestamp:  time.Now().Unix(),
 	}
