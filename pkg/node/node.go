@@ -3,6 +3,7 @@ package node
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -90,7 +91,7 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 		return nil, err
 	}
 
-	key, pub, err := crypto.GenerateKeyPair(crypto.Secp256k1, 256)
+	key, pub, err := crypto.GenerateEd25519Key(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
