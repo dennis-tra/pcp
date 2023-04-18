@@ -24,7 +24,7 @@ func TestPushProtocol_RegisterPushRequestHandler_happyPath(t *testing.T) {
 	skipMessageAuth = true
 
 	ctx := context.Background()
-	net := mocknet.New(ctx)
+	net := mocknet.New()
 
 	node1, _ := setupNode(t, net)
 	node2, _ := setupNode(t, net)
@@ -60,7 +60,7 @@ func TestPushProtocol_RegisterPushRequestHandler_unauthenticated(t *testing.T) {
 	skipMessageAuth = true
 
 	ctx := context.Background()
-	net := mocknet.New(ctx)
+	net := mocknet.New()
 
 	node1, _ := setupNode(t, net)
 	node2, _ := setupNode(t, net)

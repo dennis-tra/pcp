@@ -49,7 +49,7 @@ func TestTransferProtocol_onTransfer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run("transfer-test: "+tt.testObj, func(t *testing.T) {
 			ctx := context.Background()
-			net := mocknet.New(ctx)
+			net := mocknet.New()
 
 			node1, _ := setupNode(t, net)
 			node2, done := setupNode(t, net)
@@ -75,7 +75,7 @@ func TestTransferProtocol_onTransfer(t *testing.T) {
 
 func TestTransferProtocol_onTransfer_senderNotAuthenticatedAtReceiver(t *testing.T) {
 	ctx := context.Background()
-	net := mocknet.New(ctx)
+	net := mocknet.New()
 
 	node1, _ := setupNode(t, net)
 	node2, _ := setupNode(t, net)
@@ -94,7 +94,7 @@ func TestTransferProtocol_onTransfer_senderNotAuthenticatedAtReceiver(t *testing
 
 func TestTransferProtocol_onTransfer_peersDifferentKeys(t *testing.T) {
 	ctx := context.Background()
-	net := mocknet.New(ctx)
+	net := mocknet.New()
 
 	node1, _ := setupNode(t, net)
 	node2, _ := setupNode(t, net)
@@ -117,7 +117,7 @@ func TestTransferProtocol_onTransfer_peersDifferentKeys(t *testing.T) {
 
 func TestTransferProtocol_onTransfer_provokeErrCases(t *testing.T) {
 	ctx := context.Background()
-	net := mocknet.New(ctx)
+	net := mocknet.New()
 
 	node1, _ := setupNode(t, net)
 	node2, _ := setupNode(t, net)
@@ -155,7 +155,7 @@ func setupNode(t *testing.T, net mocknet.Mocknet) (*Node, chan struct{}) {
 	p, err := net.GenPeer()
 	require.NoError(t, err)
 	n := &Node{Service: service.New("node"), Host: p}
-	n.PakeProtocol = &PakeProtocol{}
+	n.PakeProtocol = PakeProtocol{}
 	n.TransferProtocol = NewTransferProtocol(n)
 	done := make(chan struct{})
 	n.RegisterTransferHandler(&TestTransferHandler{handler: tmpWriter(t), done: func() { close(done) }})
