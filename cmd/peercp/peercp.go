@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime/debug"
+	"strconv"
 	"syscall"
 
 	"github.com/urfave/cli/v2"
@@ -15,28 +17,21 @@ import (
 )
 
 var (
-	// RawVersion and build tag of the
-	// PCP command line tool. This is
-	// replaced on build via e.g.:
-	// -ldflags "-X main.RawVersion=${VERSION}"
-	RawVersion  = "dev"
-	ShortCommit = "5f3759df" // quake
+	// RawVersion is set via build flags.
+	RawVersion = "dev"
 )
 
 func main() {
-	// ShortCommit version tag
-	verTag := fmt.Sprintf("v%s+%s", RawVersion, ShortCommit)
-
 	app := &cli.App{
-		Name: "pcp",
+		Name: "peercp",
 		Authors: []*cli.Author{
 			{
 				Name:  "Dennis Trautwein",
-				Email: "pcp@dtrautwein.eu",
+				Email: "peercp@dtrautwein.eu",
 			},
 		},
 		Usage:                "Peer Copy, a peer-to-peer data transfer tool.",
-		Version:              verTag,
+		Version:              version(),
 		EnableBashCompletion: true,
 		Commands: []*cli.Command{
 			receive.Command,
@@ -85,4 +80,35 @@ func main() {
 		log.Infof("error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// version returns the version identifier for peercp in the following form: v0.5.0-d4aeaa2
+func version() string {
+
+	var (
+		err         error
+		isDirty     bool
+		shortCommit string
+	)
+
+	bi, ok := debug.ReadBuildInfo()
+	if ok {
+		for _, bs := range bi.Settings {
+			switch bs.Key {
+			case "vcs.modified":
+				shortCommit = bs.Value[:7]
+			case "vcs.revision":
+				isDirty, err = strconv.ParseBool(bs.Value)
+				if err != nil {
+					log.Warningln("couldn't parse vcs.revision:", err)
+				}
+			}
+		}
+	}
+
+	if isDirty {
+		shortCommit += "+dirty"
+	}
+
+	return fmt.Sprintf("v%s-%s", RawVersion, shortCommit)
 }
