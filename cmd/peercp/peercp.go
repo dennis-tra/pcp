@@ -50,11 +50,11 @@ func main() {
 			},
 			&cli.BoolFlag{
 				Name:  "dht",
-				Usage: "Only advertise via the DHT",
+				Usage: "only advertise via the DHT",
 			},
 			&cli.BoolFlag{
 				Name:  "mdns",
-				Usage: "Only advertise via multicast DNS",
+				Usage: "only advertise via multicast DNS",
 			},
 			&cli.BoolFlag{
 				Name:   "homebrew",
@@ -84,7 +84,6 @@ func main() {
 
 // version returns the version identifier for peercp in the following form: v0.5.0-d4aeaa2
 func version() string {
-
 	var (
 		err         error
 		isDirty     bool
