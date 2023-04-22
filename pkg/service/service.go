@@ -8,15 +8,15 @@ import (
 	"github.com/dennis-tra/pcp/internal/log"
 )
 
-// State represents the lifecycle states of a service.
-type State uint8
+// state represents the lifecycle states of a service.
+type state uint8
 
 const (
 	// These are the concrete lifecycle manifestations.
-	Idle State = iota
-	Started
-	Stopping
-	Stopped
+	idle state = iota
+	started
+	stopping
+	stopped
 )
 
 // ErrServiceAlreadyStarted is returned if there are multiple calls to ServiceStarted.
@@ -41,7 +41,7 @@ type Service struct {
 
 	// The current state of this service.
 	lk    sync.RWMutex
-	state State
+	state state
 
 	// When a message is sent to this channel it
 	// starts to gracefully shut down.
@@ -54,7 +54,7 @@ type Service struct {
 
 // New instantiates an initialised Service struct. It
 // deliberately does not accept a context as an input
-// parameter as I consider long running service life-
+// parameter as I consider long-running service life-
 // cycle handling with contexts as a bad practice.
 // Contexts belong in request/response paths and
 // Services should be handled via channels.
@@ -64,7 +64,7 @@ func New(name string) Service {
 		ctx:      ctx,
 		name:     name,
 		cancel:   cancel,
-		state:    Idle,
+		state:    idle,
 		shutdown: make(chan struct{}),
 		done:     make(chan struct{}),
 	}
@@ -77,10 +77,10 @@ func (s *Service) ServiceStarted() error {
 	s.lk.Lock()
 	defer s.lk.Unlock()
 
-	if s.state != Idle {
+	if s.state != idle {
 		return ErrServiceAlreadyStarted
 	}
-	s.state = Started
+	s.state = started
 
 	go func() {
 		select {
@@ -111,10 +111,10 @@ func (s *Service) ServiceStopped() {
 	s.lk.Lock()
 	defer s.lk.Unlock()
 
-	if s.state == Idle || s.state == Stopped {
+	if s.state == idle || s.state == stopped {
 		return
 	}
-	s.state = Stopped
+	s.state = stopped
 
 	close(s.done)
 	log.Debugln(s.name, "- Service has stopped")
@@ -123,7 +123,7 @@ func (s *Service) ServiceStopped() {
 // ServiceContext returns the context associated with this
 // service. This context is passed into requests or similar
 // that are initiated from this service. Doing it this way
-// we can cancel this contexts when someone shuts down
+// we can cancel these contexts when someone shuts down
 // the service, which results in all requests being stopped.
 func (s *Service) ServiceContext() context.Context {
 	return s.ctx
@@ -136,11 +136,11 @@ func (s *Service) Shutdown() {
 	log.Debugln(s.name, "- Service shutting down...")
 
 	s.lk.Lock()
-	if s.state != Started {
+	if s.state != started {
 		s.lk.Unlock()
 		return
 	}
-	s.state = Stopping
+	s.state = stopping
 	s.lk.Unlock()
 
 	close(s.shutdown)
