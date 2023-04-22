@@ -2,7 +2,6 @@ package dht
 
 import (
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -21,7 +20,6 @@ func setup(t *testing.T) (*gomock.Controller, host.Host, mocknet.Mocknet) {
 	wrapDHT = wrap.DHT{}
 	wrapmanet = wrap.Manet{}
 	wraptime = wrap.Time{}
-	bootstrap = map[peer.ID]*sync.Once{}
 
 	ctrl := gomock.NewController(t)
 
@@ -89,7 +87,7 @@ func TestProtocol_Bootstrap_connectsBootstrapPeers(t *testing.T) {
 	peers := genPeers(t, net, local, ConnThreshold)
 	mockGetDefaultBootstrapPeerAddrInfos(ctrl, peers)
 
-	err := newProtocol(local, nil).Bootstrap()
+	err := newProtocol(local, nil).bootstrap()
 	require.NoError(t, err)
 
 	// Check if they are connected.
@@ -101,7 +99,7 @@ func TestProtocol_Bootstrap_errorOnNoConfiguredBootstrapPeers(t *testing.T) {
 
 	mockGetDefaultBootstrapPeerAddrInfos(ctrl, []peer.AddrInfo{})
 
-	err := newProtocol(local, nil).Bootstrap()
+	err := newProtocol(local, nil).bootstrap()
 	assert.Error(t, err)
 }
 
@@ -114,7 +112,7 @@ func TestProtocol_Bootstrap_cantConnectToOneLessThanThreshold(t *testing.T) {
 	err := net.UnlinkPeers(local.ID(), peers[0].ID)
 	require.NoError(t, err)
 
-	err = newProtocol(local, nil).Bootstrap()
+	err = newProtocol(local, nil).bootstrap()
 	assert.Error(t, err)
 
 	errs, ok := err.(ErrConnThresholdNotReached)
@@ -135,7 +133,7 @@ func TestProtocol_Bootstrap_cantConnectToMultipleLessThanThreshold(t *testing.T)
 	err = net.UnlinkPeers(local.ID(), peers[1].ID)
 	require.NoError(t, err)
 
-	err = newProtocol(local, nil).Bootstrap()
+	err = newProtocol(local, nil).bootstrap()
 	assert.Error(t, err)
 
 	errs, ok := err.(ErrConnThresholdNotReached)
@@ -155,6 +153,6 @@ func TestProtocol_Bootstrap_cantConnectButGreaterThanThreshold(t *testing.T) {
 	err := net.UnlinkPeers(local.ID(), peers[0].ID)
 	require.NoError(t, err)
 
-	err = newProtocol(local, nil).Bootstrap()
+	err = newProtocol(local, nil).bootstrap()
 	assert.NoError(t, err)
 }

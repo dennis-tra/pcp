@@ -2,8 +2,9 @@ package mdns
 
 import (
 	"fmt"
-	"github.com/dennis-tra/pcp/pkg/discovery"
 	"time"
+
+	"github.com/dennis-tra/pcp/pkg/discovery"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -67,6 +68,11 @@ func (d *Discoverer) HandlePeerFound(pi peer.AddrInfo) {
 	}
 
 	d.notifee.HandlePeerFound(pi)
+}
+
+func (d *Discoverer) SetOffset(offset time.Duration) *Discoverer {
+	d.did.SetOffset(offset)
+	return d
 }
 
 func (d *Discoverer) Shutdown() {

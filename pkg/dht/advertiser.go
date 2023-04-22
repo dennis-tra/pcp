@@ -43,41 +43,39 @@ func NewAdvertiser(h host.Host, dht wrap.IpfsDHT) *Advertiser {
 // When pcp is advertising its own channel-id + time slot it can happen that
 // it rolls over to the next time slot. Then, pcp just advertises the new
 // time slot as well. It can still be found with the old one.
-func (a *Advertiser) Advertise(chanID int) error {
-	if err := a.Bootstrap(); err != nil {
-		return err
-	}
-
+func (a *Advertiser) Advertise(chanID int) {
 	if err := a.ServiceStarted(); err != nil {
-		return err
+		a.SetError(err)
+		return
 	}
 	defer a.ServiceStopped()
 
-	log.Debugln("DHT - Waiting for public IP...")
-	for {
-		// Only advertise in the DHT if we have a public addr.
-		if !a.HasPublicAddr() {
-			select {
-			case <-a.SigShutdown():
-				return nil
-			case <-time.After(pubAddrInter):
-				continue
-			}
-		}
-		log.Debugln("DHT - Identified a public IP in", a.Addrs())
-		break
+	if err := a.bootstrap(); err != nil {
+		a.SetError(err)
+		return
 	}
+
+	if err := a.checkNetwork(); err != nil {
+		a.SetError(err)
+		return
+	}
+
+	a.SetState(func(s *State) { s.Stage = StageProviding })
 
 	for {
 		err := a.provide(a.ServiceContext(), a.did.DiscoveryID(chanID))
 		if err == context.Canceled {
 			break
 		} else if err != nil && err != context.DeadlineExceeded {
-			log.Warningf("Error providing: %s\n", err)
+			a.SetState(func(s *State) { s.Stage = StageRetrying })
+		} else {
+			a.SetState(func(s *State) { s.Stage = StageProvided })
 		}
 	}
 
-	return nil
+	a.SetState(func(s *State) { s.Stage = StageStopped })
+
+	return
 }
 
 // HasPublicAddr returns true if there is at least one public

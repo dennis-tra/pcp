@@ -37,10 +37,10 @@ var skipMessageAuth = false
 type State string
 
 const (
-	Idle        State = "idle"
-	Discovering       = "discovering"
-	Advertising       = "advertising"
-	Connected         = "connected"
+	Initialising State = "initialising"
+	Discovering        = "discovering"
+	Advertising        = "advertising"
+	Connected          = "connected"
 )
 
 // Node encapsulates the logic for sending and receiving messages.
@@ -79,7 +79,7 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 
 	node := &Node{
 		Service: service.New("node"),
-		state:   Idle,
+		state:   Initialising,
 		stateLk: &sync.RWMutex{},
 		Words:   wrds,
 		ChanID:  ints[0],
@@ -103,6 +103,7 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 
 	opts = append(opts,
 		libp2p.Identity(key),
+		libp2p.UserAgent("pcp/"+c.App.Version),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
 			node.DHT, err = kaddht.New(c.Context, h)
 			return node.DHT, err
@@ -129,9 +130,9 @@ func (n *Node) Shutdown() {
 func (n *Node) SetState(s State) State {
 	log.Debugln("Setting local node state to", s)
 	n.stateLk.Lock()
-	defer n.stateLk.Unlock()
 	n.state = s
-	return n.state
+	n.stateLk.Unlock()
+	return s
 }
 
 func (n *Node) GetState() State {
@@ -357,5 +358,5 @@ func (n *Node) WaitForEOF(s network.Stream) error {
 
 func (n *Node) Trace(evt *holepunch.Event) {
 	// TODO implement me
-	panic("implement me")
+	// panic("implement me")
 }

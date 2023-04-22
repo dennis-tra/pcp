@@ -3,7 +3,6 @@ package send
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/dennis-tra/pcp/pkg/words"
 
@@ -84,11 +83,15 @@ func Action(c *cli.Context) error {
 		return err
 	}
 
-	// Broadcast the code to be found by peers.
-	log.Infoln("Code is: ", strings.Join(local.Words, "-"))
-	log.Infoln("On the other machine run:\n\tpcp receive", strings.Join(local.Words, "-"))
+	// if mDNS is active, start advertising in the local network
+	if isMDNSActive(c) {
+		go local.StartAdvertisingMDNS()
+	}
 
-	local.StartAdvertising(c)
+	// if DHT is active, start advertising in the wider area network
+	if isDHTActive(c) {
+		go local.StartAdvertisingDHT()
+	}
 
 	// Wait for the user to stop the tool or the transfer to finish.
 	select {
@@ -118,4 +121,16 @@ func validateFile(filepath string) error {
 	defer f.Close()
 
 	return nil
+}
+
+// isMDNSActive returns true if the user explicitly chose to only advertised via mDNS
+// or if they didn't specify any preference.
+func isMDNSActive(c *cli.Context) bool {
+	return c.Bool("mdns") || c.Bool("dht") == c.Bool("mdns")
+}
+
+// isDHTActive returns true if the user explicitly chose to only advertised via the DHT
+// or if they didn't specify any preference.
+func isDHTActive(c *cli.Context) bool {
+	return c.Bool("dht") || c.Bool("dht") == c.Bool("mdns")
 }

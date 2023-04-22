@@ -16,10 +16,8 @@ import (
 	"github.com/dennis-tra/pcp/pkg/send"
 )
 
-var (
-	// RawVersion is set via build flags.
-	RawVersion = "dev"
-)
+// RawVersion is set via build flags.
+var RawVersion = "dev"
 
 func main() {
 	app := &cli.App{
@@ -49,12 +47,18 @@ func main() {
 				Usage: "enables debug log output",
 			},
 			&cli.BoolFlag{
-				Name:  "dht",
-				Usage: "only advertise via the DHT",
+				Name:  "verbose",
+				Usage: "shows more information about the local network",
 			},
 			&cli.BoolFlag{
-				Name:  "mdns",
-				Usage: "only advertise via multicast DNS",
+				Name:    "dht",
+				Aliases: []string{"remote"},
+				Usage:   "only advertise via the DHT",
+			},
+			&cli.BoolFlag{
+				Name:    "mdns",
+				Aliases: []string{"local"},
+				Usage:   "only advertise via multicast DNS",
 			},
 			&cli.BoolFlag{
 				Name:   "homebrew",
@@ -70,7 +74,7 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	go func() {
 		<-sigs
-		log.Infoln("Stopping...")
+		log.Debugln("Stopping...")
 		signal.Stop(sigs)
 		cancel()
 	}()
@@ -96,7 +100,10 @@ func version() string {
 		for _, bs := range bi.Settings {
 			switch bs.Key {
 			case "vcs.modified":
-				shortCommit = bs.Value[:7]
+				shortCommit = bs.Value
+				if len(bs.Value) >= 7 {
+					shortCommit = bs.Value[:7]
+				}
 			case "vcs.revision":
 				isDirty, err = strconv.ParseBool(bs.Value)
 				if err != nil {

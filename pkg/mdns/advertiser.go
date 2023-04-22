@@ -19,24 +19,33 @@ func NewAdvertiser(h host.Host) *Advertiser {
 }
 
 // Advertise broadcasts that we're providing data for the given channel ID in the local network.
-func (a *Advertiser) Advertise(chanID int) error {
+func (a *Advertiser) Advertise(chanID int) {
 	if err := a.ServiceStarted(); err != nil {
-		return err
+		a.SetError(err)
+		return
 	}
 	defer a.ServiceStopped()
 
+	a.SetState(StateAdvertising)
+	defer a.SetState(StateStopped)
+
 	for {
 		did := a.did.DiscoveryID(chanID)
+
 		log.Debugln("mDNS - Advertising ", did)
 		mdns := wrapdiscovery.NewMdnsService(a, did, a)
 		if err := mdns.Start(); err != nil {
-			return fmt.Errorf("start mdns service: %w", err)
+			a.SetError(fmt.Errorf("start mdns service: %w", err))
+			return
 		}
 
 		select {
 		case <-a.SigShutdown():
 			log.Debugln("mDNS - Advertising", did, " done - shutdown signal")
-			return mdns.Close()
+			if err := mdns.Close(); err != nil {
+				log.Warningf("Error closing MDNS service: %s", err)
+			}
+			return
 		case <-time.After(Timeout):
 		}
 
@@ -48,6 +57,7 @@ func (a *Advertiser) Advertise(chanID int) error {
 }
 
 func (a *Advertiser) HandlePeerFound(info peer.AddrInfo) {
+	// no-op for advertisements - could consider to proactively contact other peers
 }
 
 func (a *Advertiser) Shutdown() {

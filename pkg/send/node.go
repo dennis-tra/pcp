@@ -1,13 +1,17 @@
 package send
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
 	"path/filepath"
 	"sync"
+	"time"
 
+	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	"github.com/urfave/cli/v2"
 
 	"github.com/dennis-tra/pcp/internal/log"
@@ -16,101 +20,157 @@ import (
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 )
 
+type Advertiser[T any] interface {
+	Advertise(chanID int)
+	State() T
+	Error() error
+	Shutdown()
+}
+
+var (
+	_ Advertiser[mdns.State] = (*mdns.Advertiser)(nil)
+	_ Advertiser[dht.State]  = (*dht.Advertiser)(nil)
+)
+
 // Node encapsulates the logic of advertising and transmitting
 // a particular file to a peer.
 type Node struct {
 	*pcpnode.Node
 
-	advertisers []Advertiser
+	// mDNS advertisement implementations
+	mdnsAdvertiser Advertiser[mdns.State]
 
+	// DHT advertisement implementation
+	dhtAdvertiser Advertiser[dht.State]
+
+	// map of peers that passed PAKE
 	authPeers *sync.Map
-	filepath  string
-}
 
-type Advertiser interface {
-	Advertise(chanID int) error
-	Shutdown()
+	// path to the file or directory to transfer
+	filepath string
+
+	// ....
+	relayFinderActiveLk sync.RWMutex
+	relayFinderActive   bool
+
+	// reference to the ticker that triggers the status logs.
+	statusTicker *time.Ticker
+
+	// "closed" when the status log go routine returned
+	logLoopWg sync.WaitGroup
 }
 
 // InitNode returns a fully configured node ready to start
 // advertising that we want to send a specific file.
 func InitNode(c *cli.Context, filepath string, words []string) (*Node, error) {
-	h, err := pcpnode.New(c, words)
+	var err error
+	node := &Node{
+		authPeers: &sync.Map{},
+		filepath:  filepath,
+	}
+
+	opt := libp2p.EnableAutoRelayWithPeerSource(node.autoRelayPeerSource,
+		autorelay.WithMetricsTracer(node),
+		autorelay.WithBootDelay(0),
+		autorelay.WithMinCandidates(1),
+		autorelay.WithNumRelays(1),
+	)
+
+	node.Node, err = pcpnode.New(c, words, opt)
 	if err != nil {
 		return nil, err
 	}
 
-	node := &Node{
-		Node:        h,
-		advertisers: []Advertiser{},
-		authPeers:   &sync.Map{},
-		filepath:    filepath,
+	node.mdnsAdvertiser = mdns.NewAdvertiser(node)
+	node.dhtAdvertiser = dht.NewAdvertiser(node, node.DHT)
+
+	// start logging the current status to the console
+	if !c.Bool("debug") {
+		go node.logLoop(c.Bool("verbose"))
 	}
 
+	// register handler to respond to PAKE handshakes
 	node.RegisterKeyExchangeHandler(node)
 
 	return node, nil
 }
 
 func (n *Node) Shutdown() {
-	n.StopAdvertising()
+	n.stopAdvertising()
 	n.UnregisterKeyExchangeHandler()
 	n.Node.Shutdown()
+	if n.statusTicker != nil {
+		n.statusTicker.Stop()
+	}
+	n.logLoopWg.Wait()
 }
 
-// StartAdvertising asynchronously advertises the given code through the means of all
-// registered advertisers. Currently, these are multicast DNS and DHT.
-func (n *Node) StartAdvertising(c *cli.Context) {
-	n.SetState(pcpnode.Advertising)
-
-	if c.Bool("mdns") == c.Bool("dht") {
-		n.advertisers = []Advertiser{
-			dht.NewAdvertiser(n, n.DHT),
-			mdns.NewAdvertiser(n.Node),
-		}
-	} else if c.Bool("mdns") {
-		n.advertisers = []Advertiser{
-			mdns.NewAdvertiser(n.Node),
-		}
-	} else if c.Bool("dht") {
-		n.advertisers = []Advertiser{
-			dht.NewAdvertiser(n, n.DHT),
-		}
-	}
-
-	for _, advertiser := range n.advertisers {
-		go func(a Advertiser) {
-			err := a.Advertise(n.ChanID)
-			if err == nil {
-				return
-			}
-
-			// If the user is connected to another peer
-			// we don't care about discover errors.
-			if n.GetState() == pcpnode.Connected {
-				return
-			}
-
-			switch e := err.(type) {
-			case dht.ErrConnThresholdNotReached:
-				e.Log()
-			default:
-				log.Warningln(err)
-			}
-		}(advertiser)
-	}
+func (n *Node) StartAdvertisingMDNS() {
+	n.mdnsAdvertiser.Advertise(n.ChanID)
 }
 
-func (n *Node) StopAdvertising() {
+func (n *Node) StartAdvertisingDHT() {
+	n.dhtAdvertiser.Advertise(n.ChanID)
+}
+
+func (n *Node) stopAdvertising() {
 	var wg sync.WaitGroup
-	for _, advertiser := range n.advertisers {
-		wg.Add(1)
-		go func(a Advertiser) {
-			a.Shutdown()
-			wg.Done()
-		}(advertiser)
-	}
+
+	wg.Add(1)
+	go func() {
+		n.mdnsAdvertiser.Shutdown()
+		wg.Done()
+	}()
+
+	wg.Add(1)
+	go func() {
+		n.dhtAdvertiser.Shutdown()
+		wg.Done()
+	}()
+
 	wg.Wait()
+}
+
+// autoRelayPeerSource is a function that queries the DHT for a random peer ID with CPL 0.
+// The found peers are used as candidates for circuit relay v2 peers.
+func (n *Node) autoRelayPeerSource(ctx context.Context, num int) <-chan peer.AddrInfo {
+	out := make(chan peer.AddrInfo)
+
+	go func() {
+		defer close(out)
+
+		peerID, err := n.DHT.RoutingTable().GenRandPeerID(0)
+		if err != nil {
+			log.Warningln("error generating random peer ID:", err.Error())
+		}
+
+		closestPeers, err := n.DHT.GetClosestPeers(ctx, peerID.String())
+		if err != nil {
+			return
+		}
+
+		maxLen := len(closestPeers)
+		if maxLen > num {
+			maxLen = num
+		}
+
+		for i := 0; i < maxLen; i++ {
+			p := closestPeers[i]
+
+			addrs := n.Peerstore().Addrs(p)
+			if len(addrs) == 0 {
+				continue
+			}
+
+			select {
+			case out <- peer.AddrInfo{ID: p, Addrs: addrs}:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return out
 }
 
 func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
@@ -122,7 +182,7 @@ func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
 	n.SetState(pcpnode.Connected)
 
 	n.UnregisterKeyExchangeHandler()
-	go n.StopAdvertising()
+	n.stopAdvertising()
 
 	err := n.Transfer(peerID)
 	if err != nil {

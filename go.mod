@@ -132,3 +132,5 @@ require (
 	lukechampine.com/blake3 v1.1.7 // indirect
 	nhooyr.io/websocket v1.8.7 // indirect
 )
+
+replace github.com/libp2p/go-libp2p v0.27.1 => github.com/dennis-tra/go-libp2p v0.0.0-20230420184006-ce6d95d54036

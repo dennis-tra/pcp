@@ -38,10 +38,6 @@ func (d *Discoverer) Discover(chanID int) error {
 	}
 	defer d.ServiceStopped()
 
-	if err := d.Bootstrap(); err != nil {
-		return err
-	}
-
 	for {
 		did := d.did.DiscoveryID(chanID)
 		log.Debugln("DHT - Discovering", did)

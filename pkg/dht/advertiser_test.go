@@ -46,8 +46,7 @@ func TestAdvertiser_Advertise(t *testing.T) {
 		a.Shutdown()
 	}()
 
-	err := a.Advertise(333)
-	assert.NoError(t, err)
+	a.Advertise(333)
 }
 
 func TestAdvertiser_Advertise_deadlineExceeded(t *testing.T) {
@@ -76,8 +75,7 @@ func TestAdvertiser_Advertise_deadlineExceeded(t *testing.T) {
 		a.Shutdown()
 	}()
 
-	err := a.Advertise(333)
-	assert.NoError(t, err)
+	a.Advertise(333)
 }
 
 func TestAdvertiser_Advertise_provideAfterPublicAddr(t *testing.T) {
@@ -115,8 +113,7 @@ func TestAdvertiser_Advertise_provideAfterPublicAddr(t *testing.T) {
 		a.Shutdown()
 	}()
 
-	err := a.Advertise(333)
-	assert.NoError(t, err)
+	a.Advertise(333)
 }
 
 func TestAdvertiser_Advertise_listensOnShutdownIfNoPublicAddr(t *testing.T) {
@@ -149,8 +146,7 @@ func TestAdvertiser_Advertise_listensOnShutdownIfNoPublicAddr(t *testing.T) {
 		a.Shutdown()
 	}()
 
-	err := a.Advertise(333)
-	assert.NoError(t, err)
+	a.Advertise(333)
 }
 
 func TestAdvertiser_Advertise_propagatesServiceAlreadyStarted(t *testing.T) {
@@ -163,7 +159,7 @@ func TestAdvertiser_Advertise_propagatesServiceAlreadyStarted(t *testing.T) {
 	err := a.ServiceStarted()
 	require.NoError(t, err)
 
-	err = a.Advertise(333)
+	a.Advertise(333)
 	assert.Equal(t, service.ErrServiceAlreadyStarted, err)
 }
 
@@ -200,8 +196,7 @@ func TestAdvertiser_Advertise_continuesToProvideOnError(t *testing.T) {
 		a.Shutdown()
 	}()
 
-	err := a.Advertise(333)
-	require.NoError(t, err)
+	a.Advertise(333)
 }
 
 func TestAdvertiser_Advertise_mutatesDiscoveryIdentifier(t *testing.T) {
@@ -237,8 +232,7 @@ func TestAdvertiser_Advertise_mutatesDiscoveryIdentifier(t *testing.T) {
 		a.Shutdown()
 	}()
 
-	err := a.Advertise(333)
-	require.NoError(t, err)
+	a.Advertise(333)
 
 	assert.NotEqual(t, cids[0], cids[1])
 }
