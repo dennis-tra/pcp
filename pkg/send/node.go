@@ -7,7 +7,6 @@ import (
 	"path"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -20,31 +19,19 @@ import (
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 )
 
-type Advertiser[T any] interface {
-	Advertise(chanID int)
-	State() T
-	Error() error
-	Shutdown()
-}
-
-var (
-	_ Advertiser[mdns.State] = (*mdns.Advertiser)(nil)
-	_ Advertiser[dht.State]  = (*dht.Advertiser)(nil)
-)
-
 // Node encapsulates the logic of advertising and transmitting
 // a particular file to a peer.
 type Node struct {
 	*pcpnode.Node
 
+	// if verbose logging is activated
+	verbose bool
+
 	// mDNS advertisement implementations
-	mdnsAdvertiser Advertiser[mdns.State]
+	mdnsAdvertiser *mdns.Advertiser
 
 	// DHT advertisement implementation
-	dhtAdvertiser Advertiser[dht.State]
-
-	// map of peers that passed PAKE
-	authPeers *sync.Map
+	dhtAdvertiser *dht.Advertiser
 
 	// path to the file or directory to transfer
 	filepath string
@@ -54,7 +41,7 @@ type Node struct {
 	relayFinderActive   bool
 
 	// reference to the ticker that triggers the status logs.
-	statusTicker *time.Ticker
+	stopPrintStatus chan struct{}
 
 	// "closed" when the status log go routine returned
 	logLoopWg sync.WaitGroup
@@ -65,8 +52,9 @@ type Node struct {
 func InitNode(c *cli.Context, filepath string, words []string) (*Node, error) {
 	var err error
 	node := &Node{
-		authPeers: &sync.Map{},
-		filepath:  filepath,
+		verbose:         c.Bool("verbose"),
+		filepath:        filepath,
+		stopPrintStatus: make(chan struct{}),
 	}
 
 	opt := libp2p.EnableAutoRelayWithPeerSource(node.autoRelayPeerSource,
@@ -86,7 +74,7 @@ func InitNode(c *cli.Context, filepath string, words []string) (*Node, error) {
 
 	// start logging the current status to the console
 	if !c.Bool("debug") {
-		go node.logLoop(c.Bool("verbose"))
+		go node.printStatus(node.stopPrintStatus)
 	}
 
 	// register handler to respond to PAKE handshakes
@@ -99,9 +87,7 @@ func (n *Node) Shutdown() {
 	n.stopAdvertising()
 	n.UnregisterKeyExchangeHandler()
 	n.Node.Shutdown()
-	if n.statusTicker != nil {
-		n.statusTicker.Stop()
-	}
+	close(n.stopPrintStatus)
 	n.logLoopWg.Wait()
 }
 
@@ -173,16 +159,21 @@ func (n *Node) autoRelayPeerSource(ctx context.Context, num int) <-chan peer.Add
 	return out
 }
 
+// HandleSuccessfulKeyExchange gets called when we have a peer that passed the PAKE.
 func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
 	// We're authenticated so can initiate a transfer
 	if n.GetState() == pcpnode.Connected {
-		log.Debugln("already connected and authenticated with another node")
+		log.Debugln("already connected and authenticated with another peer")
 		return
 	}
 	n.SetState(pcpnode.Connected)
 
 	n.UnregisterKeyExchangeHandler()
 	n.stopAdvertising()
+
+	// stop log loop
+	n.stopPrintStatus <- struct{}{}
+	n.logLoopWg.Wait()
 
 	err := n.Transfer(peerID)
 	if err != nil {

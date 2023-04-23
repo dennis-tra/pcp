@@ -11,14 +11,14 @@ import (
 type Stage string
 
 const (
-	StageIdle            = "idle"
-	StageBootstrapping   = "bootstrapping"
-	StageCheckingNetwork = "checking network"
-	StageProviding       = "providing"
-	StageRetrying        = "retrying"
-	StageProvided        = "provided"
-	StageStopped         = "stopped"
-	StageError           = "error"
+	StageIdle             = "idle"
+	StageBootstrapping    = "bootstrapping"
+	StageAnalyzingNetwork = "analyzing_network"
+	StageProviding        = "providing"
+	StageRetrying         = "retrying"
+	StageProvided         = "provided"
+	StageStopped          = "stopped"
+	StageError            = "error"
 )
 
 type State struct {
@@ -29,6 +29,7 @@ type State struct {
 	PublicAddrs  []ma.Multiaddr
 	PrivateAddrs []ma.Multiaddr
 	RelayAddrs   []ma.Multiaddr
+	Err          error
 }
 
 func (s *State) String() string {

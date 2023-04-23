@@ -45,55 +45,40 @@ func NewAdvertiser(h host.Host, dht wrap.IpfsDHT) *Advertiser {
 // time slot as well. It can still be found with the old one.
 func (a *Advertiser) Advertise(chanID int) {
 	if err := a.ServiceStarted(); err != nil {
-		a.SetError(err)
+		a.setError(err)
 		return
 	}
 	defer a.ServiceStopped()
 
 	if err := a.bootstrap(); err != nil {
-		a.SetError(err)
+		a.setError(err)
 		return
 	}
 
 	if err := a.checkNetwork(); err != nil {
-		a.SetError(err)
+		a.setError(err)
 		return
 	}
 
-	a.SetState(func(s *State) { s.Stage = StageProviding })
+	did := a.did.DiscoveryID(chanID)
 
+	a.setStage(StageProviding)
 	for {
-		err := a.provide(a.ServiceContext(), a.did.DiscoveryID(chanID))
-		if err == context.Canceled {
-			break
-		} else if err != nil && err != context.DeadlineExceeded {
-			a.SetState(func(s *State) { s.Stage = StageRetrying })
+		select {
+		case <-a.SigShutdown():
+			log.Debugln("DHT - Advertising", did, " done - shutdown signal")
+			a.setStage(StageStopped)
+			return
+		default:
+		}
+
+		err := a.provide(a.ServiceContext(), did)
+		if err != nil {
+			a.setStage(StageRetrying)
 		} else {
-			a.SetState(func(s *State) { s.Stage = StageProvided })
+			a.setStage(StageProvided)
 		}
 	}
-
-	a.SetState(func(s *State) { s.Stage = StageStopped })
-
-	return
-}
-
-// HasPublicAddr returns true if there is at least one public
-// address associated with the current node - aka we got at
-// least three confirmations from peers through the identify
-// protocol.
-func (a *Advertiser) HasPublicAddr() bool {
-	for _, addr := range a.Addrs() {
-		if wrapmanet.IsPublicAddr(addr) {
-			return true
-		}
-	}
-	return false
-}
-
-// Shutdown stops the advertisement mechanics.
-func (a *Advertiser) Shutdown() {
-	a.Service.Shutdown()
 }
 
 // the context requires a timeout; it determines how long the DHT looks for
@@ -111,4 +96,9 @@ func (a *Advertiser) provide(ctx context.Context, did string) error {
 	defer cancel()
 
 	return a.dht.Provide(ctx, cID, true)
+}
+
+// Shutdown stops the advertisement mechanics.
+func (a *Advertiser) Shutdown() {
+	a.Service.Shutdown()
 }

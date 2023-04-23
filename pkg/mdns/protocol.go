@@ -13,15 +13,6 @@ import (
 	"github.com/dennis-tra/pcp/pkg/service"
 )
 
-type State string
-
-const (
-	StateIdle        State = "idle"
-	StateAdvertising State = "advertising"
-	StateError       State = "error"
-	StateStopped     State = "stopped"
-)
-
 // These wrapped top level functions are here for testing purposes.
 var (
 	wraptime      wrap.Timer      = wrap.Time{}
@@ -41,8 +32,7 @@ type protocol struct {
 	did discovery.ID
 
 	stateLk sync.RWMutex
-	state   State
-	err     error
+	state   *State
 }
 
 func newProtocol(h host.Host) *protocol {
@@ -50,36 +40,35 @@ func newProtocol(h host.Host) *protocol {
 		Host:    h,
 		Service: service.New("mDNS"),
 		did:     discovery.ID{},
-		state:   StateIdle,
+		state: &State{
+			Stage: StageIdle,
+			Err:   nil,
+		},
 	}
 }
 
-func (p *protocol) SetError(err error) {
+func (p *protocol) setError(err error) {
 	p.stateLk.Lock()
-	p.state = StateError
-	p.err = err
+	p.state.Stage = StageError
+	p.state.Err = err
 	p.stateLk.Unlock()
 }
 
-func (p *protocol) SetState(state State) {
+func (p *protocol) setState(fn func(state *State)) {
 	p.stateLk.Lock()
-	p.state = state
+	fn(p.state)
+	log.Debugln("DHT State:", p.state)
 	p.stateLk.Unlock()
+}
+
+func (p *protocol) setStage(stage Stage) {
+	p.setState(func(s *State) { s.Stage = stage })
 }
 
 func (p *protocol) State() State {
 	p.stateLk.RLock()
-	state := p.state
-	log.Debugln("DHT State:", p.state)
+	state := *p.state
 	p.stateLk.RUnlock()
 
 	return state
-}
-
-func (p *protocol) Error() error {
-	p.stateLk.RLock()
-	err := p.err
-	p.stateLk.RUnlock()
-
-	return err
 }

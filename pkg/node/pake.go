@@ -3,7 +3,6 @@ package node
 import (
 	"bytes"
 	"context"
-	"crypto/elliptic"
 	"fmt"
 	"strings"
 	"sync"
@@ -30,14 +29,15 @@ type PakeProtocol struct {
 	// This is the input key for PAKE.
 	pwKey []byte
 
-	// A map of peers that have successfully passed PAKE.
-	// Peer.ID -> Session Key
-	authedPeers sync.Map
+	// A map of peers and their respective state in the
+	// authentication process.
+	statesLk sync.RWMutex
+	states   map[peer.ID]*PakeState
 
 	// Holds a key exchange handler that is called after
 	// a successful key exchange.
-	lk  sync.RWMutex
-	keh KeyExchangeHandler
+	kehLk sync.RWMutex
+	keh   KeyExchangeHandler
 }
 
 func NewPakeProtocol(node *Node, words []string) (PakeProtocol, error) {
@@ -48,42 +48,94 @@ func NewPakeProtocol(node *Node, words []string) (PakeProtocol, error) {
 	}
 
 	return PakeProtocol{
-		node:        node,
-		pwKey:       key,
-		authedPeers: sync.Map{},
-		lk:          sync.RWMutex{},
+		node:   node,
+		pwKey:  key,
+		states: map[peer.ID]*PakeState{},
 	}, nil
 }
 
-// AddAuthenticatedPeer adds a peer ID and the session key that was
-// obtained via the password authenticated peer exchange (PAKE) to
-// a local peer store.
-func (p *PakeProtocol) AddAuthenticatedPeer(peerID peer.ID, key []byte) {
-	log.Debugf("Adding authenticated peer %s to known peers\n", peerID)
-	p.authedPeers.Store(peerID, key)
+// setPakeStep sets the authentication state to the given step.
+// If the peer isn't tracked yet, its state is created.
+func (p *PakeProtocol) setPakeStep(peerID peer.ID, step PakeStep) {
+	p.statesLk.Lock()
+	defer p.statesLk.Unlock()
+
+	log.Debugf("%s: %s", peerID.String(), step)
+	if _, ok := p.states[peerID]; ok {
+		p.states[peerID].Step = step
+	} else {
+		p.states[peerID] = &PakeState{Step: step}
+	}
+}
+
+// setPakeStep sets the authentication state to the given step.
+// If the peer isn't tracked yet, its state is created.
+func (p *PakeProtocol) setPakeError(peerID peer.ID, err error) {
+	p.statesLk.Lock()
+	defer p.statesLk.Unlock()
+
+	log.Debugf("%s: experienced error: %s", peerID.String(), err)
+	p.states[peerID] = &PakeState{
+		Step: PakeStepError,
+		Err:  err,
+	}
+}
+
+// PakeStates returns the authentication states for all peers that we have interacted with.
+func (p *PakeProtocol) PakeStates() map[peer.ID]*PakeState {
+	p.statesLk.RLock()
+	defer p.statesLk.RUnlock()
+
+	cpy := map[peer.ID]*PakeState{}
+	for k, v := range p.states {
+		cpy[k] = &PakeState{
+			Step: v.Step,
+			Err:  v.Err,
+		}
+		copy(cpy[k].Key, v.Key)
+	}
+	return cpy
+}
+
+// addSessionKey stores the given key for the given peer ID in the internal states map.
+func (p *PakeProtocol) addSessionKey(peerID peer.ID, key []byte) {
+	p.statesLk.Lock()
+	defer p.statesLk.Unlock()
+
+	log.Debugf("Storing session key for peer %s\n", peerID)
+	if _, ok := p.states[peerID]; ok {
+		p.states[peerID].Key = key
+	} else {
+		// unlikely to reach this code path
+		p.states[peerID] = &PakeState{
+			Step: PakeStepPeerAuthenticated,
+			Key:  key,
+		}
+	}
 }
 
 // IsAuthenticated checks if the given peer ID has successfully
 // passed a password authenticated key exchange.
 func (p *PakeProtocol) IsAuthenticated(peerID peer.ID) bool {
-	_, found := p.authedPeers.Load(peerID)
-	log.Debugf("Is peer %s authenticated: %v\n", peerID, found)
-	return found
+	p.statesLk.RLock()
+	defer p.statesLk.RUnlock()
+
+	as, ok := p.states[peerID]
+	return ok && as.Step == PakeStepPeerAuthenticated
 }
 
 // GetSessionKey returns the session key that was obtain via
 // the password authenticated key exchange (PAKE) protocol.
 func (p *PakeProtocol) GetSessionKey(peerID peer.ID) ([]byte, bool) {
-	key, found := p.authedPeers.Load(peerID)
-	if !found {
-		return nil, false
-	}
-	sKey, ok := key.([]byte)
+	p.statesLk.RLock()
+	defer p.statesLk.RUnlock()
+
+	state, ok := p.states[peerID]
 	if !ok {
-		p.authedPeers.Delete(peerID)
 		return nil, false
 	}
-	return sKey, true
+
+	return state.Key, true
 }
 
 type KeyExchangeHandler interface {
@@ -92,16 +144,16 @@ type KeyExchangeHandler interface {
 
 func (p *PakeProtocol) RegisterKeyExchangeHandler(keh KeyExchangeHandler) {
 	log.Debugln("Registering key exchange handler")
-	p.lk.Lock()
-	defer p.lk.Unlock()
+	p.kehLk.Lock()
+	defer p.kehLk.Unlock()
 	p.keh = keh
 	p.node.SetStreamHandler(ProtocolPake, p.onKeyExchange)
 }
 
 func (p *PakeProtocol) UnregisterKeyExchangeHandler() {
 	log.Debugln("Unregistering key exchange handler")
-	p.lk.Lock()
-	defer p.lk.Unlock()
+	p.kehLk.Lock()
+	defer p.kehLk.Unlock()
 	p.node.RemoveStreamHandler(ProtocolPake)
 	p.keh = nil
 }
@@ -110,92 +162,107 @@ func (p *PakeProtocol) onKeyExchange(s network.Stream) {
 	defer s.Close()
 	defer p.node.ResetOnShutdown(s)()
 
-	log.Infor("Authenticating peer...")
+	remotePeer := s.Conn().RemotePeer()
 
-	// pick an elliptic curve
-	curve := elliptic.P521()
+	// Authenticating peer...
+	p.setPakeStep(remotePeer, PakeStepStart)
 
 	// initialize recipient Q ("1" indicates recipient)
-	Q, err := pake.Init(p.pwKey, 1, curve)
+	Q, err := pake.InitCurve(p.pwKey, 1, "siec")
 	if err != nil {
-		log.Warningln(err)
+		p.setPakeError(remotePeer, err)
 		return
 	}
 
-	log.Infor("Waiting for key information...")
+	// Waiting for key information...
+	p.setPakeStep(remotePeer, PakeStepWaitingForKeyInformation)
+
 	// Read init data from P
 	dat, err := p.node.ReadBytes(s)
 	if err != nil {
-		log.Warningln(err)
+		p.setPakeError(remotePeer, err)
 		return
 	}
 
-	log.Infor("Calculating on key information...")
+	// Calculating on key information...
+	p.setPakeStep(remotePeer, PakeStepCalculatingKeyInformation)
+
 	// Use init data from P
 	if err = Q.Update(dat); err != nil {
-		log.Warningln(err)
+		p.setPakeError(remotePeer, err)
 		return
 	}
 
-	log.Infor("Sending key information...")
+	// Sending key information...
+	p.setPakeStep(remotePeer, PakeStepSendingKeyInformation)
+
 	// Send P calculated Data
 	if _, err = p.node.WriteBytes(s, Q.Bytes()); err != nil {
-		log.Warningln(err)
+		p.setPakeError(remotePeer, err)
 		return
 	}
 
-	log.Infor("Waiting for final key information...")
+	// Waiting for final key information...
+	p.setPakeStep(remotePeer, PakeStepWaitingForFinalKeyInformation)
+
 	// Read calculated data from P
 	dat, err = p.node.ReadBytes(s)
 	if err != nil {
-		log.Warningln(err)
+		p.setPakeError(remotePeer, err)
 		return
 	}
 
-	log.Infor("Calculating on key information...")
+	// Calculating on key information...
+	p.setPakeStep(remotePeer, PakeStepCalculatingKeyInformation)
+
 	// Use calculated data from P
 	if err = Q.Update(dat); err != nil {
-		log.Warningln(err)
+		p.setPakeError(remotePeer, err)
 		return
 	}
 
 	// Access session key
 	key, err := Q.SessionKey()
 	if err != nil {
-		log.Warningln(err)
+		p.setPakeError(remotePeer, err)
 		return
 	}
 
-	log.Infor("Proofing authenticity to peer...")
+	// Proving authenticity to peer...
+	p.setPakeStep(remotePeer, PakeStepProvingAuthenticityToPeer)
+
 	// Send P encryption proof
 	if err := p.SendProof(s, key); err != nil {
-		log.Warningln(err)
+		p.setPakeError(remotePeer, err)
 		return
 	}
 
-	log.Infor("Verifying proof from peer...")
+	// Verifying proof from peer...
+	p.setPakeStep(remotePeer, PakeStepVerifyingProofFromPeer)
+
 	// Read and verify encryption proof from P
 	if err := p.ReceiveVerifyProof(s, key); err != nil {
-		log.Warningln(err)
+		p.setPakeError(remotePeer, err)
 		return
 	}
 
-	p.AddAuthenticatedPeer(s.Conn().RemotePeer(), key)
+	p.addSessionKey(remotePeer, key)
+	p.setPakeStep(remotePeer, PakeStepPeerAuthenticated)
 
 	// We're done reading data from P
 	if err = s.CloseRead(); err != nil {
-		log.Warningln("error closing pake write", err)
+		log.Debugln("error closing pake write", err)
 	}
 
 	// Tell P the proof was verified and is okay
 	if _, err = p.node.WriteBytes(s, []byte("ok")); err != nil {
-		log.Warningln(err)
+		p.setPakeError(remotePeer, err)
 		return
 	}
 
 	// Wait for P to close the stream, so we know confirmation was received.
 	if err = p.node.WaitForEOF(s); err != nil {
-		log.Warningln("error waiting for EOF", err)
+		log.Debugln("error waiting for EOF", err)
 	}
 
 	// We're done sending data over the stream.
@@ -203,15 +270,15 @@ func (p *PakeProtocol) onKeyExchange(s network.Stream) {
 		log.Warningln("error closing pake stream", err)
 	}
 
-	log.Infor("Peer connected and authenticated!\n")
-
-	p.lk.RLock()
-	defer p.lk.RUnlock()
+	p.kehLk.RLock()
+	defer p.kehLk.RUnlock()
 	if p.keh == nil {
 		return
 	}
 
-	go p.keh.HandleSuccessfulKeyExchange(s.Conn().RemotePeer())
+	// needs to be in a go routine - if not, calls to (Un)register
+	// stream handlers would deadlock
+	go p.keh.HandleSuccessfulKeyExchange(remotePeer)
 }
 
 func (p *PakeProtocol) StartKeyExchange(ctx context.Context, peerID peer.ID) ([]byte, error) {
@@ -221,59 +288,79 @@ func (p *PakeProtocol) StartKeyExchange(ctx context.Context, peerID peer.ID) ([]
 	}
 	defer s.Close()
 
-	log.Infor("Authenticating peer...")
+	remotePeer := s.Conn().RemotePeer()
 
-	// pick an elliptic curve
-	curve := elliptic.P521()
+	// Authenticating peer...
+	p.setPakeStep(remotePeer, PakeStepStart)
 
 	// initialize sender p ("0" indicates sender)
-	P, err := pake.Init(p.pwKey, 0, curve)
+	P, err := pake.InitCurve(p.pwKey, 0, "siec")
 	if err != nil {
+		p.setPakeError(remotePeer, err)
 		return nil, err
 	}
 
-	log.Infor("Sending key information...")
+	// Sending key information...
+	p.setPakeStep(remotePeer, PakeStepSendingKeyInformation)
+
 	// Send Q init data
 	if _, err = p.node.WriteBytes(s, P.Bytes()); err != nil {
+		p.setPakeError(remotePeer, err)
 		return nil, err
 	}
 
-	log.Infor("Waiting for key information...")
+	// Waiting for key information...
+	p.setPakeStep(remotePeer, PakeStepWaitingForKeyInformation)
+
 	// Read calculated data from Q
 	dat, err := p.node.ReadBytes(s)
 	if err != nil {
+		p.setPakeError(remotePeer, err)
 		return nil, err
 	}
 
-	log.Infor("Calculating on key information...")
+	// Calculating on key information...
+	p.setPakeStep(remotePeer, PakeStepCalculatingKeyInformation)
+
 	// Use calculated data from Q
 	if err = P.Update(dat); err != nil {
+		p.setPakeError(remotePeer, err)
 		return nil, err
 	}
 
-	log.Infor("Sending key information...")
+	// Sending key information...
+	p.setPakeStep(remotePeer, PakeStepSendingKeyInformation)
+
 	// Send Q calculated data
 	if _, err = p.node.WriteBytes(s, P.Bytes()); err != nil {
+		p.setPakeError(remotePeer, err)
 		return nil, err
 	}
 
 	// Extract calculated key
 	key, err := P.SessionKey()
 	if err != nil {
+		p.setPakeError(remotePeer, err)
 		return nil, err
 	}
 
-	log.Infor("Verifying proof from peer...")
+	// Verifying proof from peer...
+	p.setPakeStep(remotePeer, PakeStepVerifyingProofFromPeer)
+
 	// Read and verify encryption proof from Q
 	if err = p.ReceiveVerifyProof(s, key); err != nil {
+		p.setPakeError(remotePeer, err)
 		return nil, err
 	}
 
-	p.AddAuthenticatedPeer(s.Conn().RemotePeer(), key)
+	p.addSessionKey(s.Conn().RemotePeer(), key)
 
-	log.Infor("Proofing authenticity to peer...")
+	// Proving authenticity to peer...
+	p.setPakeStep(remotePeer, PakeStepProvingAuthenticityToPeer)
+
 	// Send Q encryption proof
 	if err = p.SendProof(s, key); err != nil {
+		p.setPakeError(remotePeer, err)
 		return nil, err
 	}
 
@@ -282,18 +369,25 @@ func (p *PakeProtocol) StartKeyExchange(ctx context.Context, peerID peer.ID) ([]
 		log.Warningln("error closing pake write", err)
 	}
 
-	log.Infor("Waiting for confirmation from peer...")
+	// Waiting for confirmation from peer...
+	p.setPakeStep(remotePeer, PakeStepWaitingForFinalConfirmation)
+
 	// Read confirmation from P
 	confirm, err := p.node.ReadBytes(s)
 	if err != nil {
+		p.setPakeError(remotePeer, err)
 		return nil, err
 	}
 
 	if string(confirm) != "ok" {
-		return nil, fmt.Errorf("peer did not respond with ok")
+		err = fmt.Errorf("peer did not respond with ok")
+		p.setPakeError(remotePeer, err)
+		return nil, err
 	}
 
-	log.Infor("Peer connected and authenticated!\n")
+	// Peer connected and authenticated!
+	p.setPakeStep(remotePeer, PakeStepPeerAuthenticated)
+
 	return key, nil
 }
 
@@ -338,3 +432,32 @@ func (p *PakeProtocol) ReceiveVerifyProof(s network.Stream, key []byte) error {
 
 	return nil
 }
+
+// PakeState holds information for a given peer that we are performing
+// a password authenticated key exchange with. The struct stores the
+// final derived strong session key as well as a potential error that has
+// occurred during the exchange. Further, it keeps track of at which
+// step of the key exchange we are with a given peer.
+type PakeState struct {
+	Step PakeStep
+	Key  []byte
+	Err  error
+}
+
+// PakeStep is an enum type that represents different steps in the
+// password authenticated key exchange protocol.
+type PakeStep uint8
+
+const (
+	PakeStepUnknown PakeStep = iota
+	PakeStepStart
+	PakeStepWaitingForKeyInformation
+	PakeStepCalculatingKeyInformation
+	PakeStepSendingKeyInformation
+	PakeStepWaitingForFinalKeyInformation
+	PakeStepProvingAuthenticityToPeer
+	PakeStepVerifyingProofFromPeer
+	PakeStepWaitingForFinalConfirmation
+	PakeStepPeerAuthenticated
+	PakeStepError
+)

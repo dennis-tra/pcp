@@ -38,8 +38,7 @@ type State string
 
 const (
 	Initialising State = "initialising"
-	Discovering        = "discovering"
-	Advertising        = "advertising"
+	Roaming            = "roaming"
 	Connected          = "connected"
 )
 
@@ -48,6 +47,7 @@ type Node struct {
 	service.Service
 	host.Host
 
+	// give node protocol capabilities
 	PushProtocol
 	TransferProtocol
 	PakeProtocol
@@ -357,6 +357,14 @@ func (n *Node) WaitForEOF(s network.Stream) error {
 }
 
 func (n *Node) Trace(evt *holepunch.Event) {
-	// TODO implement me
-	// panic("implement me")
+	switch evt.Evt.(type) {
+	case *holepunch.StartHolePunchEvt:
+		log.Infoln(evt.Remote)
+
+		log.Debugln("START")
+		for _, conn := range n.Network().ConnsToPeer(evt.Remote) {
+			log.Debugln("---", conn.Stat().Direction)
+		}
+	default:
+	}
 }

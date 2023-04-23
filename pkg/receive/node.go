@@ -68,7 +68,7 @@ func (n *Node) Shutdown() {
 }
 
 func (n *Node) StartDiscovering(c *cli.Context) {
-	n.SetState(pcpnode.Discovering)
+	n.SetState(pcpnode.Roaming)
 
 	if c.Bool("mdns") == c.Bool("dht") {
 		n.discoverers = []Discoverer{
@@ -126,7 +126,7 @@ func (n *Node) StopDiscovering() {
 
 // HandlePeer is called async from the discoverers. It's okay to have long running tasks here.
 func (n *Node) HandlePeerFound(pi peer.AddrInfo) {
-	if n.GetState() != pcpnode.Discovering {
+	if n.GetState() != pcpnode.Roaming {
 		log.Debugln("Received a peer from the discoverer although we're not discovering")
 		return
 	}

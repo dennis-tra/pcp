@@ -11,7 +11,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dennis-tra/pcp/internal/mock"
@@ -67,8 +66,7 @@ func TestAdvertiser_Advertise(t *testing.T) {
 		Times(1)
 
 	go func() {
-		err := a.Advertise(chanID)
-		assert.NoError(t, err)
+		a.Advertise(chanID)
 		wg.Done()
 	}()
 	wg.Wait()
@@ -102,8 +100,7 @@ func TestAdvertiser_Advertise_multipleTimes(t *testing.T) {
 		Times(5)
 
 	go func() {
-		err := a.Advertise(333)
-		assert.NoError(t, err)
+		a.Advertise(333)
 		wg.Done()
 	}()
 	wg.Wait()

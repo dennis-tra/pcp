@@ -37,7 +37,6 @@ type protocol struct {
 
 	stateLk sync.RWMutex
 	state   *State
-	err     error
 }
 
 func newProtocol(h host.Host, dht wrap.IpfsDHT) *protocol {
@@ -60,18 +59,22 @@ func newProtocol(h host.Host, dht wrap.IpfsDHT) *protocol {
 	return p
 }
 
-func (p *protocol) SetError(err error) {
+func (p *protocol) setError(err error) {
 	p.stateLk.Lock()
 	p.state.Stage = StageError
-	p.err = err
+	p.state.Err = err
 	p.stateLk.Unlock()
 }
 
-func (p *protocol) SetState(fn func(state *State)) {
+func (p *protocol) setState(fn func(state *State)) {
 	p.stateLk.Lock()
 	fn(p.state)
 	log.Debugln("DHT State:", p.state)
 	p.stateLk.Unlock()
+}
+
+func (p *protocol) setStage(stage Stage) {
+	p.setState(func(s *State) { s.Stage = stage })
 }
 
 func (p *protocol) State() State {
@@ -82,18 +85,10 @@ func (p *protocol) State() State {
 	return *state
 }
 
-func (p *protocol) Error() error {
-	p.stateLk.RLock()
-	err := p.err
-	p.stateLk.RUnlock()
-
-	return err
-}
-
 // bootstrap connects to a set of bootstrap nodes to connect
 // to the DHT.
 func (p *protocol) bootstrap() error {
-	p.SetState(func(s *State) { s.Stage = StageBootstrapping })
+	p.setState(func(s *State) { s.Stage = StageBootstrapping })
 
 	peers := kaddht.GetDefaultBootstrapPeerAddrInfos()
 	peerCount := len(peers)
@@ -146,7 +141,7 @@ func (p *protocol) bootstrap() error {
 
 // checkNetwork subscribes to a couple of libp2p events that fire after certain network conditions where determined.
 func (p *protocol) checkNetwork() error {
-	p.SetState(func(s *State) { s.Stage = StageCheckingNetwork })
+	p.setState(func(s *State) { s.Stage = StageAnalyzingNetwork })
 
 	evtTypes := []interface{}{
 		new(event.EvtLocalReachabilityChanged),

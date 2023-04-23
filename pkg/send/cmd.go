@@ -77,28 +77,28 @@ func Action(c *cli.Context) error {
 		wrds = words.HomebrewList()
 	}
 
-	// Initialize node
-	local, err := InitNode(c, filepath, wrds)
+	// Start the libp2p node
+	node, err := InitNode(c, filepath, wrds)
 	if err != nil {
 		return err
 	}
 
 	// if mDNS is active, start advertising in the local network
 	if isMDNSActive(c) {
-		go local.StartAdvertisingMDNS()
+		go node.StartAdvertisingMDNS()
 	}
 
 	// if DHT is active, start advertising in the wider area network
 	if isDHTActive(c) {
-		go local.StartAdvertisingDHT()
+		go node.StartAdvertisingDHT()
 	}
 
 	// Wait for the user to stop the tool or the transfer to finish.
 	select {
 	case <-c.Done():
-		local.Shutdown()
+		node.Shutdown()
 		return nil
-	case <-local.SigDone():
+	case <-node.SigDone():
 		return nil
 	}
 }

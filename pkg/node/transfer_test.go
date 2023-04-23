@@ -83,7 +83,7 @@ func TestTransferProtocol_onTransfer_senderNotAuthenticatedAtReceiver(t *testing
 	// Simulate that the receiver is authenticated (from the perspective of the sender)
 	key, err := crypt.DeriveKey([]byte{}, []byte{})
 	require.NoError(t, err)
-	node1.PakeProtocol.authedPeers.Store(node2.ID(), key)
+	node1.PakeProtocol.sessionKeys.Store(node2.ID(), key)
 
 	err = net.LinkAll()
 	require.NoError(t, err)
@@ -104,8 +104,8 @@ func TestTransferProtocol_onTransfer_peersDifferentKeys(t *testing.T) {
 	require.NoError(t, err)
 	key2, err := crypt.DeriveKey([]byte{2}, []byte{2})
 	require.NoError(t, err)
-	node1.PakeProtocol.authedPeers.Store(node2.ID(), key1)
-	node2.PakeProtocol.authedPeers.Store(node1.ID(), key2)
+	node1.PakeProtocol.sessionKeys.Store(node2.ID(), key1)
+	node2.PakeProtocol.sessionKeys.Store(node1.ID(), key2)
 
 	err = net.LinkAll()
 	require.NoError(t, err)
@@ -144,7 +144,7 @@ func TestTransferProtocol_onTransfer_provokeErrCases(t *testing.T) {
 	assert.Contains(t, err.Error(), "session key not found")
 
 	// Session key has wrong format
-	node1.authedPeers.Store(node2.ID(), []byte{1, 2, 3})
+	node1.sessionKeys.Store(node2.ID(), []byte{1, 2, 3})
 	err = node1.Transfer(ctx, node2.ID(), relTestDir("transfer_file/file"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid key size 3")
@@ -167,8 +167,8 @@ func setupNode(t *testing.T, net mocknet.Mocknet) (*Node, chan struct{}) {
 func authNodes(t *testing.T, node1 *Node, node2 *Node) {
 	key, err := crypt.DeriveKey([]byte{}, []byte{})
 	require.NoError(t, err)
-	node1.PakeProtocol.authedPeers.Store(node2.ID(), key)
-	node2.PakeProtocol.authedPeers.Store(node1.ID(), key)
+	node1.PakeProtocol.sessionKeys.Store(node2.ID(), key)
+	node2.PakeProtocol.sessionKeys.Store(node1.ID(), key)
 }
 
 func Test_relPath(t *testing.T) {

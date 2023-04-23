@@ -15,9 +15,11 @@ type AdvertiseStatusParams struct {
 	RelayAddrs   string
 	PrivateAddrs string
 	PublicAddrs  string
+	PakePeers    []string
+	PakeStates   map[string]string
 }
 
-func AdvertiseStatus(asp AdvertiseStatusParams, verbose bool) {
+func AdvertiseStatus(asp AdvertiseStatusParams, verbose bool) func() {
 	// move up for info level log lines
 	if verbose {
 		fmt.Fprint(Out, fmt.Sprintf("Code:          %s\n", asp.Code))
@@ -30,12 +32,20 @@ func AdvertiseStatus(asp AdvertiseStatusParams, verbose bool) {
 		fmt.Fprint(Out, fmt.Sprintf("   public:     %s\n", asp.PublicAddrs))
 		fmt.Fprint(Out, fmt.Sprintf("   relays:     %s\n", asp.RelayAddrs))
 	}
-	fmt.Fprint(Out, fmt.Sprintf("%sLocal Network:%s %s\t%sInternet:%s %s\n", FontBold, EscReset, asp.LANState, FontBold, EscReset, asp.WANState))
-}
+	fmt.Fprint(Out, fmt.Sprintf("%s %s\t%s %s\n", Bold("Local Network:"), asp.LANState, Bold("Internet:"), asp.WANState))
 
-func EraseAdvertiseStatus(verbose bool) {
-	if verbose {
-		fmt.Fprint(Out, "\033[9A")
+	for _, p := range asp.PakePeers {
+		fmt.Fprintf(Out, "  -> %s: %s\n", Bold(p), asp.PakeStates[p])
 	}
-	fmt.Fprint(Out, "\033[1A\u001B[0J")
+
+	// return eraser function
+	return func() {
+		if verbose {
+			fmt.Fprint(Out, "\033[9A")
+		}
+		if len(asp.PakePeers) > 0 {
+			fmt.Fprintf(Out, "\033[%dA", len(asp.PakePeers))
+		}
+		fmt.Fprint(Out, "\033[1A\u001B[0J")
+	}
 }

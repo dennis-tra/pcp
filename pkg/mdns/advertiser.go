@@ -21,21 +21,19 @@ func NewAdvertiser(h host.Host) *Advertiser {
 // Advertise broadcasts that we're providing data for the given channel ID in the local network.
 func (a *Advertiser) Advertise(chanID int) {
 	if err := a.ServiceStarted(); err != nil {
-		a.SetError(err)
+		a.setError(err)
 		return
 	}
 	defer a.ServiceStopped()
 
-	a.SetState(StateAdvertising)
-	defer a.SetState(StateStopped)
-
+	a.setStage(StageAdvertising)
 	for {
 		did := a.did.DiscoveryID(chanID)
 
 		log.Debugln("mDNS - Advertising ", did)
 		mdns := wrapdiscovery.NewMdnsService(a, did, a)
 		if err := mdns.Start(); err != nil {
-			a.SetError(fmt.Errorf("start mdns service: %w", err))
+			a.setError(fmt.Errorf("start mdns service: %w", err))
 			return
 		}
 
@@ -45,6 +43,7 @@ func (a *Advertiser) Advertise(chanID int) {
 			if err := mdns.Close(); err != nil {
 				log.Warningf("Error closing MDNS service: %s", err)
 			}
+			a.setStage(StageStopped)
 			return
 		case <-time.After(Timeout):
 		}
