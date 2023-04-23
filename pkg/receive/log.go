@@ -2,205 +2,334 @@ package receive
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/dennis-tra/pcp/pkg/node"
-
-	"github.com/dennis-tra/pcp/pkg/dht"
-
-	"github.com/dennis-tra/pcp/pkg/mdns"
+	"github.com/gosuri/uilive"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/p2p/net/nat"
 
 	"github.com/dennis-tra/pcp/internal/log"
+	"github.com/dennis-tra/pcp/pkg/dht"
+	"github.com/dennis-tra/pcp/pkg/mdns"
+	"github.com/dennis-tra/pcp/pkg/node"
+	"github.com/dennis-tra/pcp/pkg/service"
 )
 
-var spinnerChars = []string{"⠋ ", "⠙ ", "⠹ ", "⠸ ", "⠼ ", "⠴ ", "⠦ ", "⠧ ", "⠇ ", "⠏ "}
+type statusLogger struct {
+	service.Service
+	node   *Node
+	writer *uilive.Writer
+}
 
-func (n *Node) printStatus(stop chan struct{}) {
-	n.printStatusWg.Add(1)
-	defer n.printStatusWg.Done()
+func newStatusLogger(n *Node) *statusLogger {
+	return &statusLogger{
+		Service: service.New("status-logger"),
+		node:    n,
+		writer:  uilive.New(),
+	}
+}
 
-	log.Infoln("On the other machine run:")
-	log.Infoln("\tpeercp receive", strings.Join(n.Words, "-"))
-
-	eraseFn := log.DiscoverStatus(n.discoverStatus(spinnerChars[0]), n.verbose)
+func (l *statusLogger) startLogging() {
+	_ = l.ServiceStarted()
+	defer l.ServiceStopped()
 
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
-
 	for i := 0; ; i++ {
-		spinnerChar := spinnerChars[i%len(spinnerChars)]
+		i %= len(log.SpinnerChars)
+
 		select {
-		case <-stop:
-			eraseFn()
-			eraseFn = log.DiscoverStatus(n.discoverStatus(spinnerChar), n.verbose)
-			return
-		case <-n.ServiceContext().Done():
+		case <-l.SigShutdown():
+			l.newLogStatus(log.SpinnerChars[i]).writeStatus(l.writer)
+			_ = l.writer.Flush()
 			return
 		case <-ticker.C:
-			eraseFn()
-			eraseFn = log.DiscoverStatus(n.discoverStatus(spinnerChar), n.verbose)
+			l.newLogStatus(log.SpinnerChars[i]).writeStatus(l.writer)
+			_ = l.writer.Flush()
 		}
 	}
 }
 
-func (n *Node) discoverStatus(spinnerChar string) log.DiscoverStatusParams {
-	isCtxCancelled := n.ServiceContext().Err() == context.Canceled
+type logStatus struct {
+	verbose      bool
+	words        []string
+	mdnsState    mdns.State
+	dhtState     dht.DiscoverState
+	pakeStates   map[peer.ID]*node.PakeState
+	hpStates     map[peer.ID]node.HolePunchState
+	portMappings []nat.Mapping
+	spinnerChar  string
+	ctxCancelled bool
+}
 
-	mdnsState := n.mdnsDiscoverer.State()
-	dhtState := n.dhtDiscoverer.State()
-	pakeStates := n.PakeProtocol.PakeStates()
-	hpStates := n.HolePunchStates()
-
-	asp := log.DiscoverStatusParams{
-		Code:       strings.Join(n.Words, "-"),
-		LANState:   log.Gray("-"),
-		MDNSState:  log.Gray("-"),
-		Peers:      []string{},
-		PeerStates: map[string]string{},
+func (l *statusLogger) newLogStatus(spinnerChar string) *logStatus {
+	var portMappings []nat.Mapping
+	if l.node.NATManager.NAT() != nil {
+		portMappings = l.node.NATManager.NAT().Mappings()
 	}
 
-	switch mdnsState.Stage {
+	return &logStatus{
+		ctxCancelled: l.node.ServiceContext().Err() == context.Canceled,
+		spinnerChar:  spinnerChar,
+		verbose:      l.node.verbose,
+		words:        l.node.Words,
+		mdnsState:    l.node.mdnsDiscoverer.State(),
+		dhtState:     l.node.dhtDiscoverer.State(),
+		pakeStates:   l.node.PakeProtocol.PakeStates(),
+		hpStates:     l.node.HolePunchStates(),
+		portMappings: portMappings,
+	}
+}
+
+func (l *logStatus) writeStatus(writer io.Writer) {
+	if l.verbose {
+		fmt.Fprintf(writer, "Code:          %s\n", strings.Join(l.words, "-"))
+		fmt.Fprintf(writer, "mDNS:          %s\n", l.mdnsStateStr())
+		fmt.Fprintf(writer, "DHT:           %s\n", l.dhtStateStr())
+		fmt.Fprintf(writer, "NAT (udp/tcp):\n")
+		fmt.Fprintf(writer, "   Mappings:   %s\n", l.portMappingsStr())
+		fmt.Fprintf(writer, "Multiaddresses\n")
+		fmt.Fprintf(writer, "   private:    %s\n", l.privateAddrsStr())
+		fmt.Fprintf(writer, "   public:     %s\n", l.publicAddrsStr())
+	}
+	fmt.Fprint(writer, fmt.Sprintf("%s %s\t%s %s\n", log.Bold("Local Network:"), l.lanStateStr(), log.Bold("Internet:"), l.wanStateStr()))
+
+	peers, peerStates := l.peerStates()
+	for _, p := range peers {
+		fmt.Fprintf(writer, "  -> %s: %s\n", log.Bold(p), peerStates[p])
+	}
+}
+
+func (l *logStatus) mdnsStateStr() string {
+	switch l.mdnsState.Stage {
 	case mdns.StageIdle:
-		asp.MDNSState = log.Gray("-")
-		asp.LANState = log.Green("-")
+		return log.Gray("-")
 	case mdns.StageRoaming:
-		asp.MDNSState = spinnerChar
-		asp.LANState = log.Green("searching " + spinnerChar)
+		return log.Green("active")
 	case mdns.StageError:
-		asp.MDNSState = log.Red(mdnsState.Err.Error())
-		asp.LANState = log.Red("failed")
+		return log.Red(l.mdnsState.Err.Error())
 	case mdns.StageStopped:
-		asp.MDNSState = log.Green("inactive")
-		asp.LANState = log.Green("stopped")
+		return log.Green("inactive")
+	default:
+		return log.Red(fmt.Sprintf("unknown stage: %s", l.mdnsState.Stage))
+	}
+}
+
+func (l *logStatus) lanStateStr() string {
+	switch l.mdnsState.Stage {
+	case mdns.StageIdle:
+		return log.Green("-")
+	case mdns.StageRoaming:
+		return log.Green("searching " + l.spinnerChar)
+	case mdns.StageError:
+		return log.Red("failed")
+	case mdns.StageStopped:
+		if l.ctxCancelled {
+			return log.Gray("cancelled")
+		}
+		return log.Green("stopped")
+	default:
+		return log.Gray("-")
+	}
+}
+
+func (l *logStatus) dhtStateStr() string {
+	switch l.dhtState.Stage {
+	case dht.StageIdle:
+		return log.Gray("-")
+	case dht.StageStopped:
+		return log.Green("stopped")
 	}
 
-	switch dhtState.Stage {
-	case dht.StageIdle:
-		asp.DHTState = log.Gray("-")
-		asp.WANState = log.Green("-")
+	if l.ctxCancelled {
+		return log.Gray("cancelled")
+	}
+
+	switch l.dhtState.Stage {
 	case dht.StageBootstrapping:
-		if isCtxCancelled {
-			asp.DHTState = log.Gray("cancelled")
-			asp.WANState = log.Gray("cancelled")
-		} else {
-			asp.DHTState = spinnerChar + "(bootstrapping)"
-			asp.WANState = spinnerChar + "(bootstrapping)"
-		}
+		return l.spinnerChar + "(bootstrapping)"
+	case dht.StageWaitingForPublicAddrs:
+		return l.spinnerChar + "(detecting public addresses)"
 	case dht.StageLookup:
 		fallthrough
 	case dht.StageRetrying:
-		if isCtxCancelled {
-			asp.DHTState = log.Gray("cancelled")
-			asp.WANState = log.Gray("cancelled")
-		} else {
-			asp.DHTState = spinnerChar
-			asp.WANState = log.Green("searching " + spinnerChar)
-		}
+		return log.Green("searching " + l.spinnerChar)
 	case dht.StageError:
-		if isCtxCancelled || errors.Is(dhtState.Err, context.Canceled) {
-			asp.DHTState = log.Gray("cancelled")
-			asp.WANState = log.Gray("cancelled")
-		} else {
-			asp.DHTState = log.Red(dhtState.Err.Error())
-			asp.WANState = log.Red("failed (" + dhtState.Err.Error() + ")")
-		}
-	case dht.StageStopped:
-		asp.DHTState = log.Green("inactive")
-		asp.WANState = log.Green("stopped")
+		return log.Red("failed (" + l.dhtState.Err.Error() + ")")
+	default:
+		return log.Red(fmt.Sprintf("unknown stage: %d", l.dhtState.Stage))
+	}
+}
+
+func (l *logStatus) wanStateStr() string {
+	if l.dhtState.Stage == dht.StageIdle {
+		return log.Gray("-")
+	} else if l.ctxCancelled {
+		return log.Gray("cancelled")
 	}
 
-	for peer, state := range pakeStates {
+	switch l.dhtState.Stage {
+	case dht.StageBootstrapping:
+		return l.spinnerChar + "(bootstrapping)"
+	case dht.StageWaitingForPublicAddrs:
+		return l.spinnerChar + "(detecting public addresses)"
+	case dht.StageLookup:
+		fallthrough
+	case dht.StageRetrying:
+		return log.Green("searching " + l.spinnerChar)
+	case dht.StageStopped:
+		return log.Green("stopped")
+	case dht.StageError:
+		return log.Red(l.dhtState.Err.Error())
+	default:
+		return log.Red(fmt.Sprintf("unknown stage: %d", l.dhtState.Stage))
+	}
+}
+
+func (l *logStatus) portMappingsStr() string {
+	pmsUDP := 0
+	pmsTCP := 0
+	for _, mapping := range l.portMappings {
+		switch mapping.Protocol() {
+		case "udp":
+			pmsUDP += 1
+		case "tcp":
+			pmsTCP += 1
+		}
+	}
+
+	pmsStr := ""
+	if pmsUDP == 0 {
+		pmsStr += log.Gray("0")
+	} else {
+		pmsStr += log.Green(strconv.Itoa(pmsUDP))
+	}
+	pmsStr += " / "
+	if pmsTCP == 0 {
+		pmsStr += log.Gray("0")
+	} else {
+		pmsStr += log.Green(strconv.Itoa(pmsTCP))
+	}
+
+	return pmsStr
+}
+
+func (l *logStatus) privateAddrsStr() string {
+	if len(l.dhtState.PrivateAddrs) == 0 {
+		return log.Red("0")
+	} else {
+		return log.Green(strconv.Itoa(len(l.dhtState.PrivateAddrs)))
+	}
+}
+
+func (l *logStatus) publicAddrsStr() string {
+	if len(l.dhtState.PublicAddrs) == 0 {
+		if l.ctxCancelled {
+			return log.Gray("cancelled")
+		} else {
+			return l.spinnerChar
+		}
+	} else {
+		return log.Green(strconv.Itoa(len(l.dhtState.PublicAddrs)))
+	}
+}
+
+func (l *logStatus) peerStates() ([]string, map[string]string) {
+	var peers []string
+	peerStates := map[string]string{}
+	for peer, state := range l.pakeStates {
 		peerID := peer.String()
 		if len(peerID) >= 16 {
 			peerID = peerID[:16]
 		}
 
-		if isCtxCancelled {
-			asp.PeerStates[peerID] = log.Gray("cancelled")
+		if l.ctxCancelled {
+			peerStates[peerID] = log.Gray("cancelled")
 		}
 
-		asp.Peers = append(asp.Peers, peerID)
+		peers = append(peers, peerID)
 		switch state.Step {
 		case node.PakeStepStart:
-			asp.PeerStates[peerID] = "Started peer authentication"
+			peerStates[peerID] = "Started peer authentication"
 		case node.PakeStepWaitingForKeyInformation:
-			asp.PeerStates[peerID] = "Waiting for key information... " + spinnerChar
-			if isCtxCancelled {
-				asp.PeerStates[peerID] = log.Gray("cancelled")
+			peerStates[peerID] = "Waiting for key information... " + l.spinnerChar
+			if l.ctxCancelled {
+				peerStates[peerID] = log.Gray("cancelled")
 			}
 		case node.PakeStepCalculatingKeyInformation:
-			asp.PeerStates[peerID] = "Calculating on key information... " + spinnerChar
-			if isCtxCancelled {
-				asp.PeerStates[peerID] = log.Gray("cancelled")
+			peerStates[peerID] = "Calculating on key information... " + l.spinnerChar
+			if l.ctxCancelled {
+				peerStates[peerID] = log.Gray("cancelled")
 			}
 		case node.PakeStepSendingKeyInformation:
-			asp.PeerStates[peerID] = "Sending key information... " + spinnerChar
-			if isCtxCancelled {
-				asp.PeerStates[peerID] = log.Gray("cancelled")
+			peerStates[peerID] = "Sending key information... " + l.spinnerChar
+			if l.ctxCancelled {
+				peerStates[peerID] = log.Gray("cancelled")
 			}
 		case node.PakeStepWaitingForFinalKeyInformation:
-			asp.PeerStates[peerID] = "Waiting for final key information... " + spinnerChar
-			if isCtxCancelled {
-				asp.PeerStates[peerID] = log.Gray("cancelled")
+			peerStates[peerID] = "Waiting for final key information... " + l.spinnerChar
+			if l.ctxCancelled {
+				peerStates[peerID] = log.Gray("cancelled")
 			}
 		case node.PakeStepProvingAuthenticityToPeer:
-			asp.PeerStates[peerID] = "Proving authenticity to peer... " + spinnerChar
-			if isCtxCancelled {
-				asp.PeerStates[peerID] = log.Gray("cancelled")
+			peerStates[peerID] = "Proving authenticity to peer... " + l.spinnerChar
+			if l.ctxCancelled {
+				peerStates[peerID] = log.Gray("cancelled")
 			}
 		case node.PakeStepVerifyingProofFromPeer:
-			asp.PeerStates[peerID] = "Verifying proof from peer... " + spinnerChar
-			if isCtxCancelled {
-				asp.PeerStates[peerID] = log.Gray("cancelled")
+			peerStates[peerID] = "Verifying proof from peer... " + l.spinnerChar
+			if l.ctxCancelled {
+				peerStates[peerID] = log.Gray("cancelled")
 			}
 		case node.PakeStepWaitingForFinalConfirmation:
-			asp.PeerStates[peerID] = "Waiting for final confirmation... " + spinnerChar
-			if isCtxCancelled {
-				asp.PeerStates[peerID] = log.Gray("cancelled")
+			peerStates[peerID] = "Waiting for final confirmation... " + l.spinnerChar
+			if l.ctxCancelled {
+				peerStates[peerID] = log.Gray("cancelled")
 			}
 		case node.PakeStepPeerAuthenticated:
-			asp.PeerStates[peerID] = log.Green("Peer authenticated!")
+			peerStates[peerID] = log.Green("Peer authenticated!")
 		case node.PakeStepError:
 			if state.Err != nil {
-				asp.PeerStates[peerID] = log.Red("Peer authentication failed: " + state.Err.Error())
+				peerStates[peerID] = log.Red("Peer authentication failed: " + state.Err.Error())
 			} else {
-				asp.PeerStates[peerID] = log.Red("Peer authentication failed")
+				peerStates[peerID] = log.Red("Peer authentication failed")
 			}
 		default:
-			asp.PeerStates[peerID] = log.Yellow(fmt.Sprintf("Unknown PAKE step: %d", state.Step))
+			peerStates[peerID] = log.Yellow(fmt.Sprintf("Unknown PAKE step: %d", state.Step))
 		}
 	}
 
-	for peer, state := range hpStates {
+	for peer, state := range l.hpStates {
 		peerID := peer.String()
 		if len(peerID) >= 16 {
 			peerID = peerID[:16]
 		}
 
 		// give PAKE status precedence
-		if _, found := asp.PeerStates[peerID]; found {
+		if _, found := peerStates[peerID]; found {
 			continue
 		}
 
-		if isCtxCancelled {
-			asp.PeerStates[peerID] = log.Gray("cancelled")
+		if l.ctxCancelled {
+			peerStates[peerID] = log.Gray("cancelled")
 		}
 
 		switch state.Stage {
 		case node.HolePunchStageStarted:
-			asp.PeerStates[peerID] = fmt.Sprintf("Hole punching NATs (attempt %d)... %s", state.Attempts, spinnerChar)
+			peerStates[peerID] = fmt.Sprintf("Hole punching NATs (attempt %d)... %s", state.Attempts, l.spinnerChar)
 		case node.HolePunchStageSucceeded:
-			asp.PeerStates[peerID] = log.Green("Hole punching succeeded!")
+			peerStates[peerID] = log.Green("Hole punching succeeded!")
 		case node.HolePunchStageFailed:
-			asp.PeerStates[peerID] = log.Red(fmt.Sprintf("Hole punching failed (%s)", state.Err))
+			peerStates[peerID] = log.Red(fmt.Sprintf("Hole punching failed (%s)", state.Err))
 		}
 	}
 
-	sort.Strings(asp.Peers)
+	sort.Strings(peers)
 
-	return asp
+	return peers, peerStates
 }

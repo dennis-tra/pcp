@@ -1,5 +1,7 @@
 package log
 
+var SpinnerChars = []string{"⠋ ", "⠙ ", "⠹ ", "⠸ ", "⠼ ", "⠴ ", "⠦ ", "⠧ ", "⠇ ", "⠏ "}
+
 const (
 	EscReset    = "\033[0m"
 	FontBold    = "\033[1m"

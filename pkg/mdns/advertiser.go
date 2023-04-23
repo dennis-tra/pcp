@@ -58,7 +58,3 @@ func (a *Advertiser) Advertise(chanID int) {
 func (a *Advertiser) HandlePeerFound(info peer.AddrInfo) {
 	// no-op for advertisements - could consider to proactively contact other peers
 }
-
-func (a *Advertiser) Shutdown() {
-	a.Service.Shutdown()
-}

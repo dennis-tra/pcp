@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"sync"
 	"time"
 
@@ -71,9 +70,6 @@ type Node struct {
 
 	stateLk *sync.RWMutex
 	state   State
-
-	// StatusWriter is a reference to the logger that prints the status to the console
-	StatusWriter *uilive.Writer
 }
 
 // New creates a new, fully initialized node with the given options.
@@ -92,13 +88,12 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 	uilive.RefreshInterval = 100 * time.Hour
 
 	node := &Node{
-		Service:      service.New("node"),
-		hpStates:     map[peer.ID]*HolePunchState{},
-		state:        Initialising,
-		stateLk:      &sync.RWMutex{},
-		Words:        wrds,
-		ChanID:       ints[0],
-		StatusWriter: uilive.New(),
+		Service:  service.New("node"),
+		hpStates: map[peer.ID]*HolePunchState{},
+		state:    Initialising,
+		stateLk:  &sync.RWMutex{},
+		Words:    wrds,
+		ChanID:   ints[0],
 	}
 	node.PushProtocol = NewPushProtocol(node)
 	node.TransferProtocol = NewTransferProtocol(node)
@@ -138,21 +133,16 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 
 	go func() {
 		<-node.SigShutdown()
-		if err = node.Host.Close(); err != nil {
-			log.Warningln("error closing node", err)
-		}
+
+		// TODO: properly closing the host can take up to 1 minute
+		//if err = node.Host.Close(); err != nil {
+		//	log.Warningln("error closing node", err)
+		//}
+
 		node.ServiceStopped()
 	}()
 
 	return node, node.ServiceStarted()
-}
-
-func (n *Node) Shutdown() {
-	if err := n.Host.Close(); err != nil {
-		log.Warningln("error closing node", err)
-	}
-
-	n.ServiceStopped()
 }
 
 func (n *Node) SetState(s State) State {
@@ -290,7 +280,7 @@ func (n *Node) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
 func (n *Node) Read(s network.Stream, buf p2p.HeaderMessage) error {
 	defer s.CloseRead()
 
-	data, err := ioutil.ReadAll(s)
+	data, err := io.ReadAll(s)
 	if err != nil {
 		if err2 := s.Reset(); err2 != nil {
 			err = fmt.Errorf("%s: %w", err2.Error(), err)

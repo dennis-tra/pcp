@@ -52,8 +52,6 @@ func TestAdvertiser_Advertise(t *testing.T) {
 func TestAdvertiser_Advertise_deadlineExceeded(t *testing.T) {
 	ctrl, local, net := setup(t)
 
-	provideTimeout = 10 * time.Millisecond
-
 	mockDefaultBootstrapPeers(t, ctrl, net, local)
 
 	dht := mock.NewMockIpfsDHT(ctrl)
@@ -80,8 +78,6 @@ func TestAdvertiser_Advertise_deadlineExceeded(t *testing.T) {
 
 func TestAdvertiser_Advertise_provideAfterPublicAddr(t *testing.T) {
 	ctrl, local, net := setup(t)
-
-	pubAddrInter = 10 * time.Millisecond
 
 	mockDefaultBootstrapPeers(t, ctrl, net, local)
 

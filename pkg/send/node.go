@@ -2,7 +2,6 @@ package send
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -41,11 +40,8 @@ type Node struct {
 	relayFinderActiveLk sync.RWMutex
 	relayFinderActive   bool
 
-	// if closed or sent a struct this channel will stop the print loop.
-	stopPrintStatus chan struct{}
-
-	// "closed" when the print-status go routine returned
-	printStatusWg sync.WaitGroup
+	// a logging service which updates the terminal with the current state
+	statusLogger *statusLogger
 }
 
 // InitNode returns a fully configured node ready to start
@@ -53,9 +49,8 @@ type Node struct {
 func InitNode(c *cli.Context, filepath string, words []string) (*Node, error) {
 	var err error
 	node := &Node{
-		verbose:         c.Bool("verbose"),
-		filepath:        filepath,
-		stopPrintStatus: make(chan struct{}),
+		verbose:  c.Bool("verbose"),
+		filepath: filepath,
 	}
 
 	opt := libp2p.EnableAutoRelayWithPeerSource(node.autoRelayPeerSource,
@@ -70,12 +65,13 @@ func InitNode(c *cli.Context, filepath string, words []string) (*Node, error) {
 		return nil, err
 	}
 
+	node.statusLogger = newStatusLogger(node)
 	node.mdnsAdvertiser = mdns.NewAdvertiser(node)
 	node.dhtAdvertiser = dht.NewAdvertiser(node, node.DHT)
 
 	// start logging the current status to the console
 	if !c.Bool("debug") {
-		go node.printStatus(node.stopPrintStatus)
+		go node.statusLogger.startLogging()
 	}
 
 	// stop the process if both advertisers error out
@@ -90,9 +86,13 @@ func InitNode(c *cli.Context, filepath string, words []string) (*Node, error) {
 func (n *Node) Shutdown() {
 	n.stopAdvertising()
 	n.UnregisterKeyExchangeHandler()
+	n.statusLogger.Shutdown()
+
+	if n.mdnsAdvertiser.State().Stage == mdns.StageError && n.dhtAdvertiser.State().Stage == dht.StageError {
+		log.Infoln("An error occurred. Run peercp again with the --verbose flag to get more information")
+	}
+
 	n.Node.Shutdown()
-	close(n.stopPrintStatus)
-	n.printStatusWg.Wait()
 }
 
 func (n *Node) StartAdvertisingMDNS() {
@@ -136,8 +136,7 @@ func (n *Node) watchAdvertiseErrors() {
 		dhtState := n.dhtAdvertiser.State()
 
 		// if both advertisers errored out, stop the process
-		if mdnsState.Stage == mdns.StageError && !errors.Is(mdnsState.Err, context.Canceled) &&
-			dhtState.Stage == dht.StageError && !errors.Is(dhtState.Err, context.Canceled) {
+		if mdnsState.Stage == mdns.StageError && dhtState.Stage == dht.StageError {
 			n.Shutdown()
 			return
 		}
@@ -205,10 +204,7 @@ func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
 
 	n.UnregisterKeyExchangeHandler()
 	n.stopAdvertising()
-
-	// stop log loop
-	n.stopPrintStatus <- struct{}{}
-	n.printStatusWg.Wait()
+	n.statusLogger.Shutdown()
 
 	err := n.Transfer(peerID)
 	if err != nil {

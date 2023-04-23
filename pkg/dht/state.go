@@ -14,6 +14,7 @@ const (
 	StageIdle = iota + 1
 	StageBootstrapping
 	StageAnalyzingNetwork
+	StageWaitingForPublicAddrs
 	StageProviding
 	StageLookup
 	StageRetrying
@@ -26,7 +27,7 @@ func (s Stage) IsTermination() bool {
 	return s == StageStopped || s == StageError
 }
 
-type State struct {
+type AdvertiseState struct {
 	Stage        Stage
 	NATTypeUDP   network.NATDeviceType
 	NATTypeTCP   network.NATDeviceType
@@ -37,11 +38,11 @@ type State struct {
 	Err          error
 }
 
-func (s *State) String() string {
+func (s *AdvertiseState) String() string {
 	return fmt.Sprintf("stage=%q nat_tcp=%s nat_udp=%s reachability=%s", s.Stage, s.NATTypeTCP, s.NATTypeUDP, s.Reachability)
 }
 
-func (s *State) populateAddrs(addrs []ma.Multiaddr) {
+func (s *AdvertiseState) populateAddrs(addrs []ma.Multiaddr) {
 	s.PublicAddrs = []ma.Multiaddr{}
 	s.PrivateAddrs = []ma.Multiaddr{}
 	s.RelayAddrs = []ma.Multiaddr{}
@@ -49,6 +50,26 @@ func (s *State) populateAddrs(addrs []ma.Multiaddr) {
 		if isRelayedMaddr(addr) { // needs to come before IsPublic because relay addrs are also public addrs
 			s.RelayAddrs = append(s.RelayAddrs, addr)
 		} else if manet.IsPublicAddr(addr) {
+			s.PublicAddrs = append(s.PublicAddrs, addr)
+		} else if manet.IsPrivateAddr(addr) {
+			s.PrivateAddrs = append(s.PrivateAddrs, addr)
+		}
+	}
+}
+
+type DiscoverState struct {
+	Stage        Stage
+	PublicAddrs  []ma.Multiaddr
+	PrivateAddrs []ma.Multiaddr
+	Err          error
+}
+
+// TODO remove duplication
+func (s *DiscoverState) populateAddrs(addrs []ma.Multiaddr) {
+	s.PublicAddrs = []ma.Multiaddr{}
+	s.PrivateAddrs = []ma.Multiaddr{}
+	for _, addr := range addrs {
+		if manet.IsPublicAddr(addr) {
 			s.PublicAddrs = append(s.PublicAddrs, addr)
 		} else if manet.IsPrivateAddr(addr) {
 			s.PrivateAddrs = append(s.PrivateAddrs, addr)

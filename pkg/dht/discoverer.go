@@ -2,10 +2,15 @@ package dht
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"sync"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/internal/wrap"
@@ -22,6 +27,9 @@ const (
 type Discoverer struct {
 	*protocol
 
+	stateLk sync.RWMutex
+	state   *DiscoverState
+
 	notifee discovery.Notifee
 }
 
@@ -30,7 +38,36 @@ func NewDiscoverer(h host.Host, dht wrap.IpfsDHT, notifee discovery.Notifee) *Di
 	return &Discoverer{
 		protocol: newProtocol(h, dht),
 		notifee:  notifee,
+		state: &DiscoverState{
+			Stage: StageIdle,
+		},
 	}
+}
+
+func (d *Discoverer) setError(err error) {
+	d.stateLk.Lock()
+	d.state.Stage = StageError
+	d.state.Err = err
+	d.stateLk.Unlock()
+}
+
+func (d *Discoverer) setState(fn func(state *DiscoverState)) {
+	d.stateLk.Lock()
+	fn(d.state)
+	log.Debugln("DHT DiscoverState:", d.state)
+	d.stateLk.Unlock()
+}
+
+func (d *Discoverer) setStage(stage Stage) {
+	d.setState(func(s *DiscoverState) { s.Stage = stage })
+}
+
+func (d *Discoverer) State() DiscoverState {
+	d.stateLk.RLock()
+	state := d.state
+	d.stateLk.RUnlock()
+
+	return *state
 }
 
 // Discover establishes a connection to a set of bootstrap peers
@@ -42,7 +79,20 @@ func (d *Discoverer) Discover(chanID int) {
 	}
 	defer d.ServiceStopped()
 
-	if err := d.bootstrap(); err != nil {
+	err := d.bootstrap()
+	if errors.Is(err, context.Canceled) {
+		d.setStage(StageStopped)
+		return
+	} else if err != nil {
+		d.setError(err)
+		return
+	}
+
+	err = d.waitPublicAddresses()
+	if errors.Is(err, context.Canceled) {
+		d.setStage(StageStopped)
+		return
+	} else if err != nil {
 		d.setError(err)
 		return
 	}
@@ -92,4 +142,43 @@ func (d *Discoverer) Shutdown() {
 
 func isRoutable(pi peer.AddrInfo) bool {
 	return len(pi.Addrs) > 0
+}
+
+// waitPublicAddresses blocks until we've found public addresses
+func (d *Discoverer) waitPublicAddresses() error {
+	d.setStage(StageWaitingForPublicAddrs)
+
+	evtTypes := []interface{}{
+		new(event.EvtLocalAddressesUpdated),
+	}
+	sub, err := d.EventBus().Subscribe(evtTypes)
+	if err != nil {
+		return fmt.Errorf("subscribe to libp2p eventbus: %w", err)
+	}
+	defer sub.Close()
+
+	for {
+		var e interface{}
+
+		select {
+		case <-d.ServiceContext().Done():
+			return d.ServiceContext().Err()
+		case e = <-sub.Out():
+		}
+
+		d.stateLk.Lock()
+		switch evt := e.(type) {
+		case event.EvtLocalAddressesUpdated:
+			maddrs := make([]ma.Multiaddr, len(evt.Current))
+			for i, update := range evt.Current {
+				maddrs[i] = update.Address
+			}
+			d.state.populateAddrs(maddrs)
+		}
+		d.stateLk.Unlock()
+
+		if len(d.state.PublicAddrs) > 0 {
+			return nil
+		}
+	}
 }

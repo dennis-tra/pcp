@@ -45,13 +45,10 @@ type Node struct {
 	dhtDiscovererOffset *dht.Discoverer
 
 	autoAccept bool
-	peerStates *sync.Map // TODO: Use PeerStore?
+	peerStates sync.Map
 
-	// if closed or sent a struct this channel will stop the print loop.
-	stopPrintStatus chan struct{}
-
-	// "closed" when the print-status go routine returned
-	printStatusWg sync.WaitGroup
+	// a logging service which updates the terminal with the current state
+	statusLogger *statusLogger
 }
 
 func InitNode(c *cli.Context, words []string) (*Node, error) {
@@ -64,19 +61,20 @@ func InitNode(c *cli.Context, words []string) (*Node, error) {
 		Node:       h,
 		verbose:    c.Bool("verbose"),
 		autoAccept: c.Bool("auto-accept"),
-		peerStates: &sync.Map{},
+		peerStates: sync.Map{},
 	}
 
 	node.mdnsDiscoverer = mdns.NewDiscoverer(node, node)
 	node.mdnsDiscovererOffset = mdns.NewDiscoverer(node, node).SetOffset(-discovery.TruncateDuration)
 	node.dhtDiscoverer = dht.NewDiscoverer(node, node.DHT, node)
 	node.dhtDiscovererOffset = dht.NewDiscoverer(node, node.DHT, node).SetOffset(-discovery.TruncateDuration)
+	node.statusLogger = newStatusLogger(node)
 
 	node.RegisterPushRequestHandler(node)
-	// start logging the current status to the console
 
+	// start logging the current status to the console
 	if !c.Bool("debug") {
-		go node.printStatus(node.stopPrintStatus)
+		go node.statusLogger.startLogging()
 	}
 
 	// stop the process if all discoverers error out
@@ -87,7 +85,7 @@ func InitNode(c *cli.Context, words []string) (*Node, error) {
 
 func (n *Node) Shutdown() {
 	n.stopDiscovering()
-	n.UnregisterPushRequestHandler()
+	n.UnregisterTransferHandler()
 	n.UnregisterTransferHandler()
 	n.Node.Shutdown()
 }
@@ -218,6 +216,7 @@ func (n *Node) HandlePeerFound(pi peer.AddrInfo) {
 
 	// Stop the discovering process as we have found the valid peer
 	n.stopDiscovering()
+	n.statusLogger.Shutdown()
 }
 
 func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {

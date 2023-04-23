@@ -80,7 +80,7 @@ func TestDiscoverer_Discover_happyPath(t *testing.T) {
 		d.Shutdown()
 	}()
 
-	err = d.Discover(333)
+	d.Discover(333)
 	assert.NoError(t, err)
 }
 
@@ -111,8 +111,7 @@ func TestDiscoverer_Discover_reschedulesFindProvider(t *testing.T) {
 		d.Shutdown()
 	}()
 
-	err := d.Discover(333)
-	assert.NoError(t, err)
+	d.Discover(333)
 }
 
 func TestDiscoverer_Discover_callsFindProviderWithMutatingDiscoveryIDs(t *testing.T) {
@@ -149,8 +148,7 @@ func TestDiscoverer_Discover_callsFindProviderWithMutatingDiscoveryIDs(t *testin
 		d.Shutdown()
 	}()
 
-	err := d.Discover(333)
-	assert.NoError(t, err)
+	d.Discover(333)
 
 	assert.NotEqual(t, cIDs[0], cIDs[1])
 }
@@ -161,8 +159,6 @@ func TestTimeCriticalDiscoverer_Discover_restartAsSoonAsCurrentTimeSlotIsExpired
 	}
 
 	ctrl, local, net := setup(t)
-
-	provideTimeout = 20 * time.Millisecond
 
 	mockDefaultBootstrapPeers(t, ctrl, net, local)
 
@@ -193,10 +189,8 @@ func TestTimeCriticalDiscoverer_Discover_restartAsSoonAsCurrentTimeSlotIsExpired
 	}()
 
 	start := time.Now()
-	err := d.Discover(333)
+	d.Discover(333)
 	end := time.Now()
-
-	assert.NoError(t, err)
 
 	// Only 4 because last round is immediately termianated by d.Shutdown()
 	assert.InDelta(t, 4*provideTimeout, end.Sub(start), float64(provideTimeout))
