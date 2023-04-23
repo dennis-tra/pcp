@@ -133,7 +133,12 @@ func (p *protocol) bootstrap() error {
 
 	// If we could not establish enough connections return an error
 	if peerCount-len(errs.BootstrapErrs) < ConnThreshold {
-		return errs
+		select {
+		case <-p.ServiceContext().Done():
+			return p.ServiceContext().Err()
+		default:
+			return errs
+		}
 	}
 
 	return nil

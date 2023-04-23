@@ -7,13 +7,14 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/dennis-tra/pcp/pkg/discovery"
+
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/urfave/cli/v2"
 
 	"github.com/dennis-tra/pcp/internal/format"
 	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/dht"
-	disc "github.com/dennis-tra/pcp/pkg/discovery"
 	"github.com/dennis-tra/pcp/pkg/mdns"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
@@ -32,14 +33,25 @@ const (
 type Node struct {
 	*pcpnode.Node
 
-	autoAccept  bool
-	discoverers []Discoverer
-	peerStates  *sync.Map // TODO: Use PeerStore?
-}
+	// if verbose logging is activated
+	verbose bool
 
-type Discoverer interface {
-	Discover(chanID int) error
-	Shutdown()
+	// mDNS discovery implementations
+	mdnsDiscoverer       *mdns.Discoverer
+	mdnsDiscovererOffset *mdns.Discoverer
+
+	// DHT discovery implementations
+	dhtDiscoverer       *dht.Discoverer
+	dhtDiscovererOffset *dht.Discoverer
+
+	autoAccept bool
+	peerStates *sync.Map // TODO: Use PeerStore?
+
+	// if closed or sent a struct this channel will stop the print loop.
+	stopPrintStatus chan struct{}
+
+	// "closed" when the print-status go routine returned
+	printStatusWg sync.WaitGroup
 }
 
 func InitNode(c *cli.Context, words []string) (*Node, error) {
@@ -48,88 +60,123 @@ func InitNode(c *cli.Context, words []string) (*Node, error) {
 		return nil, err
 	}
 
-	n := &Node{
-		Node:        h,
-		autoAccept:  c.Bool("auto-accept"),
-		peerStates:  &sync.Map{},
-		discoverers: []Discoverer{},
+	node := &Node{
+		Node:       h,
+		verbose:    c.Bool("verbose"),
+		autoAccept: c.Bool("auto-accept"),
+		peerStates: &sync.Map{},
 	}
 
-	n.RegisterPushRequestHandler(n)
+	node.mdnsDiscoverer = mdns.NewDiscoverer(node, node)
+	node.mdnsDiscovererOffset = mdns.NewDiscoverer(node, node).SetOffset(-discovery.TruncateDuration)
+	node.dhtDiscoverer = dht.NewDiscoverer(node, node.DHT, node)
+	node.dhtDiscovererOffset = dht.NewDiscoverer(node, node.DHT, node).SetOffset(-discovery.TruncateDuration)
 
-	return n, nil
+	node.RegisterPushRequestHandler(node)
+	// start logging the current status to the console
+
+	if !c.Bool("debug") {
+		go node.printStatus(node.stopPrintStatus)
+	}
+
+	// stop the process if all discoverers error out
+	go node.watchDiscoverErrors()
+
+	return node, nil
 }
 
 func (n *Node) Shutdown() {
-	n.StopDiscovering()
+	n.stopDiscovering()
 	n.UnregisterPushRequestHandler()
 	n.UnregisterTransferHandler()
 	n.Node.Shutdown()
 }
 
-func (n *Node) StartDiscovering(c *cli.Context) {
+func (n *Node) StartDiscoveringMDNS() {
 	n.SetState(pcpnode.Roaming)
-
-	if c.Bool("mdns") == c.Bool("dht") {
-		n.discoverers = []Discoverer{
-			dht.NewDiscoverer(n, n.DHT, n),
-			dht.NewDiscoverer(n, n.DHT, n).SetOffset(-disc.TruncateDuration),
-			mdns.NewDiscoverer(n.Node, n),
-			mdns.NewDiscoverer(n.Node, n).SetOffset(-disc.TruncateDuration),
-		}
-	} else if c.Bool("mdns") {
-		n.discoverers = []Discoverer{
-			mdns.NewDiscoverer(n.Node, n),
-			mdns.NewDiscoverer(n.Node, n).SetOffset(-disc.TruncateDuration),
-		}
-	} else if c.Bool("dht") {
-		n.discoverers = []Discoverer{
-			dht.NewDiscoverer(n, n.DHT, n),
-			dht.NewDiscoverer(n, n.DHT, n).SetOffset(-disc.TruncateDuration),
-		}
-	}
-
-	for _, discoverer := range n.discoverers {
-		go func(d Discoverer) {
-			err := d.Discover(n.ChanID)
-			if err == nil {
-				return
-			}
-
-			// If the user is connected to another peer
-			// we don't care about discover errors.
-			if n.GetState() == pcpnode.Connected {
-				return
-			}
-
-			switch e := err.(type) {
-			case dht.ErrConnThresholdNotReached:
-				e.Log()
-			default:
-				log.Warningln(err)
-			}
-		}(discoverer)
-	}
+	n.mdnsDiscoverer.Discover(n.ChanID)
+	n.mdnsDiscovererOffset.Discover(n.ChanID)
 }
 
-func (n *Node) StopDiscovering() {
+func (n *Node) StartDiscoveringDHT() {
+	n.SetState(pcpnode.Roaming)
+	n.dhtDiscoverer.Discover(n.ChanID)
+	n.dhtDiscovererOffset.Discover(n.ChanID)
+}
+
+func (n *Node) stopDiscovering() {
 	var wg sync.WaitGroup
-	for _, discoverer := range n.discoverers {
-		wg.Add(1)
-		go func(d Discoverer) {
-			d.Shutdown()
-			wg.Done()
-		}(discoverer)
-	}
+
+	wg.Add(1)
+	go func() {
+		n.mdnsDiscoverer.Shutdown()
+		wg.Done()
+	}()
+
+	wg.Add(1)
+	go func() {
+		n.mdnsDiscovererOffset.Shutdown()
+		wg.Done()
+	}()
+
+	wg.Add(1)
+	go func() {
+		n.dhtDiscoverer.Shutdown()
+		wg.Done()
+	}()
+
+	wg.Add(1)
+	go func() {
+		n.dhtDiscovererOffset.Shutdown()
+		wg.Done()
+	}()
+
 	wg.Wait()
 }
 
-// HandlePeer is called async from the discoverers. It's okay to have long running tasks here.
+func (n *Node) watchDiscoverErrors() {
+	for {
+		select {
+		case <-n.SigShutdown():
+			return
+		case <-n.mdnsDiscoverer.SigDone():
+		case <-n.mdnsDiscovererOffset.SigDone():
+		case <-n.dhtDiscoverer.SigDone():
+		case <-n.dhtDiscovererOffset.SigDone():
+		}
+		mdnsState := n.mdnsDiscoverer.State()
+		mdnsOffsetState := n.mdnsDiscovererOffset.State()
+		dhtState := n.dhtDiscoverer.State()
+		dhtOffsetState := n.dhtDiscovererOffset.State()
+
+		// if all discoverers errored out, stop the process
+		if mdnsState.Stage == mdns.StageError && mdnsOffsetState.Stage == mdns.StageError &&
+			dhtState.Stage == dht.StageError && dhtOffsetState.Stage == dht.StageError {
+			n.Shutdown()
+			return
+		}
+
+		// if all discoverers reached a termination stage (e.g., both were stopped or one was stopped, the other
+		// experienced an error), we have found and successfully connected to a peer. This means, all good - just
+		// stop this go routine.
+		if mdnsState.Stage.IsTermination() && mdnsOffsetState.Stage.IsTermination() &&
+			dhtState.Stage.IsTermination() && dhtOffsetState.Stage.IsTermination() {
+			n.Shutdown()
+			return
+		}
+	}
+}
+
+// HandlePeerFound is called async from the discoverers. It's okay to have long-running tasks here.
 func (n *Node) HandlePeerFound(pi peer.AddrInfo) {
 	if n.GetState() != pcpnode.Roaming {
 		log.Debugln("Received a peer from the discoverer although we're not discovering")
 		return
 	}
+
+	// Add discovered peer to the hole punch allow list to track the hole punch state of that
+	// particular peer as soon as we try to connect to them.
+	n.AddToHolePunchAllowList(pi.ID)
 
 	// Check if we have already seen the peer and exit early to not connect again.
 	peerState, _ := n.peerStates.LoadOrStore(pi.ID, NotConnected)
@@ -170,7 +217,7 @@ func (n *Node) HandlePeerFound(pi peer.AddrInfo) {
 	n.SetState(pcpnode.Connected)
 
 	// Stop the discovering process as we have found the valid peer
-	n.StopDiscovering()
+	n.stopDiscovering()
 }
 
 func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {

@@ -52,6 +52,11 @@ type Node struct {
 	TransferProtocol
 	PakeProtocol
 
+	// tracer for hole punching updates
+	hpStatesLk  sync.RWMutex
+	hpStates    map[peer.ID]*HolePunchState
+	hpAllowList sync.Map
+
 	// The public key of this node for easy access
 	pubKey []byte
 
@@ -116,6 +121,14 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 		return nil, err
 	}
 
+	go func() {
+		<-node.SigShutdown()
+		if err = node.Host.Close(); err != nil {
+			log.Warningln("error closing node", err)
+		}
+		node.ServiceStopped()
+	}()
+
 	return node, node.ServiceStarted()
 }
 
@@ -128,8 +141,11 @@ func (n *Node) Shutdown() {
 }
 
 func (n *Node) SetState(s State) State {
-	log.Debugln("Setting local node state to", s)
 	n.stateLk.Lock()
+	if n.state == Connected {
+		panic("illegal state transition from connected to roaming")
+	}
+	log.Debugln("Setting local node state to", s)
 	n.state = s
 	n.stateLk.Unlock()
 	return s
@@ -353,18 +369,5 @@ func (n *Node) WaitForEOF(s network.Stream) error {
 		return fmt.Errorf("timeout")
 	case err := <-done:
 		return err
-	}
-}
-
-func (n *Node) Trace(evt *holepunch.Event) {
-	switch evt.Evt.(type) {
-	case *holepunch.StartHolePunchEvt:
-		log.Infoln(evt.Remote)
-
-		log.Debugln("START")
-		for _, conn := range n.Network().ConnsToPeer(evt.Remote) {
-			log.Debugln("---", conn.Stat().Direction)
-		}
-	default:
 	}
 }

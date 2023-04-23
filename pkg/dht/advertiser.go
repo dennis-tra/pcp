@@ -10,14 +10,9 @@ import (
 	"github.com/dennis-tra/pcp/internal/wrap"
 )
 
-var (
+const (
 	// Timeout for pushing our data to the DHT.
 	provideTimeout = 30 * time.Second
-
-	// Interval between two checks whether we know our public
-	// IP address. This can take time until e.g. the identify
-	// protocol has determined one for us.
-	pubAddrInter = 50 * time.Millisecond
 )
 
 // Advertiser is responsible for writing and renewing the DHT entry.

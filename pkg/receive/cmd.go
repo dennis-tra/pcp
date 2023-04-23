@@ -54,7 +54,7 @@ any files with the same name. If the transmission fails the file
 will contain the partial written bytes.`,
 }
 
-// Action is the function that is called when running pcp receive.
+// Action is the function that is called when running peercp receive.
 func Action(c *cli.Context) error {
 	c, err := config.FillContext(c)
 	if err != nil {
@@ -63,23 +63,42 @@ func Action(c *cli.Context) error {
 
 	words := strings.Split(c.Args().First(), "-") // transfer words
 
-	local, err := InitNode(c, words)
+	node, err := InitNode(c, words)
 	if err != nil {
 		return fmt.Errorf("failed to initialize node: %w", err)
 	}
 
 	// Search for identifier
 	log.Infof("Looking for peer %s... \n", c.Args().First())
-	local.StartDiscovering(c)
+
+	if isMDNSActive(c) {
+		go node.StartDiscoveringMDNS()
+	}
+
+	if isDHTActive(c) {
+		go node.StartDiscoveringDHT()
+	}
 
 	// Wait for the user to stop the tool or the transfer to finish.
 	select {
 	case <-c.Done():
-		local.Shutdown()
+		node.Shutdown()
 		return nil
-	case <-local.SigDone():
+	case <-node.SigDone():
 		return nil
 	}
+}
+
+// isMDNSActive returns true if the user explicitly chose to only advertised via mDNS
+// or if they didn't specify any preference.
+func isMDNSActive(c *cli.Context) bool {
+	return c.Bool("mdns") || c.Bool("dht") == c.Bool("mdns")
+}
+
+// isDHTActive returns true if the user explicitly chose to only advertised via the DHT
+// or if they didn't specify any preference.
+func isDHTActive(c *cli.Context) bool {
+	return c.Bool("dht") || c.Bool("dht") == c.Bool("mdns")
 }
 
 func printInformation(data *p2p.PushRequest) {

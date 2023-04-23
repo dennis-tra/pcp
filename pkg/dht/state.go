@@ -8,18 +8,23 @@ import (
 	manet "github.com/multiformats/go-multiaddr/net"
 )
 
-type Stage string
+type Stage uint8
 
 const (
-	StageIdle             = "idle"
-	StageBootstrapping    = "bootstrapping"
-	StageAnalyzingNetwork = "analyzing_network"
-	StageProviding        = "providing"
-	StageRetrying         = "retrying"
-	StageProvided         = "provided"
-	StageStopped          = "stopped"
-	StageError            = "error"
+	StageIdle = iota + 1
+	StageBootstrapping
+	StageAnalyzingNetwork
+	StageProviding
+	StageLookup
+	StageRetrying
+	StageProvided
+	StageStopped
+	StageError
 )
+
+func (s Stage) IsTermination() bool {
+	return s == StageStopped || s == StageError
+}
 
 type State struct {
 	Stage        Stage

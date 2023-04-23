@@ -1,11 +1,10 @@
-package send
+package receive
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -14,8 +13,6 @@ import (
 	"github.com/dennis-tra/pcp/pkg/dht"
 
 	"github.com/dennis-tra/pcp/pkg/mdns"
-
-	"github.com/libp2p/go-libp2p/core/network"
 
 	"github.com/dennis-tra/pcp/internal/log"
 )
@@ -29,7 +26,7 @@ func (n *Node) printStatus(stop chan struct{}) {
 	log.Infoln("On the other machine run:")
 	log.Infoln("\tpeercp receive", strings.Join(n.Words, "-"))
 
-	eraseFn := log.AdvertiseStatus(n.advertiseStatus(spinnerChars[0]), n.verbose)
+	eraseFn := log.DiscoverStatus(n.discoverStatus(spinnerChars[0]), n.verbose)
 
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
@@ -39,33 +36,31 @@ func (n *Node) printStatus(stop chan struct{}) {
 		select {
 		case <-stop:
 			eraseFn()
-			eraseFn = log.AdvertiseStatus(n.advertiseStatus(spinnerChar), n.verbose)
+			eraseFn = log.DiscoverStatus(n.discoverStatus(spinnerChar), n.verbose)
 			return
 		case <-n.ServiceContext().Done():
 			return
 		case <-ticker.C:
 			eraseFn()
-			eraseFn = log.AdvertiseStatus(n.advertiseStatus(spinnerChar), n.verbose)
+			eraseFn = log.DiscoverStatus(n.discoverStatus(spinnerChar), n.verbose)
 		}
 	}
 }
 
-func (n *Node) advertiseStatus(spinnerChar string) log.AdvertiseStatusParams {
+func (n *Node) discoverStatus(spinnerChar string) log.DiscoverStatusParams {
 	isCtxCancelled := n.ServiceContext().Err() == context.Canceled
 
-	mdnsState := n.mdnsAdvertiser.State()
-	dhtState := n.dhtAdvertiser.State()
+	mdnsState := n.mdnsDiscoverer.State()
+	dhtState := n.dhtDiscoverer.State()
 	pakeStates := n.PakeProtocol.PakeStates()
 	hpStates := n.HolePunchStates()
 
-	asp := log.AdvertiseStatusParams{
-		Code:         strings.Join(n.Words, "-"),
-		LANState:     log.Gray("-"),
-		MDNSState:    log.Gray("-"),
-		Reachability: log.Gray("-"),
-		RelayAddrs:   log.Gray("-"),
-		Peers:        []string{},
-		PeerStates:   map[string]string{},
+	asp := log.DiscoverStatusParams{
+		Code:       strings.Join(n.Words, "-"),
+		LANState:   log.Gray("-"),
+		MDNSState:  log.Gray("-"),
+		Peers:      []string{},
+		PeerStates: map[string]string{},
 	}
 
 	switch mdnsState.Stage {
@@ -73,8 +68,8 @@ func (n *Node) advertiseStatus(spinnerChar string) log.AdvertiseStatusParams {
 		asp.MDNSState = log.Gray("-")
 		asp.LANState = log.Green("-")
 	case mdns.StageRoaming:
-		asp.MDNSState = log.Green("active")
-		asp.LANState = log.Green("ready")
+		asp.MDNSState = spinnerChar
+		asp.LANState = log.Green("searching " + spinnerChar)
 	case mdns.StageError:
 		asp.MDNSState = log.Red(mdnsState.Err.Error())
 		asp.LANState = log.Red("failed")
@@ -95,36 +90,16 @@ func (n *Node) advertiseStatus(spinnerChar string) log.AdvertiseStatusParams {
 			asp.DHTState = spinnerChar + "(bootstrapping)"
 			asp.WANState = spinnerChar + "(bootstrapping)"
 		}
-	case dht.StageAnalyzingNetwork:
-		if isCtxCancelled {
-			asp.DHTState = log.Gray("cancelled")
-			asp.WANState = log.Gray("cancelled")
-		} else if n.relayFinderActive {
-			asp.DHTState = spinnerChar + "(finding relays)"
-			asp.WANState = spinnerChar + "(finding relays)"
-		} else {
-			asp.DHTState = spinnerChar + "(analyzing network)"
-			asp.WANState = spinnerChar + "(analyzing network)"
-		}
-	case dht.StageProviding:
-		if isCtxCancelled {
-			asp.DHTState = log.Gray("cancelled")
-			asp.WANState = log.Gray("cancelled")
-		} else {
-			asp.DHTState = spinnerChar + "(providing)"
-			asp.WANState = spinnerChar + "(writing to DHT)"
-		}
+	case dht.StageLookup:
+		fallthrough
 	case dht.StageRetrying:
 		if isCtxCancelled {
 			asp.DHTState = log.Gray("cancelled")
 			asp.WANState = log.Gray("cancelled")
 		} else {
-			asp.DHTState = spinnerChar + "(retrying)"
-			asp.WANState = spinnerChar + log.Yellow("(retry writing to DHT)")
+			asp.DHTState = spinnerChar
+			asp.WANState = log.Green("searching " + spinnerChar)
 		}
-	case dht.StageProvided:
-		asp.DHTState = log.Green("active")
-		asp.WANState = log.Green("ready")
 	case dht.StageError:
 		if isCtxCancelled || errors.Is(dhtState.Err, context.Canceled) {
 			asp.DHTState = log.Gray("cancelled")
@@ -136,79 +111,6 @@ func (n *Node) advertiseStatus(spinnerChar string) log.AdvertiseStatusParams {
 	case dht.StageStopped:
 		asp.DHTState = log.Green("inactive")
 		asp.WANState = log.Green("stopped")
-	}
-
-	switch dhtState.Reachability {
-	case network.ReachabilityUnknown:
-		if isCtxCancelled {
-			asp.Reachability = log.Gray("cancelled")
-		} else {
-			asp.Reachability = spinnerChar
-		}
-	case network.ReachabilityPrivate:
-		asp.Reachability = log.Yellow(strings.ToLower(dhtState.Reachability.String()))
-	case network.ReachabilityPublic:
-		asp.Reachability = log.Green(strings.ToLower(dhtState.Reachability.String()))
-	}
-
-	asp.NATState = ""
-	switch dhtState.NATTypeUDP {
-	case network.NATDeviceTypeUnknown:
-		if dhtState.Reachability == network.ReachabilityPublic {
-			asp.NATState += log.Gray("irrelevant")
-		} else if isCtxCancelled {
-			asp.NATState = log.Gray("cancelled")
-		} else {
-			asp.NATState += spinnerChar
-		}
-	case network.NATDeviceTypeCone:
-		asp.NATState += log.Green(strings.ToLower(dhtState.NATTypeUDP.String()))
-	case network.NATDeviceTypeSymmetric:
-		asp.NATState += log.Red(strings.ToLower(dhtState.NATTypeUDP.String()))
-	}
-	asp.NATState += " / "
-	switch dhtState.NATTypeTCP {
-	case network.NATDeviceTypeUnknown:
-		if dhtState.Reachability == network.ReachabilityPublic {
-			asp.NATState += log.Gray("irrelevant")
-		} else if isCtxCancelled {
-			asp.NATState = log.Gray("cancelled")
-		} else {
-			asp.NATState += spinnerChar + " "
-		}
-	case network.NATDeviceTypeCone:
-		asp.NATState += log.Green(strings.ToLower(dhtState.NATTypeTCP.String()))
-	case network.NATDeviceTypeSymmetric:
-		asp.NATState += log.Red(strings.ToLower(dhtState.NATTypeTCP.String()))
-	}
-
-	if dhtState.Reachability == network.ReachabilityPublic {
-		asp.RelayAddrs = log.Gray("irrelevant")
-	} else if isCtxCancelled {
-		asp.RelayAddrs = log.Gray("cancelled")
-	} else if n.relayFinderActive {
-		asp.RelayAddrs = spinnerChar
-		if len(dhtState.RelayAddrs) > 0 {
-			asp.RelayAddrs = log.Green(strconv.Itoa(len(dhtState.RelayAddrs)))
-		}
-	}
-
-	if len(dhtState.PrivateAddrs) == 0 {
-		asp.PrivateAddrs = log.Red("0")
-	} else {
-		asp.PrivateAddrs = log.Green(strconv.Itoa(len(dhtState.PrivateAddrs)))
-	}
-
-	if len(dhtState.PublicAddrs) == 0 {
-		if len(dhtState.RelayAddrs) > 0 {
-			asp.PublicAddrs = log.Gray("0")
-		} else if isCtxCancelled {
-			asp.PublicAddrs = log.Gray("cancelled")
-		} else {
-			asp.PublicAddrs = spinnerChar
-		}
-	} else {
-		asp.PublicAddrs = log.Green(strconv.Itoa(len(dhtState.PublicAddrs)))
 	}
 
 	for peer, state := range pakeStates {

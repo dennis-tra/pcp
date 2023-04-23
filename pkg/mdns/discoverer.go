@@ -26,25 +26,33 @@ func NewDiscoverer(h host.Host, notifee discovery.Notifee) *Discoverer {
 	}
 }
 
-func (d *Discoverer) Discover(chanID int) error {
+func (d *Discoverer) Discover(chanID int) {
 	if err := d.ServiceStarted(); err != nil {
-		return err
+		d.setError(err)
+		return
 	}
 	defer d.ServiceStopped()
 
+	d.setStage(StageRoaming)
 	for {
 		did := d.did.DiscoveryID(chanID)
 		log.Debugln("mDNS - Discovering", did)
 
 		mdnsSvc := wrapdiscovery.NewMdnsService(d, did, d)
 		if err := mdnsSvc.Start(); err != nil {
-			return fmt.Errorf("start mdns service: %w", err)
+			d.setError(fmt.Errorf("start mdns service: %w", err))
+			return
 		}
 
 		select {
 		case <-d.SigShutdown():
 			log.Debugln("mDNS - Discovering", did, " done - shutdown signal")
-			return mdnsSvc.Close()
+
+			if err := mdnsSvc.Close(); err != nil {
+				log.Warningf("Error closing MDNS service: %s", err)
+			}
+			d.setStage(StageStopped)
+			return
 		case <-time.After(Timeout):
 		}
 
@@ -63,7 +71,7 @@ func (d *Discoverer) HandlePeerFound(pi peer.AddrInfo) {
 	}
 
 	pi.Addrs = onlyPrivate(pi.Addrs)
-	if !isRoutable(pi) {
+	if len(pi.Addrs) == 0 {
 		return
 	}
 
@@ -77,11 +85,6 @@ func (d *Discoverer) SetOffset(offset time.Duration) *Discoverer {
 
 func (d *Discoverer) Shutdown() {
 	d.Service.Shutdown()
-}
-
-// isRoutable returns true if we know at least one multi address
-func isRoutable(pi peer.AddrInfo) bool {
-	return len(pi.Addrs) > 0
 }
 
 // Filter out addresses that are public - only allow private ones.

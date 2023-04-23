@@ -26,13 +26,13 @@ func (a *Advertiser) Advertise(chanID int) {
 	}
 	defer a.ServiceStopped()
 
-	a.setStage(StageAdvertising)
+	a.setStage(StageRoaming)
 	for {
 		did := a.did.DiscoveryID(chanID)
 
 		log.Debugln("mDNS - Advertising ", did)
-		mdns := wrapdiscovery.NewMdnsService(a, did, a)
-		if err := mdns.Start(); err != nil {
+		mdnsSvc := wrapdiscovery.NewMdnsService(a, did, a)
+		if err := mdnsSvc.Start(); err != nil {
 			a.setError(fmt.Errorf("start mdns service: %w", err))
 			return
 		}
@@ -40,7 +40,7 @@ func (a *Advertiser) Advertise(chanID int) {
 		select {
 		case <-a.SigShutdown():
 			log.Debugln("mDNS - Advertising", did, " done - shutdown signal")
-			if err := mdns.Close(); err != nil {
+			if err := mdnsSvc.Close(); err != nil {
 				log.Warningf("Error closing MDNS service: %s", err)
 			}
 			a.setStage(StageStopped)
@@ -49,7 +49,7 @@ func (a *Advertiser) Advertise(chanID int) {
 		}
 
 		log.Debugln("mDNS - Advertising", did, "done")
-		if err := mdns.Close(); err != nil {
+		if err := mdnsSvc.Close(); err != nil {
 			log.Warningf("Error closing MDNS service: %s", err)
 		}
 	}

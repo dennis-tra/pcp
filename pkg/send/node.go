@@ -2,6 +2,7 @@ package send
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -40,11 +41,11 @@ type Node struct {
 	relayFinderActiveLk sync.RWMutex
 	relayFinderActive   bool
 
-	// reference to the ticker that triggers the status logs.
+	// if closed or sent a struct this channel will stop the print loop.
 	stopPrintStatus chan struct{}
 
-	// "closed" when the status log go routine returned
-	logLoopWg sync.WaitGroup
+	// "closed" when the print-status go routine returned
+	printStatusWg sync.WaitGroup
 }
 
 // InitNode returns a fully configured node ready to start
@@ -77,6 +78,9 @@ func InitNode(c *cli.Context, filepath string, words []string) (*Node, error) {
 		go node.printStatus(node.stopPrintStatus)
 	}
 
+	// stop the process if both advertisers error out
+	go node.watchAdvertiseErrors()
+
 	// register handler to respond to PAKE handshakes
 	node.RegisterKeyExchangeHandler(node)
 
@@ -88,14 +92,16 @@ func (n *Node) Shutdown() {
 	n.UnregisterKeyExchangeHandler()
 	n.Node.Shutdown()
 	close(n.stopPrintStatus)
-	n.logLoopWg.Wait()
+	n.printStatusWg.Wait()
 }
 
 func (n *Node) StartAdvertisingMDNS() {
+	n.SetState(pcpnode.Roaming)
 	n.mdnsAdvertiser.Advertise(n.ChanID)
 }
 
 func (n *Node) StartAdvertisingDHT() {
+	n.SetState(pcpnode.Roaming)
 	n.dhtAdvertiser.Advertise(n.ChanID)
 }
 
@@ -117,6 +123,34 @@ func (n *Node) stopAdvertising() {
 	wg.Wait()
 }
 
+func (n *Node) watchAdvertiseErrors() {
+	for {
+		select {
+		case <-n.SigShutdown():
+			return
+		case <-n.mdnsAdvertiser.SigDone():
+		case <-n.dhtAdvertiser.SigDone():
+		}
+
+		mdnsState := n.mdnsAdvertiser.State()
+		dhtState := n.dhtAdvertiser.State()
+
+		// if both advertisers errored out, stop the process
+		if mdnsState.Stage == mdns.StageError && !errors.Is(mdnsState.Err, context.Canceled) &&
+			dhtState.Stage == dht.StageError && !errors.Is(dhtState.Err, context.Canceled) {
+			n.Shutdown()
+			return
+		}
+
+		// if both advertisers reached a termination stage (e.g., both were stopped or one was stopped, the other
+		// experienced an error), we have found and successfully connected to a peer. This means, all good - just
+		// stop this go routine.
+		if mdnsState.Stage.IsTermination() && dhtState.Stage.IsTermination() {
+			return
+		}
+	}
+}
+
 // autoRelayPeerSource is a function that queries the DHT for a random peer ID with CPL 0.
 // The found peers are used as candidates for circuit relay v2 peers.
 func (n *Node) autoRelayPeerSource(ctx context.Context, num int) <-chan peer.AddrInfo {
@@ -127,7 +161,8 @@ func (n *Node) autoRelayPeerSource(ctx context.Context, num int) <-chan peer.Add
 
 		peerID, err := n.DHT.RoutingTable().GenRandPeerID(0)
 		if err != nil {
-			log.Warningln("error generating random peer ID:", err.Error())
+			log.Debugln("error generating random peer ID:", err.Error())
+			return
 		}
 
 		closestPeers, err := n.DHT.GetClosestPeers(ctx, peerID.String())
@@ -173,7 +208,7 @@ func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
 
 	// stop log loop
 	n.stopPrintStatus <- struct{}{}
-	n.logLoopWg.Wait()
+	n.printStatusWg.Wait()
 
 	err := n.Transfer(peerID)
 	if err != nil {

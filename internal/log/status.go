@@ -15,8 +15,8 @@ type AdvertiseStatusParams struct {
 	RelayAddrs   string
 	PrivateAddrs string
 	PublicAddrs  string
-	PakePeers    []string
-	PakeStates   map[string]string
+	Peers        []string
+	PeerStates   map[string]string
 }
 
 func AdvertiseStatus(asp AdvertiseStatusParams, verbose bool) func() {
@@ -34,8 +34,8 @@ func AdvertiseStatus(asp AdvertiseStatusParams, verbose bool) func() {
 	}
 	fmt.Fprint(Out, fmt.Sprintf("%s %s\t%s %s\n", Bold("Local Network:"), asp.LANState, Bold("Internet:"), asp.WANState))
 
-	for _, p := range asp.PakePeers {
-		fmt.Fprintf(Out, "  -> %s: %s\n", Bold(p), asp.PakeStates[p])
+	for _, p := range asp.Peers {
+		fmt.Fprintf(Out, "  -> %s: %s\n", Bold(p), asp.PeerStates[p])
 	}
 
 	// return eraser function
@@ -43,8 +43,43 @@ func AdvertiseStatus(asp AdvertiseStatusParams, verbose bool) func() {
 		if verbose {
 			fmt.Fprint(Out, "\033[9A")
 		}
-		if len(asp.PakePeers) > 0 {
-			fmt.Fprintf(Out, "\033[%dA", len(asp.PakePeers))
+		if len(asp.Peers) > 0 {
+			fmt.Fprintf(Out, "\033[%dA", len(asp.Peers))
+		}
+		fmt.Fprint(Out, "\033[1A\u001B[0J")
+	}
+}
+
+type DiscoverStatusParams struct {
+	Code       string
+	LANState   string
+	WANState   string
+	MDNSState  string
+	DHTState   string
+	Peers      []string
+	PeerStates map[string]string
+}
+
+func DiscoverStatus(dsp DiscoverStatusParams, verbose bool) func() {
+	// move up for info level log lines
+	if verbose {
+		fmt.Fprint(Out, fmt.Sprintf("Code:          %s\n", dsp.Code))
+		fmt.Fprint(Out, fmt.Sprintf("mDNS:          %s\n", dsp.MDNSState))
+		fmt.Fprint(Out, fmt.Sprintf("DHT:           %s\n", dsp.DHTState))
+	}
+	fmt.Fprint(Out, fmt.Sprintf("%s %s\t%s %s\n", Bold("Local Network:"), dsp.LANState, Bold("Internet:"), dsp.WANState))
+
+	for _, p := range dsp.Peers {
+		fmt.Fprintf(Out, "  -> %s: %s\n", Bold(p), dsp.PeerStates[p])
+	}
+
+	// return eraser function
+	return func() {
+		if verbose {
+			fmt.Fprint(Out, "\033[3A")
+		}
+		if len(dsp.Peers) > 0 {
+			fmt.Fprintf(Out, "\033[%dA", len(dsp.Peers))
 		}
 		fmt.Fprint(Out, "\033[1A\u001B[0J")
 	}
