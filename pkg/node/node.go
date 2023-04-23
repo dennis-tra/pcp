@@ -12,6 +12,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
+	"github.com/gosuri/uilive"
 	"github.com/libp2p/go-libp2p"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -19,6 +20,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
+	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
 	"github.com/multiformats/go-varint"
 	"github.com/urfave/cli/v2"
@@ -61,13 +63,17 @@ type Node struct {
 	pubKey []byte
 
 	// DHT is an accessor that is needed in the DHT discoverer/advertiser.
-	DHT *kaddht.IpfsDHT
+	DHT        *kaddht.IpfsDHT
+	NATManager basichost.NATManager
 
 	ChanID int
 	Words  []string
 
 	stateLk *sync.RWMutex
 	state   State
+
+	// StatusWriter is a reference to the logger that prints the status to the console
+	StatusWriter *uilive.Writer
 }
 
 // New creates a new, fully initialized node with the given options.
@@ -82,12 +88,17 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 		return nil, err
 	}
 
+	// set to something large, we're manually flushing the output
+	uilive.RefreshInterval = 100 * time.Hour
+
 	node := &Node{
-		Service: service.New("node"),
-		state:   Initialising,
-		stateLk: &sync.RWMutex{},
-		Words:   wrds,
-		ChanID:  ints[0],
+		Service:      service.New("node"),
+		hpStates:     map[peer.ID]*HolePunchState{},
+		state:        Initialising,
+		stateLk:      &sync.RWMutex{},
+		Words:        wrds,
+		ChanID:       ints[0],
+		StatusWriter: uilive.New(),
 	}
 	node.PushProtocol = NewPushProtocol(node)
 	node.TransferProtocol = NewTransferProtocol(node)
@@ -110,10 +121,14 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 		libp2p.Identity(key),
 		libp2p.UserAgent("pcp/"+c.App.Version),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
-			node.DHT, err = kaddht.New(c.Context, h)
+			node.DHT, err = kaddht.New(c.Context, h, kaddht.EnableOptimisticProvide())
 			return node.DHT, err
 		}),
 		libp2p.EnableHolePunching(holepunch.WithTracer(node)),
+		libp2p.NATManager(func(network network.Network) basichost.NATManager {
+			node.NATManager = basichost.NewNATManager(network)
+			return node.NATManager
+		}),
 	)
 
 	node.Host, err = libp2p.New(opts...)

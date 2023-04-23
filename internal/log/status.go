@@ -17,6 +17,7 @@ type AdvertiseStatusParams struct {
 	PublicAddrs  string
 	Peers        []string
 	PeerStates   map[string]string
+	PortMappings string
 }
 
 func AdvertiseStatus(asp AdvertiseStatusParams, verbose bool) func() {
@@ -27,6 +28,7 @@ func AdvertiseStatus(asp AdvertiseStatusParams, verbose bool) func() {
 		fmt.Fprint(Out, fmt.Sprintf("DHT:           %s\n", asp.DHTState))
 		fmt.Fprint(Out, fmt.Sprintf("Network:       %s\n", asp.Reachability))
 		fmt.Fprint(Out, fmt.Sprintf("NAT (udp/tcp): %s\n", asp.NATState))
+		fmt.Fprint(Out, fmt.Sprintf("Port Mappings: %s\n", asp.PortMappings))
 		fmt.Fprint(Out, fmt.Sprintf("Multiaddresses\n"))
 		fmt.Fprint(Out, fmt.Sprintf("   private:    %s\n", asp.PrivateAddrs))
 		fmt.Fprint(Out, fmt.Sprintf("   public:     %s\n", asp.PublicAddrs))
@@ -41,7 +43,7 @@ func AdvertiseStatus(asp AdvertiseStatusParams, verbose bool) func() {
 	// return eraser function
 	return func() {
 		if verbose {
-			fmt.Fprint(Out, "\033[9A")
+			fmt.Fprint(Out, "\033[10A")
 		}
 		if len(asp.Peers) > 0 {
 			fmt.Fprintf(Out, "\033[%dA", len(asp.Peers))

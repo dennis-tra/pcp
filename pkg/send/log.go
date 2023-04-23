@@ -9,15 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dennis-tra/pcp/pkg/node"
-
-	"github.com/dennis-tra/pcp/pkg/dht"
-
-	"github.com/dennis-tra/pcp/pkg/mdns"
-
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/p2p/net/nat"
 
 	"github.com/dennis-tra/pcp/internal/log"
+	"github.com/dennis-tra/pcp/pkg/dht"
+	"github.com/dennis-tra/pcp/pkg/mdns"
+	"github.com/dennis-tra/pcp/pkg/node"
 )
 
 var spinnerChars = []string{"⠋ ", "⠙ ", "⠹ ", "⠸ ", "⠼ ", "⠴ ", "⠦ ", "⠧ ", "⠇ ", "⠏ "}
@@ -57,6 +55,10 @@ func (n *Node) advertiseStatus(spinnerChar string) log.AdvertiseStatusParams {
 	dhtState := n.dhtAdvertiser.State()
 	pakeStates := n.PakeProtocol.PakeStates()
 	hpStates := n.HolePunchStates()
+	portMappings := []nat.Mapping{}
+	if n.NATManager.NAT() != nil {
+		portMappings = n.NATManager.NAT().Mappings()
+	}
 
 	asp := log.AdvertiseStatusParams{
 		Code:         strings.Join(n.Words, "-"),
@@ -299,6 +301,28 @@ func (n *Node) advertiseStatus(spinnerChar string) log.AdvertiseStatusParams {
 	}
 
 	sort.Strings(asp.Peers)
+
+	portMappingsUDP := 0
+	portMappingsTCP := 0
+	for _, mapping := range portMappings {
+		switch mapping.Protocol() {
+		case "udp":
+			portMappingsUDP += 1
+		case "tcp":
+			portMappingsTCP += 1
+		}
+	}
+	if portMappingsUDP == 0 {
+		asp.PortMappings += log.Gray("0")
+	} else {
+		asp.PortMappings += log.Green(strconv.Itoa(portMappingsUDP))
+	}
+	asp.PortMappings += " / "
+	if portMappingsTCP == 0 {
+		asp.PortMappings += log.Gray("0")
+	} else {
+		asp.PortMappings += log.Green(strconv.Itoa(portMappingsTCP))
+	}
 
 	return asp
 }

@@ -167,7 +167,6 @@ func (p *protocol) checkNetwork() error {
 			return p.ServiceContext().Err()
 		case e = <-sub.Out():
 		}
-
 		p.stateLk.Lock()
 		switch evt := e.(type) {
 		case event.EvtLocalReachabilityChanged:
