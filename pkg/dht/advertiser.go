@@ -101,8 +101,8 @@ func (a *Advertiser) Advertise(chanID int) {
 		a.setError(err)
 		return
 	}
-
-	err = a.checkNetwork()
+	a.setStage(StageAnalyzingNetwork)
+	err = a.analyzeNetwork()
 	if errors.Is(err, context.Canceled) {
 		a.setStage(StageStopped)
 		return
@@ -149,10 +149,8 @@ func (a *Advertiser) provide(ctx context.Context, did string) error {
 	return a.dht.Provide(ctx, cID, true)
 }
 
-// checkNetwork subscribes to a couple of libp2p events that fire after certain network conditions where determined.
-func (a *Advertiser) checkNetwork() error {
-	a.setStage(StageAnalyzingNetwork)
-
+// analyzeNetwork subscribes to a couple of libp2p events that fire after certain network conditions where determined.
+func (a *Advertiser) analyzeNetwork() error {
 	evtTypes := []interface{}{
 		new(event.EvtLocalReachabilityChanged),
 		new(event.EvtNATDeviceTypeChanged),

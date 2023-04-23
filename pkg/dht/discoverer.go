@@ -9,7 +9,6 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/dennis-tra/pcp/internal/log"
@@ -79,6 +78,7 @@ func (d *Discoverer) Discover(chanID int) {
 	}
 	defer d.ServiceStopped()
 
+	d.setStage(StageBootstrapping)
 	err := d.bootstrap()
 	if errors.Is(err, context.Canceled) {
 		d.setStage(StageStopped)
@@ -88,6 +88,7 @@ func (d *Discoverer) Discover(chanID int) {
 		return
 	}
 
+	d.setStage(StageWaitingForPublicAddrs)
 	err = d.waitPublicAddresses()
 	if errors.Is(err, context.Canceled) {
 		d.setStage(StageStopped)
@@ -140,14 +141,8 @@ func (d *Discoverer) Shutdown() {
 	d.Service.Shutdown()
 }
 
-func isRoutable(pi peer.AddrInfo) bool {
-	return len(pi.Addrs) > 0
-}
-
 // waitPublicAddresses blocks until we've found public addresses
 func (d *Discoverer) waitPublicAddresses() error {
-	d.setStage(StageWaitingForPublicAddrs)
-
 	evtTypes := []interface{}{
 		new(event.EvtLocalAddressesUpdated),
 	}

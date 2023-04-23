@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/dennis-tra/pcp/internal/wrap"
-	"github.com/dennis-tra/pcp/pkg/discovery"
-	"github.com/dennis-tra/pcp/pkg/service"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+
+	"github.com/dennis-tra/pcp/internal/wrap"
+	"github.com/dennis-tra/pcp/pkg/discovery"
+	"github.com/dennis-tra/pcp/pkg/service"
 )
 
 // These wrapped top level functions are here for testing purposes.

@@ -99,12 +99,12 @@ func version() string {
 	if ok {
 		for _, bs := range bi.Settings {
 			switch bs.Key {
-			case "vcs.modified":
+			case "vcs.revision":
 				shortCommit = bs.Value
 				if len(bs.Value) >= 7 {
 					shortCommit = bs.Value[:7]
 				}
-			case "vcs.revision":
+			case "vcs.modified":
 				isDirty, err = strconv.ParseBool(bs.Value)
 				if err != nil {
 					log.Warningln("couldn't parse vcs.revision:", err)
