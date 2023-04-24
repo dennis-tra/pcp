@@ -89,7 +89,7 @@ func (l *statusLogger) newLogStatus(spinnerChar string) *logStatus {
 	return &logStatus{
 		ctxCancelled:      l.node.ServiceContext().Err() == context.Canceled,
 		spinnerChar:       spinnerChar,
-		verbose:           l.node.verbose,
+		verbose:           l.node.Verbose,
 		words:             l.node.Words,
 		mdnsState:         l.node.mdnsAdvertiser.State(),
 		dhtState:          l.node.dhtAdvertiser.State(),
@@ -103,18 +103,26 @@ func (l *statusLogger) newLogStatus(spinnerChar string) *logStatus {
 func (l *logStatus) writeStatus(writer io.Writer) {
 	if l.verbose {
 		fmt.Fprintf(writer, "Code:          %s\n", strings.Join(l.words, "-"))
-		fmt.Fprintf(writer, "mDNS:          %s\n", l.mdnsStateStr())
-		fmt.Fprintf(writer, "DHT:           %s\n", l.dhtStateStr())
+		mdnsErr := ""
+		if l.mdnsState.Err != nil {
+			mdnsErr = log.Red(" (" + l.mdnsState.Err.Error() + ")")
+		}
+		fmt.Fprintf(writer, "mDNS:          %s%s\n", l.mdnsStateStr(), mdnsErr)
+		dhtErr := ""
+		if l.dhtState.Err != nil {
+			dhtErr = log.Red(" (" + l.dhtState.Err.Error() + ")")
+		}
+		fmt.Fprintf(writer, "DHT:           %s%s\n", l.dhtStateStr(), dhtErr)
 		fmt.Fprintf(writer, "Network:       %s\n", l.reachabilityStr())
 		fmt.Fprintf(writer, "NAT (udp/tcp):\n")
-		fmt.Fprintf(writer, "   Type:       %s\n", l.natStateStr())
-		fmt.Fprintf(writer, "   Mappings:   %s\n", l.portMappingsStr())
+		fmt.Fprintf(writer, "    Type:       %s\n", l.natStateStr())
+		fmt.Fprintf(writer, "    Mappings:   %s\n", l.portMappingsStr())
 		fmt.Fprintf(writer, "Multiaddresses\n")
-		fmt.Fprintf(writer, "   private:    %s\n", l.privateAddrsStr())
-		fmt.Fprintf(writer, "   public:     %s\n", l.publicAddrsStr())
-		fmt.Fprintf(writer, "   relays:     %s\n", l.relayAddrsStr())
+		fmt.Fprintf(writer, "    private:    %s\n", l.privateAddrsStr())
+		fmt.Fprintf(writer, "    public:     %s\n", l.publicAddrsStr())
+		fmt.Fprintf(writer, "    relays:     %s\n", l.relayAddrsStr())
 	}
-	fmt.Fprint(writer, fmt.Sprintf("%s %s\t%s %s\n", log.Bold("Local Network:"), l.lanStateStr(), log.Bold("Internet:"), l.wanStateStr()))
+	fmt.Fprint(writer, fmt.Sprintf("%s %s  %s %s\n", log.Bold("Local Network:"), l.mdnsStateStr(), log.Bold("Internet:"), l.dhtStateStr()))
 
 	peers, peerStates := l.peerStates()
 	for _, p := range peers {
@@ -123,21 +131,6 @@ func (l *logStatus) writeStatus(writer io.Writer) {
 }
 
 func (l *logStatus) mdnsStateStr() string {
-	switch l.mdnsState.Stage {
-	case mdns.StageIdle:
-		return log.Gray("-")
-	case mdns.StageRoaming:
-		return log.Green("active")
-	case mdns.StageError:
-		return log.Red("failed (" + l.mdnsState.Err.Error() + ")")
-	case mdns.StageStopped:
-		return log.Green("inactive")
-	default:
-		return log.Red(fmt.Sprintf("unknown stage: %s", l.mdnsState.Stage))
-	}
-}
-
-func (l *logStatus) lanStateStr() string {
 	switch l.mdnsState.Stage {
 	case mdns.StageIdle:
 		return log.Gray("-")
@@ -151,45 +144,11 @@ func (l *logStatus) lanStateStr() string {
 		}
 		return log.Green("stopped")
 	default:
-		return log.Gray("-")
+		return log.Red(fmt.Sprintf("unknown stage: %s", l.mdnsState.Stage))
 	}
 }
 
 func (l *logStatus) dhtStateStr() string {
-	switch l.dhtState.Stage {
-	case dht.StageIdle:
-		return log.Gray("-")
-	case dht.StageProvided:
-		return log.Green("provided")
-	case dht.StageStopped:
-		return log.Green("stopped")
-	case dht.StageError:
-		return log.Red("failed (" + l.dhtState.Err.Error() + ")")
-	}
-
-	if l.ctxCancelled {
-		return log.Gray("cancelled")
-	}
-
-	switch l.dhtState.Stage {
-	case dht.StageBootstrapping:
-		return l.spinnerChar + "(bootstrapping)"
-	case dht.StageAnalyzingNetwork:
-		if l.relayFinderActive {
-			return l.spinnerChar + "(finding relays)"
-		} else {
-			return l.spinnerChar + "(analyzing network)"
-		}
-	case dht.StageProviding:
-		return l.spinnerChar + "(providing)"
-	case dht.StageRetrying:
-		return l.spinnerChar + "(retrying)"
-	default:
-		return log.Red(fmt.Sprintf("unknown stage: %d", l.dhtState.Stage))
-	}
-}
-
-func (l *logStatus) wanStateStr() string {
 	if l.dhtState.Stage == dht.StageIdle {
 		return log.Gray("-")
 	} else if l.dhtState.Stage == dht.StageError {
@@ -223,7 +182,9 @@ func (l *logStatus) wanStateStr() string {
 func (l *logStatus) reachabilityStr() string {
 	switch l.dhtState.Reachability {
 	case network.ReachabilityUnknown:
-		if l.ctxCancelled {
+		if l.dhtState.Stage == dht.StageIdle {
+			return log.Gray("-")
+		} else if l.ctxCancelled {
 			return log.Gray("cancelled")
 		} else {
 			return l.spinnerChar
@@ -238,6 +199,9 @@ func (l *logStatus) reachabilityStr() string {
 }
 
 func (l *logStatus) natStateStr() string {
+	if l.dhtState.Stage == dht.StageIdle {
+		return log.Gray("- / -")
+	}
 	udpType := l.natStr(l.dhtState.NATTypeUDP)
 	tcpType := l.natStr(l.dhtState.NATTypeTCP)
 	return fmt.Sprintf("%s / %s", udpType, tcpType)
@@ -263,6 +227,10 @@ func (l *logStatus) natStr(deviceType network.NATDeviceType) string {
 }
 
 func (l *logStatus) portMappingsStr() string {
+	if l.dhtState.Stage == dht.StageIdle {
+		return log.Gray("- / -")
+	}
+
 	pmsUDP := 0
 	pmsTCP := 0
 	for _, mapping := range l.portMappings {
@@ -299,7 +267,9 @@ func (l *logStatus) privateAddrsStr() string {
 }
 
 func (l *logStatus) publicAddrsStr() string {
-	if len(l.dhtState.PublicAddrs) == 0 {
+	if l.dhtState.Stage == dht.StageIdle {
+		return log.Gray("-")
+	} else if len(l.dhtState.PublicAddrs) == 0 {
 		if len(l.dhtState.RelayAddrs) > 0 {
 			return log.Gray("0")
 		} else if l.ctxCancelled {
@@ -313,7 +283,9 @@ func (l *logStatus) publicAddrsStr() string {
 }
 
 func (l *logStatus) relayAddrsStr() string {
-	if l.dhtState.Reachability == network.ReachabilityPublic {
+	if l.dhtState.Stage == dht.StageIdle {
+		return log.Gray("-")
+	} else if l.dhtState.Reachability == network.ReachabilityPublic {
 		return log.Gray("irrelevant")
 	} else if l.ctxCancelled {
 		return log.Gray("cancelled")

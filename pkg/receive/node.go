@@ -33,9 +33,6 @@ const (
 type Node struct {
 	*pcpnode.Node
 
-	// if verbose logging is activated
-	verbose bool
-
 	// mDNS discovery implementations
 	mdnsDiscoverer       *mdns.Discoverer
 	mdnsDiscovererOffset *mdns.Discoverer
@@ -59,7 +56,6 @@ func InitNode(c *cli.Context, words []string) (*Node, error) {
 
 	node := &Node{
 		Node:       h,
-		verbose:    c.Bool("verbose"),
 		autoAccept: c.Bool("auto-accept"),
 		peerStates: sync.Map{},
 	}
@@ -84,10 +80,20 @@ func InitNode(c *cli.Context, words []string) (*Node, error) {
 }
 
 func (n *Node) Shutdown() {
-	n.stopDiscovering()
-	n.UnregisterTransferHandler()
-	n.UnregisterTransferHandler()
-	n.Node.Shutdown()
+	go func() {
+		<-n.SigShutdown()
+		n.stopDiscovering()
+		n.UnregisterTransferHandler()
+		n.statusLogger.Shutdown()
+
+		// TODO: properly closing the host can take up to 1 minute
+		if err := n.Host.Close(); err != nil {
+			log.Warningln("error stopping libp2p node:", err)
+		}
+
+		n.ServiceStopped()
+	}()
+	n.Service.Shutdown()
 }
 
 func (n *Node) StartDiscoveringMDNS() {
@@ -159,7 +165,6 @@ func (n *Node) watchDiscoverErrors() {
 		// stop this go routine.
 		if mdnsState.Stage.IsTermination() && mdnsOffsetState.Stage.IsTermination() &&
 			dhtState.Stage.IsTermination() && dhtOffsetState.Stage.IsTermination() {
-			n.Shutdown()
 			return
 		}
 	}
@@ -172,8 +177,9 @@ func (n *Node) HandlePeerFound(pi peer.AddrInfo) {
 		return
 	}
 
-	// Add discovered peer to the hole punch allow list to track the hole punch state of that
-	// particular peer as soon as we try to connect to them.
+	// Add discovered peer to the hole punch allow list to track the
+	// hole punch state of that particular peer as soon as we try to
+	// connect to them.
 	n.AddToHolePunchAllowList(pi.ID)
 
 	// Check if we have already seen the peer and exit early to not connect again.

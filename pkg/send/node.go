@@ -24,9 +24,6 @@ import (
 type Node struct {
 	*pcpnode.Node
 
-	// if verbose logging is activated
-	verbose bool
-
 	// mDNS advertisement implementations
 	mdnsAdvertiser *mdns.Advertiser
 
@@ -49,7 +46,6 @@ type Node struct {
 func InitNode(c *cli.Context, filepath string, words []string) (*Node, error) {
 	var err error
 	node := &Node{
-		verbose:  c.Bool("verbose"),
 		filepath: filepath,
 	}
 
@@ -84,15 +80,34 @@ func InitNode(c *cli.Context, filepath string, words []string) (*Node, error) {
 }
 
 func (n *Node) Shutdown() {
-	n.stopAdvertising()
-	n.UnregisterKeyExchangeHandler()
-	n.statusLogger.Shutdown()
+	go func() {
+		<-n.SigShutdown()
 
-	if n.mdnsAdvertiser.State().Stage == mdns.StageError && n.dhtAdvertiser.State().Stage == dht.StageError {
-		log.Infoln("An error occurred. Run peercp again with the --verbose flag to get more information")
-	}
+		n.stopAdvertising()
+		n.UnregisterKeyExchangeHandler()
+		n.statusLogger.Shutdown()
 
-	n.Node.Shutdown()
+		if n.mdnsAdvertiser.State().Stage == mdns.StageError && n.dhtAdvertiser.State().Stage == dht.StageError {
+			log.Infoln("An error occurred. Run peercp again with the --verbose flag to get more information")
+		}
+
+		// TODO: properly closing the host can take up to 1 minute
+		//if err := n.Host.Close(); err != nil {
+		//	log.Warningln("error stopping libp2p node:", err)
+		//}
+
+		n.ServiceStopped()
+	}()
+
+	// Blocks until ServiceStopped is called.
+	// This call signals e.g., the statusLogger that the node is shutting down,
+	// and we're cancelling the process.
+	// That's why we put the other shutdown stuff in the go routine at the top.
+	// If we called n.statusLogger.Shutdown() without shutting down this service
+	// it wouldn't know that we cancelled the process and would just stop as normal.
+	// What we want is, that it shows "cancelled" in the log output. That's why
+	// we need the signal to be present when n.statusLogger.Shutdown() is called.
+	n.Service.Shutdown()
 }
 
 func (n *Node) StartAdvertisingMDNS() {
@@ -135,8 +150,10 @@ func (n *Node) watchAdvertiseErrors() {
 		mdnsState := n.mdnsAdvertiser.State()
 		dhtState := n.dhtAdvertiser.State()
 
-		// if both advertisers errored out, stop the process
-		if mdnsState.Stage == mdns.StageError && dhtState.Stage == dht.StageError {
+		// if both advertisers errored out or one errored and the other is idle, stop the process
+		if (mdnsState.Stage == mdns.StageError && (dhtState.Stage == dht.StageIdle || dhtState.Stage == dht.StageError)) ||
+			(dhtState.Stage == dht.StageError && (mdnsState.Stage == mdns.StageIdle || mdnsState.Stage == mdns.StageError)) {
+
 			n.Shutdown()
 			return
 		}
@@ -202,10 +219,15 @@ func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
 	}
 	n.SetState(pcpnode.Connected)
 
+	// we are connected to the correct peer:
+	// 1. stop accepting key exchange requests
+	// 2. stop advertising to the network that we're searching
+	// 3. stop printing the search status
 	n.UnregisterKeyExchangeHandler()
 	n.stopAdvertising()
 	n.statusLogger.Shutdown()
 
+	// Start transferring file
 	err := n.Transfer(peerID)
 	if err != nil {
 		log.Warningln("Error transferring file:", err)

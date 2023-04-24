@@ -3,11 +3,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"runtime/debug"
 	"strconv"
 	"syscall"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/urfave/cli/v2"
 
@@ -36,6 +40,10 @@ func main() {
 			send.Command,
 		},
 		Before: func(c *cli.Context) error {
+			if c.IsSet("telemetry-host") || c.IsSet("telemetry-port") {
+				go metricsListenAndServe(c.String("telemetry-host"), c.Int("telemetry-port"))
+			}
+
 			if c.Bool("debug") {
 				log.SetLevel(log.DebugLevel)
 			}
@@ -64,6 +72,20 @@ func main() {
 				Name:   "homebrew",
 				Usage:  "if set transfers a hard coded file with a hard coded word sequence",
 				Hidden: true,
+			},
+			&cli.StringFlag{
+				Name:    "telemetry-host",
+				Usage:   "To which network address should the telemetry (prometheus, pprof) server bind",
+				EnvVars: []string{"PEERCP_TELEMETRY_HOST", "PCP_TELEMETRY_HOST"},
+				Value:   "localhost",
+				Hidden:  true,
+			},
+			&cli.IntFlag{
+				Name:    "telemetry-port",
+				Usage:   "On which port should the telemetry (prometheus, pprof) server listen",
+				EnvVars: []string{"PEERCP_TELEMETRY_PORT", "PCP_TELEMETRY_PORT"},
+				Value:   0,
+				Hidden:  true,
 			},
 		},
 	}
@@ -118,4 +140,13 @@ func version() string {
 	}
 
 	return fmt.Sprintf("v%s-%s", RawVersion, shortCommit)
+}
+
+func metricsListenAndServe(host string, port int) {
+	addr := fmt.Sprintf("%s:%d", host, port)
+	log.Debugln("Starting telemetry endpoint")
+	http.Handle("/metrics", promhttp.Handler())
+	if err := http.ListenAndServe(addr, nil); err != nil {
+		log.Warningln("Error serving prometheus:", err)
+	}
 }

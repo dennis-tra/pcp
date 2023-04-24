@@ -76,7 +76,7 @@ func (l *statusLogger) newLogStatus(spinnerChar string) *logStatus {
 	return &logStatus{
 		ctxCancelled: l.node.ServiceContext().Err() == context.Canceled,
 		spinnerChar:  spinnerChar,
-		verbose:      l.node.verbose,
+		verbose:      l.node.Verbose,
 		words:        l.node.Words,
 		mdnsState:    l.node.mdnsDiscoverer.State(),
 		dhtState:     l.node.dhtDiscoverer.State(),

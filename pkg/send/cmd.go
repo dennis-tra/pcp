@@ -80,7 +80,7 @@ func Action(c *cli.Context) error {
 	// Start the libp2p node
 	node, err := InitNode(c, filepath, wrds)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to initialize node: %w", err)
 	}
 
 	// if mDNS is active, start advertising in the local network

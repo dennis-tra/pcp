@@ -12,7 +12,7 @@ import (
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
 )
 
-// Command contains the receive sub-command configuration.
+// Command contains the `receive` sub-command configuration.
 var Command = &cli.Command{
 	Name:      "receive",
 	Usage:     "search for peers in your local network and the DHT",
@@ -24,7 +24,7 @@ var Command = &cli.Command{
 			Name:    "auto-accept",
 			Aliases: []string{"yes", "y"},
 			Usage:   "automatically accept the file transfer",
-			EnvVars: []string{"PCP_AUTO_ACCEPT"},
+			EnvVars: []string{"PEERCP_AUTO_ACCEPT", "PCP_AUTO_ACCEPT" /* legacy */},
 		},
 	},
 	Description: `The receive subcommand starts searching for peers in your local 
@@ -56,12 +56,16 @@ will contain the partial written bytes.`,
 
 // Action is the function that is called when running peercp receive.
 func Action(c *cli.Context) error {
+	// Read config file and fill context with it.
 	c, err := config.FillContext(c)
 	if err != nil {
 		return fmt.Errorf("failed loading configuration: %w", err)
 	}
 
 	words := strings.Split(c.Args().First(), "-") // transfer words
+	if len(words) < 3 {
+		return fmt.Errorf("the number of words must not be less than 3")
+	}
 
 	node, err := InitNode(c, words)
 	if err != nil {
@@ -69,12 +73,14 @@ func Action(c *cli.Context) error {
 	}
 
 	// Search for identifier
-	log.Infof("Looking for peer %s... \n", c.Args().First())
+	log.Infof("Looking for peer: %s... \n", c.Args().First())
 
+	// if mDNS is active, start searching in the local network
 	if isMDNSActive(c) {
 		go node.StartDiscoveringMDNS()
 	}
 
+	// if mDNS is active, start searching in the wider area network
 	if isDHTActive(c) {
 		go node.StartDiscoveringDHT()
 	}

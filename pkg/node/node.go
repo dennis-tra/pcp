@@ -38,15 +38,24 @@ var skipMessageAuth = false
 type State string
 
 const (
+	// Initialising means the node has booted but not yet
+	// started to advertise/discover the word list/other peer.
 	Initialising State = "initialising"
-	Roaming            = "roaming"
-	Connected          = "connected"
+	// Roaming means the node is actively advertising/discovering
+	// the word list/other peers
+	Roaming = "roaming"
+	// Connected means the node has found the corresponding peer
+	// and successfully authenticated it.
+	Connected = "connected"
 )
 
 // Node encapsulates the logic for sending and receiving messages.
 type Node struct {
 	service.Service
 	host.Host
+
+	// if verbose logging is activated
+	Verbose bool
 
 	// give node protocol capabilities
 	PushProtocol
@@ -94,6 +103,7 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 		stateLk:  &sync.RWMutex{},
 		Words:    wrds,
 		ChanID:   ints[0],
+		Verbose:  c.Bool("verbose"),
 	}
 	node.PushProtocol = NewPushProtocol(node)
 	node.TransferProtocol = NewTransferProtocol(node)
@@ -130,17 +140,6 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	go func() {
-		<-node.SigShutdown()
-
-		// TODO: properly closing the host can take up to 1 minute
-		//if err = node.Host.Close(); err != nil {
-		//	log.Warningln("error closing node", err)
-		//}
-
-		node.ServiceStopped()
-	}()
 
 	return node, node.ServiceStarted()
 }
