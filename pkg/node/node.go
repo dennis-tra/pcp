@@ -6,8 +6,11 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"strconv"
 	"sync"
 	"time"
+
+	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
@@ -20,6 +23,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
+	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
 	"github.com/multiformats/go-varint"
 	"github.com/urfave/cli/v2"
@@ -65,6 +69,7 @@ type Node struct {
 	// tracer for hole punching updates
 	hpStatesLk  sync.RWMutex
 	hpStates    map[peer.ID]*HolePunchState
+	hpFailed    map[peer.ID]chan struct{}
 	hpAllowList sync.Map
 
 	// The public key of this node for easy access
@@ -99,6 +104,7 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 	node := &Node{
 		Service:  service.New("node"),
 		hpStates: map[peer.ID]*HolePunchState{},
+		hpFailed: map[peer.ID]chan struct{}{},
 		state:    Initialising,
 		stateLk:  &sync.RWMutex{},
 		Words:    wrds,
@@ -122,9 +128,17 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 		return nil, err
 	}
 
+	// Configure the resource manager to not limit anything
+	limiter := rcmgr.NewFixedLimiter(rcmgr.InfiniteLimits)
+	rm, err := rcmgr.NewResourceManager(limiter)
+	if err != nil {
+		return nil, fmt.Errorf("new resource manager: %w", err)
+	}
+
 	opts = append(opts,
 		libp2p.Identity(key),
 		libp2p.UserAgent("pcp/"+c.App.Version),
+		libp2p.ResourceManager(rm),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
 			node.DHT, err = kaddht.New(c.Context, h, kaddht.EnableOptimisticProvide())
 			return node.DHT, err
@@ -141,18 +155,18 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 		return nil, err
 	}
 
+	log.Debugln("Initialized libp2p host:", node.ID().String())
+
 	return node, node.ServiceStarted()
 }
 
 func (n *Node) SetState(s State) State {
 	n.stateLk.Lock()
-	if n.state == Connected {
-		panic("illegal state transition from connected to roaming")
-	}
 	log.Debugln("Setting local node state to", s)
+	prevState := n.state
 	n.state = s
 	n.stateLk.Unlock()
-	return s
+	return prevState
 }
 
 func (n *Node) GetState() State {
@@ -374,4 +388,114 @@ func (n *Node) WaitForEOF(s network.Stream) error {
 	case err := <-done:
 		return err
 	}
+}
+
+// WaitForDirectConn registers a notifee with the swarm that
+// gets called when we established a direct connection to the
+// given peer. Then it waits with a timeout until we actually
+// have a direct connection.
+func (n *Node) WaitForDirectConn(peerID peer.ID) error {
+	// exit early
+	if n.HasDirectConnection(peerID) {
+		return nil
+	}
+
+	directConnChan := make(chan struct{})
+	bundle := &network.NotifyBundle{
+		ConnectedF: func(n network.Network, conn network.Conn) {
+			if conn.RemotePeer() != peerID {
+				return
+			}
+
+			if IsRelayAddress(conn.RemoteMultiaddr()) {
+				return
+			}
+
+			directConnChan <- struct{}{}
+		},
+	}
+
+	n.Network().Notify(bundle)
+	defer func() {
+		n.Network().StopNotify(bundle)
+
+		// unstuck any "Connected" notifee functions
+		for {
+			select {
+			case <-directConnChan:
+				continue
+			default:
+			}
+			break
+		}
+		close(directConnChan)
+	}()
+
+	// A direct connection could have been established after we
+	// checked if we have a direct connection, and before we
+	// registered the notifee.
+	if n.HasDirectConnection(peerID) {
+		return nil
+	}
+
+	select {
+	case <-n.HolePunchFailed(peerID):
+		// hole punching failed :/
+		state, found := n.HolePunchStates()[peerID]
+		if found {
+			return state.Err
+		} else {
+			return fmt.Errorf("unknown reason")
+		}
+	case <-directConnChan:
+		// we have a direct connection!
+		return nil
+	case <-time.After(15 * time.Second):
+		// we ran into a timeout :/
+		return fmt.Errorf("timed out after 15s")
+	case <-n.ServiceContext().Done():
+		// we were instructed to shut down
+		return n.ServiceContext().Err()
+	}
+}
+
+func (n *Node) DebugLogAuthenticatedPeer(peerID peer.ID) {
+	log.Debugln("Authenticated peer:", peerID)
+
+	log.Debugln("Connections:")
+	for i, conn := range n.Network().ConnsToPeer(peerID) {
+		log.Debugf("[%d] Direction: %s Transient: %s\n", i, conn.Stat().Direction, strconv.FormatBool(conn.Stat().Transient))
+		log.Debugln("     Local:  ", conn.LocalMultiaddr())
+		log.Debugln("     Remote: ", conn.RemoteMultiaddr())
+	}
+
+	protocols, err := n.Network().Peerstore().GetProtocols(peerID)
+	if err == nil {
+		log.Debugln("Protocols:")
+		for _, p := range protocols {
+			log.Debugf("  %s\n", p)
+		}
+	}
+}
+
+func IsRelayAddress(a ma.Multiaddr) bool {
+	_, err := a.ValueForProtocol(ma.P_CIRCUIT)
+	return err == nil
+}
+
+func (n *Node) HasDirectConnection(p peer.ID) bool {
+	for _, conn := range n.Network().ConnsToPeer(p) {
+		if !IsRelayAddress(conn.RemoteMultiaddr()) {
+			return true
+		}
+	}
+	return false
+}
+
+func (n *Node) HasHolePunchFailed(p peer.ID) bool {
+	state, found := n.HolePunchStates()[p]
+	if !found {
+		return false
+	}
+	return state.Stage == HolePunchStageFailed
 }

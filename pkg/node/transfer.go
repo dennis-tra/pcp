@@ -11,7 +11,6 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	ma "github.com/multiformats/go-multiaddr"
 	progress "github.com/schollz/progressbar/v3"
 
 	"github.com/dennis-tra/pcp/internal/log"
@@ -61,10 +60,6 @@ func NewTransferProtocol(node *Node) TransferProtocol {
 func (t *TransferProtocol) onTransfer(s network.Stream) {
 	defer t.th.Done()
 	defer t.node.ResetOnShutdown(s)()
-
-	if isRelayAddress(s.Conn().RemoteMultiaddr()) {
-		log.Infoln("transfer through relay")
-	}
 
 	// Get PAKE session key for stream decryption
 	sKey, found := t.node.GetSessionKey(s.Conn().RemotePeer())
@@ -132,10 +127,6 @@ func (t *TransferProtocol) Transfer(ctx context.Context, peerID peer.ID, basePat
 	s, err := t.node.NewStream(ctx, peerID, ProtocolTransfer)
 	if err != nil {
 		return err
-	}
-
-	if isRelayAddress(s.Conn().RemoteMultiaddr()) {
-		log.Infoln("transfer through relay")
 	}
 
 	defer s.Close()
@@ -235,9 +226,4 @@ func relPath(basePath string, baseIsDir bool, targetPath string) (string, error)
 	} else {
 		return filepath.Base(basePath), nil
 	}
-}
-
-func isRelayAddress(a ma.Multiaddr) bool {
-	_, err := a.ValueForProtocol(ma.P_CIRCUIT)
-	return err == nil
 }

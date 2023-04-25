@@ -3,6 +3,7 @@ package send
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/dennis-tra/pcp/pkg/words"
 
@@ -71,6 +72,7 @@ func Action(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	log.Debugln("Random words:", strings.Join(wrds, "-"))
 
 	// If homebrew flag is set, overwrite generated words with well known list
 	if c.Bool("homebrew") {

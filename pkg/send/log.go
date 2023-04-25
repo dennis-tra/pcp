@@ -74,7 +74,15 @@ type logStatus struct {
 	spinnerChar       string
 	ctxCancelled      bool
 	relayFinderActive bool
+	connTypes         map[peer.ID]connectionType
 }
+
+type connectionType string
+
+const (
+	connTypeDirect  connectionType = "direct"
+	connTypeRelayed connectionType = "relay"
+)
 
 func (l *statusLogger) newLogStatus(spinnerChar string) *logStatus {
 	var portMappings []nat.Mapping
@@ -86,6 +94,21 @@ func (l *statusLogger) newLogStatus(spinnerChar string) *logStatus {
 	rfa := l.node.relayFinderActive
 	l.node.relayFinderActiveLk.RUnlock()
 
+	pakeStates := l.node.PakeProtocol.PakeStates()
+
+	connTypes := map[peer.ID]connectionType{}
+	for p := range pakeStates {
+		conns := l.node.Network().ConnsToPeer(p)
+		connType := connTypeRelayed
+		for _, conn := range conns {
+			if !node.IsRelayAddress(conn.RemoteMultiaddr()) {
+				connType = connTypeDirect
+				break
+			}
+		}
+		connTypes[p] = connType
+	}
+
 	return &logStatus{
 		ctxCancelled:      l.node.ServiceContext().Err() == context.Canceled,
 		spinnerChar:       spinnerChar,
@@ -93,7 +116,8 @@ func (l *statusLogger) newLogStatus(spinnerChar string) *logStatus {
 		words:             l.node.Words,
 		mdnsState:         l.node.mdnsAdvertiser.State(),
 		dhtState:          l.node.dhtAdvertiser.State(),
-		pakeStates:        l.node.PakeProtocol.PakeStates(),
+		pakeStates:        pakeStates,
+		connTypes:         connTypes,
 		hpStates:          l.node.HolePunchStates(),
 		portMappings:      portMappings,
 		relayFinderActive: rfa,
@@ -124,9 +148,10 @@ func (l *logStatus) writeStatus(writer io.Writer) {
 	}
 	fmt.Fprint(writer, fmt.Sprintf("%s %s  %s %s\n", log.Bold("Local Network:"), l.mdnsStateStr(), log.Bold("Internet:"), l.dhtStateStr()))
 
-	peers, peerStates := l.peerStates()
+	peers, peerStates := l.pakeStatesStr()
+	hpStates := l.connectionStateStr()
 	for _, p := range peers {
-		fmt.Fprintf(writer, "  -> %s: %s\n", log.Bold(p), peerStates[p])
+		fmt.Fprintf(writer, "  -> %s: %s %s\n", log.Bold(p), peerStates[p], hpStates[p])
 	}
 }
 
@@ -298,7 +323,53 @@ func (l *logStatus) relayAddrsStr() string {
 	return log.Gray("-")
 }
 
-func (l *logStatus) peerStates() ([]string, map[string]string) {
+func (l *logStatus) connectionStateStr() map[string]string {
+	states := map[string]string{}
+	for p, connType := range l.connTypes {
+		peerID := p.String()
+		if len(peerID) >= 16 {
+			peerID = peerID[:16]
+		}
+
+		switch connType {
+		case connTypeRelayed:
+			hpStateStr := ""
+			hpState, ok := l.hpStates[p]
+			if !ok {
+				hpStateStr = log.Gray(l.spinnerChar)
+			} else {
+				switch hpState.Stage {
+				case node.HolePunchStageUnknown:
+					hpStateStr = log.Gray(l.spinnerChar)
+				case node.HolePunchStageStarted:
+					hpStateStr = fmt.Sprintf("%s (attempt %d)", l.spinnerChar, hpState.Attempts)
+				case node.HolePunchStageSucceeded:
+					hpStateStr = log.Green("Succeeded!")
+				case node.HolePunchStageFailed:
+					hpStateStr = log.Red("Failed")
+				default:
+					hpStateStr = log.Yellow(fmt.Sprintf("unexpected: %d", hpState.Stage))
+				}
+			}
+
+			states[peerID] = fmt.Sprintf("%s: %s", log.Bold("Hole punching"), hpStateStr)
+
+		case connTypeDirect:
+			_, found := l.hpStates[p]
+			if found {
+				states[peerID] = log.Bold("Hole punching: ") + log.Green("Succeeded!")
+			} else {
+				states[peerID] = log.Bold("Connection: ") + log.Green("Direct")
+			}
+		default:
+			states[peerID] = log.Bold("Connection: ") + log.Yellow("unknown: "+string(connType))
+		}
+	}
+
+	return states
+}
+
+func (l *logStatus) pakeStatesStr() ([]string, map[string]string) {
 	var peers []string
 	peerStates := map[string]string{}
 	for peer, state := range l.pakeStates {
@@ -360,31 +431,6 @@ func (l *logStatus) peerStates() ([]string, map[string]string) {
 			}
 		default:
 			peerStates[peerID] = log.Yellow(fmt.Sprintf("Unknown PAKE step: %d", state.Step))
-		}
-	}
-
-	for peer, state := range l.hpStates {
-		peerID := peer.String()
-		if len(peerID) >= 16 {
-			peerID = peerID[:16]
-		}
-
-		// give PAKE status precedence
-		if _, found := peerStates[peerID]; found {
-			continue
-		}
-
-		if l.ctxCancelled {
-			peerStates[peerID] = log.Gray("cancelled")
-		}
-
-		switch state.Stage {
-		case node.HolePunchStageStarted:
-			peerStates[peerID] = fmt.Sprintf("Hole punching NATs (attempt %d)... %s", state.Attempts, l.spinnerChar)
-		case node.HolePunchStageSucceeded:
-			peerStates[peerID] = log.Green("Hole punching succeeded!")
-		case node.HolePunchStageFailed:
-			peerStates[peerID] = log.Red(fmt.Sprintf("Hole punching failed (%s)", state.Err))
 		}
 	}
 

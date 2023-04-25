@@ -210,25 +210,39 @@ func (n *Node) autoRelayPeerSource(ctx context.Context, num int) <-chan peer.Add
 	return out
 }
 
-// HandleSuccessfulKeyExchange gets called when we have a peer that passed the PAKE.
+// HandleSuccessfulKeyExchange gets called when we have a peer that passed the
+// password authenticated key exchange.
 func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
-	// We're authenticated so can initiate a transfer
-	if n.GetState() == pcpnode.Connected {
+	// If there's a second peer that passed the password authenticated key exchange
+	// we drop that peer because we already have one. Unlikely to happen.
+	// SetState returns the previous state before the given "Connected" state was set.
+	if n.SetState(pcpnode.Connected) == pcpnode.Connected {
 		log.Debugln("already connected and authenticated with another peer")
 		return
 	}
-	n.SetState(pcpnode.Connected)
+
+	// Only if --debug is activated
+	n.DebugLogAuthenticatedPeer(peerID)
 
 	// we are connected to the correct peer:
 	// 1. stop accepting key exchange requests
 	// 2. stop advertising to the network that we're searching
-	// 3. stop printing the search status
+	// 3. wait until we have a direct connection
+	// 4. stop printing the search status
 	n.UnregisterKeyExchangeHandler()
 	n.stopAdvertising()
+
+	err := n.WaitForDirectConn(peerID)
+	if err != nil {
+		n.statusLogger.Shutdown()
+		n.Shutdown()
+		log.Infoln("Hole punching failed:", err)
+		return
+	}
 	n.statusLogger.Shutdown()
 
 	// Start transferring file
-	err := n.Transfer(peerID)
+	err = n.Transfer(peerID)
 	if err != nil {
 		log.Warningln("Error transferring file:", err)
 	}

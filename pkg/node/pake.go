@@ -60,7 +60,7 @@ func (p *PakeProtocol) setPakeStep(peerID peer.ID, step PakeStep) {
 	p.statesLk.Lock()
 	defer p.statesLk.Unlock()
 
-	log.Debugf("%s: %s", peerID.String(), step)
+	log.Debugf("Pake %s: %s\n", peerID.String()[:16], step)
 	if _, ok := p.states[peerID]; ok {
 		p.states[peerID].Step = step
 	} else {
@@ -461,3 +461,30 @@ const (
 	PakeStepPeerAuthenticated
 	PakeStepError
 )
+
+func (s PakeStep) String() string {
+	switch s {
+	case PakeStepStart:
+		return "PakeStepStart"
+	case PakeStepWaitingForKeyInformation:
+		return "PakeStepWaitingForKeyInformation"
+	case PakeStepCalculatingKeyInformation:
+		return "PakeStepCalculatingKeyInformation"
+	case PakeStepSendingKeyInformation:
+		return "PakeStepSendingKeyInformation"
+	case PakeStepWaitingForFinalKeyInformation:
+		return "PakeStepWaitingForFinalKeyInformation"
+	case PakeStepProvingAuthenticityToPeer:
+		return "PakeStepProvingAuthenticityToPeer"
+	case PakeStepVerifyingProofFromPeer:
+		return "PakeStepVerifyingProofFromPeer"
+	case PakeStepWaitingForFinalConfirmation:
+		return "PakeStepWaitingForFinalConfirmation"
+	case PakeStepPeerAuthenticated:
+		return "PakeStepPeerAuthenticated"
+	case PakeStepError:
+		return "PakeStepError"
+	default:
+		return "PakeStepUnknown"
+	}
+}

@@ -65,12 +65,34 @@ type logStatus struct {
 	portMappings []nat.Mapping
 	spinnerChar  string
 	ctxCancelled bool
+	connTypes    map[peer.ID]connectionType
 }
+
+type connectionType string
+
+const (
+	connTypeDirect  connectionType = "direct"
+	connTypeRelayed connectionType = "relay"
+)
 
 func (l *statusLogger) newLogStatus(spinnerChar string) *logStatus {
 	var portMappings []nat.Mapping
 	if l.node.NATManager.NAT() != nil {
 		portMappings = l.node.NATManager.NAT().Mappings()
+	}
+	pakeStates := l.node.PakeProtocol.PakeStates()
+
+	connTypes := map[peer.ID]connectionType{}
+	for p := range pakeStates {
+		conns := l.node.Network().ConnsToPeer(p)
+		connType := connTypeRelayed
+		for _, conn := range conns {
+			if !node.IsRelayAddress(conn.RemoteMultiaddr()) {
+				connType = connTypeDirect
+				break
+			}
+		}
+		connTypes[p] = connType
 	}
 
 	return &logStatus{
@@ -80,7 +102,8 @@ func (l *statusLogger) newLogStatus(spinnerChar string) *logStatus {
 		words:        l.node.Words,
 		mdnsState:    l.node.mdnsDiscoverer.State(),
 		dhtState:     l.node.dhtDiscoverer.State(),
-		pakeStates:   l.node.PakeProtocol.PakeStates(),
+		pakeStates:   pakeStates,
+		connTypes:    connTypes,
 		hpStates:     l.node.HolePunchStates(),
 		portMappings: portMappings,
 	}
@@ -99,9 +122,10 @@ func (l *logStatus) writeStatus(writer io.Writer) {
 	}
 	fmt.Fprint(writer, fmt.Sprintf("%s %s\t%s %s\n", log.Bold("Local Network:"), l.lanStateStr(), log.Bold("Internet:"), l.wanStateStr()))
 
-	peers, peerStates := l.peerStates()
+	peers, peerStates := l.pakeStatesStr()
+	hpStates := l.connectionStateStr()
 	for _, p := range peers {
-		fmt.Fprintf(writer, "  -> %s: %s\n", log.Bold(p), peerStates[p])
+		fmt.Fprintf(writer, "  -> %s: %s %s\n", log.Bold(p), peerStates[p], hpStates[p])
 	}
 }
 
@@ -239,7 +263,7 @@ func (l *logStatus) publicAddrsStr() string {
 	}
 }
 
-func (l *logStatus) peerStates() ([]string, map[string]string) {
+func (l *logStatus) pakeStatesStr() ([]string, map[string]string) {
 	var peers []string
 	peerStates := map[string]string{}
 	for peer, state := range l.pakeStates {
@@ -304,32 +328,52 @@ func (l *logStatus) peerStates() ([]string, map[string]string) {
 		}
 	}
 
-	for peer, state := range l.hpStates {
-		peerID := peer.String()
+	sort.Strings(peers)
+	return peers, peerStates
+}
+
+func (l *logStatus) connectionStateStr() map[string]string {
+	states := map[string]string{}
+	for p, connType := range l.connTypes {
+		peerID := p.String()
 		if len(peerID) >= 16 {
 			peerID = peerID[:16]
 		}
 
-		// give PAKE status precedence
-		if _, found := peerStates[peerID]; found {
-			continue
-		}
+		switch connType {
+		case connTypeRelayed:
+			hpStateStr := ""
+			hpState, ok := l.hpStates[p]
+			if !ok {
+				hpStateStr = log.Gray(l.spinnerChar)
+			} else {
+				switch hpState.Stage {
+				case node.HolePunchStageUnknown:
+					hpStateStr = log.Gray(l.spinnerChar)
+				case node.HolePunchStageStarted:
+					hpStateStr = fmt.Sprintf("%s (attempt %d)", l.spinnerChar, hpState.Attempts)
+				case node.HolePunchStageSucceeded:
+					hpStateStr = log.Green("Succeeded!")
+				case node.HolePunchStageFailed:
+					hpStateStr = log.Red("Failed")
+				default:
+					hpStateStr = log.Yellow(fmt.Sprintf("unexpected: %d", hpState.Stage))
+				}
+			}
 
-		if l.ctxCancelled {
-			peerStates[peerID] = log.Gray("cancelled")
-		}
+			states[peerID] = fmt.Sprintf("%s: %s", log.Bold("Hole punching"), hpStateStr)
 
-		switch state.Stage {
-		case node.HolePunchStageStarted:
-			peerStates[peerID] = fmt.Sprintf("Hole punching NATs (attempt %d)... %s", state.Attempts, l.spinnerChar)
-		case node.HolePunchStageSucceeded:
-			peerStates[peerID] = log.Green("Hole punching succeeded!")
-		case node.HolePunchStageFailed:
-			peerStates[peerID] = log.Red(fmt.Sprintf("Hole punching failed (%s)", state.Err))
+		case connTypeDirect:
+			_, found := l.hpStates[p]
+			if found {
+				states[peerID] = log.Bold("Hole punching: ") + log.Green("Succeeded!")
+			} else {
+				states[peerID] = log.Bold("Connection: ") + log.Green("Direct")
+			}
+		default:
+			states[peerID] = log.Bold("Connection: ") + log.Yellow("unknown: "+string(connType))
 		}
 	}
 
-	sort.Strings(peers)
-
-	return peers, peerStates
+	return states
 }

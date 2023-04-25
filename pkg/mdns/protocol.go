@@ -57,7 +57,7 @@ func (p *protocol) setError(err error) {
 func (p *protocol) setState(fn func(state *State)) {
 	p.stateLk.Lock()
 	fn(p.state)
-	log.Debugln("DHT State:", p.state)
+	log.Debugln("mDNS State:", p.state)
 	p.stateLk.Unlock()
 }
 

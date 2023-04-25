@@ -23,6 +23,33 @@ const (
 	StageError
 )
 
+func (s Stage) String() string {
+	switch s {
+	case StageIdle:
+		return "StageIdle"
+	case StageBootstrapping:
+		return "StageBootstrapping"
+	case StageAnalyzingNetwork:
+		return "StageAnalyzingNetwork"
+	case StageWaitingForPublicAddrs:
+		return "StageWaitingForPublicAddrs"
+	case StageProviding:
+		return "StageProviding"
+	case StageLookup:
+		return "StageLookup"
+	case StageRetrying:
+		return "StageRetrying"
+	case StageProvided:
+		return "StageProvided"
+	case StageStopped:
+		return "StageStopped"
+	case StageError:
+		return "StageError"
+	default:
+		return "StageUnknown"
+	}
+}
+
 func (s Stage) IsTermination() bool {
 	return s == StageStopped || s == StageError
 }
@@ -39,7 +66,7 @@ type AdvertiseState struct {
 }
 
 func (s *AdvertiseState) String() string {
-	return fmt.Sprintf("stage=%q nat_tcp=%s nat_udp=%s reachability=%s", s.Stage, s.NATTypeTCP, s.NATTypeUDP, s.Reachability)
+	return fmt.Sprintf("stage=%q nat_tcp=%s nat_udp=%s reachability=%s error=%v", s.Stage, s.NATTypeTCP, s.NATTypeUDP, s.Reachability, s.Err)
 }
 
 func (s *AdvertiseState) populateAddrs(addrs []ma.Multiaddr) {
@@ -62,6 +89,10 @@ type DiscoverState struct {
 	PublicAddrs  []ma.Multiaddr
 	PrivateAddrs []ma.Multiaddr
 	Err          error
+}
+
+func (s *DiscoverState) String() string {
+	return fmt.Sprintf("stage=%q error=%v", s.Stage, s.Err)
 }
 
 // TODO remove duplication

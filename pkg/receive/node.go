@@ -98,14 +98,14 @@ func (n *Node) Shutdown() {
 
 func (n *Node) StartDiscoveringMDNS() {
 	n.SetState(pcpnode.Roaming)
-	n.mdnsDiscoverer.Discover(n.ChanID)
-	n.mdnsDiscovererOffset.Discover(n.ChanID)
+	go n.mdnsDiscoverer.Discover(n.ChanID)
+	go n.mdnsDiscovererOffset.Discover(n.ChanID)
 }
 
 func (n *Node) StartDiscoveringDHT() {
 	n.SetState(pcpnode.Roaming)
-	n.dhtDiscoverer.Discover(n.ChanID)
-	n.dhtDiscovererOffset.Discover(n.ChanID)
+	go n.dhtDiscoverer.Discover(n.ChanID)
+	go n.dhtDiscovererOffset.Discover(n.ChanID)
 }
 
 func (n *Node) stopDiscovering() {
@@ -205,6 +205,8 @@ func (n *Node) HandlePeerFound(pi peer.AddrInfo) {
 		return
 	}
 
+	n.DebugLogAuthenticatedPeer(pi.ID)
+
 	// Negotiate PAKE
 	if _, err := n.StartKeyExchange(n.ServiceContext(), pi.ID); err != nil {
 		log.Errorln("Peer didn't pass authentication:", err)
@@ -219,6 +221,16 @@ func (n *Node) HandlePeerFound(pi peer.AddrInfo) {
 		return
 	}
 	n.SetState(pcpnode.Connected)
+
+	err := n.WaitForDirectConn(pi.ID)
+	if err != nil {
+		n.statusLogger.Shutdown()
+		n.Shutdown()
+		log.Infoln("Hole punching failed:", err)
+		return
+	}
+
+	// TODO: register notifee that shuts down on disconnect
 
 	// Stop the discovering process as we have found the valid peer
 	n.stopDiscovering()

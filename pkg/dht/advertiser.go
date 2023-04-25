@@ -113,21 +113,23 @@ func (a *Advertiser) Advertise(chanID int) {
 
 	did := a.did.DiscoveryID(chanID)
 
+	ticker := time.NewTicker(5 * time.Second)
 	a.setStage(StageProviding)
 	for {
-		select {
-		case <-a.SigShutdown():
-			log.Debugln("DHT - Advertising", did, " done - shutdown signal")
-			a.setStage(StageStopped)
-			return
-		default:
-		}
 
 		err := a.provide(a.ServiceContext(), did)
 		if err != nil {
 			a.setStage(StageRetrying)
 		} else {
 			a.setStage(StageProvided)
+		}
+
+		select {
+		case <-a.SigShutdown():
+			log.Debugln("DHT - Advertising", did, " done - shutdown signal")
+			a.setStage(StageStopped)
+			return
+		case <-ticker.C:
 		}
 	}
 }

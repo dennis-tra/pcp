@@ -116,10 +116,9 @@ func (d *Discoverer) Discover(chanID int) {
 				go d.notifee.HandlePeerFound(pi)
 			}
 		}
-		log.Debugln("DHT - Discovering", did, " done.")
-
-		// cannot defer cancel in this for loop
 		cancel()
+
+		log.Debugln("DHT - Discovering", did, " done.")
 
 		select {
 		case <-d.SigShutdown():
