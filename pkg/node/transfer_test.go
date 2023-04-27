@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/libp2p/go-libp2p/core/peer"
-
 	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -157,10 +155,8 @@ func setupNode(t *testing.T, net mocknet.Mocknet) (*Node, chan struct{}) {
 	p, err := net.GenPeer()
 	require.NoError(t, err)
 	n := &Node{Service: service.New("node"), Host: p}
-	n.PakeProtocol = PakeProtocol{
-		node:   n,
-		states: map[peer.ID]*PakeState{},
-	}
+	n.PakeProtocol, err = NewPakeProtocol(n, []string{"equal", "equal", "equal", "equal"})
+	require.NoError(t, err)
 	n.TransferProtocol = NewTransferProtocol(n)
 	done := make(chan struct{})
 	n.RegisterTransferHandler(&TestTransferHandler{handler: tmpWriter(t), done: func() { close(done) }})

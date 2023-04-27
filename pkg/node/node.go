@@ -129,8 +129,6 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 		return nil, fmt.Errorf("new pake protocol: %w", err)
 	}
 
-	// unnecessary if I knew an API to get the public key from an
-	// initialized libp2p host.
 	key, pub, err := crypto.GenerateEd25519Key(rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("gen ed25519 key: %w", err)

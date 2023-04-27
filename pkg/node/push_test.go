@@ -11,7 +11,7 @@ import (
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
 )
 
-// TestTransferHandler is a mock transfer handler that can be registered for the TransferProtocol.
+// TestTransferHandler is a mock transfer handler that can be registered for the PushProtocol.
 type TestPushRequestHandler struct {
 	handler func(*p2p.PushRequest) (bool, error)
 }
