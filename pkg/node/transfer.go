@@ -61,6 +61,13 @@ func (t *TransferProtocol) onTransfer(s network.Stream) {
 	defer t.th.Done()
 	defer t.node.ResetOnShutdown(s)()
 
+	// Only allow authenticated peers to talk to us
+	if !t.node.IsAuthenticated(s.Conn().RemotePeer()) {
+		log.Infoln("Received transfer from unauthenticated peer")
+		s.Reset() // Tell peer to go away
+		return
+	}
+
 	// Get PAKE session key for stream decryption
 	sKey, found := t.node.GetSessionKey(s.Conn().RemotePeer())
 	if !found {
@@ -99,7 +106,7 @@ func (t *TransferProtocol) onTransfer(s network.Stream) {
 		if err == io.EOF {
 			break // End of archive
 		} else if err != nil {
-			log.Warningln("Error reading next tar element", err)
+			log.Warningln("Error reading next tar element:", err)
 			return
 		}
 		t.th.HandleFile(hdr, tr)
@@ -120,7 +127,7 @@ func (t *TransferProtocol) onTransfer(s network.Stream) {
 }
 
 // Transfer can be called to transfer the given payload to the given peer. The PushRequest is used for displaying
-// the progress to the user. This function returns when the bytes where transmitted and we have received an
+// the progress to the user. This function returns when the bytes where transmitted, and we have received an
 // acknowledgment.
 func (t *TransferProtocol) Transfer(ctx context.Context, peerID peer.ID, basePath string) error {
 	// Open a new stream to our peer.
