@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/libp2p/go-libp2p/core/network"
+
 	"github.com/dennis-tra/pcp/pkg/discovery"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -46,6 +48,9 @@ type Node struct {
 
 	// a logging service which updates the terminal with the current state
 	statusLogger *statusLogger
+
+	netNotifeeLk sync.RWMutex
+	netNotifee   *network.NotifyBundle
 }
 
 func InitNode(c *cli.Context, words []string) (*Node, error) {
@@ -87,9 +92,9 @@ func (n *Node) Shutdown() {
 		n.statusLogger.Shutdown()
 
 		// TODO: properly closing the host can take up to 1 minute
-		if err := n.Host.Close(); err != nil {
-			log.Warningln("error stopping libp2p node:", err)
-		}
+		//if err := n.Host.Close(); err != nil {
+		//	log.Warningln("error stopping libp2p node:", err)
+		//}
 
 		n.ServiceStopped()
 	}()
@@ -220,8 +225,41 @@ func (n *Node) HandlePeerFound(pi peer.AddrInfo) {
 		log.Debugln("already connected and authenticated with another node")
 		return
 	}
+
+	// can't stopNotify in Shutdown -> deadlock - but don't understand why
+	//n.netNotifeeLk.Lock()
+	//n.netNotifee = &network.NotifyBundle{
+	//	DisconnectedF: func(net network.Network, conn network.Conn) {
+	//		if conn.RemotePeer() != pi.ID {
+	//			return
+	//		}
+	//
+	//		if net.Connectedness(conn.RemotePeer()) == network.Connected {
+	//			return
+	//		}
+	//
+	//		log.Warningln("Lost connection to remote peer - shutting down")
+	//
+	//		n.Shutdown()
+	//	},
+	//}
+	//n.netNotifeeLk.Unlock()
+	//
+	//n.Network().Notify(n.netNotifee)
+
+	// between registering to be notified until here we could have been disconnected,
+	// so check again here.
+	if n.Network().Connectedness(pi.ID) == network.NotConnected {
+		n.Shutdown()
+		return
+	}
+
 	n.SetState(pcpnode.Connected)
 
+	// Stop the discovering process as we have found the valid peer
+	n.stopDiscovering()
+
+	// wait until the hole punch has succeeded
 	err := n.WaitForDirectConn(pi.ID)
 	if err != nil {
 		n.statusLogger.Shutdown()
@@ -229,12 +267,11 @@ func (n *Node) HandlePeerFound(pi peer.AddrInfo) {
 		log.Infoln("Hole punching failed:", err)
 		return
 	}
-
-	// TODO: register notifee that shuts down on disconnect
-
-	// Stop the discovering process as we have found the valid peer
-	n.stopDiscovering()
 	n.statusLogger.Shutdown()
+
+	// make sure we don't open the new transfer-stream on the relayed connection.
+	// libp2p claims to not do that, but I have observed strange connection resets.
+	n.CloseRelayedConnections(pi.ID)
 }
 
 func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {

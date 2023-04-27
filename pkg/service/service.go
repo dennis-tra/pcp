@@ -133,16 +133,16 @@ func (s *Service) ServiceContext() context.Context {
 // This function blocks until the done channel was closed
 // which happens when ServiceStopped is called.
 func (s *Service) Shutdown() {
-	log.Debugln(s.name, "- Service shutting down...")
-
 	s.lk.Lock()
 	if s.state != started {
+		log.Debugln(s.name, "- Service not started but requested to shut down")
 		s.lk.Unlock()
 		return
 	}
 	s.state = stopping
 	s.lk.Unlock()
 
+	log.Debugln(s.name, "- Service shutting down...")
 	close(s.shutdown)
 	<-s.done
 	log.Debugln(s.name, "- Service was shut down")

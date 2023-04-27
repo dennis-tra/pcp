@@ -14,7 +14,9 @@ import (
 // pattern: /protocol-name/request-or-response-message/version
 const ProtocolPushRequest = "/pcp/push/0.0.1"
 
-// PushProtocol .
+// PushProtocol is the protocol that's responsible for exchanging information
+// about the data that's about to be transmitted and asking for confirmation
+// to start the transfer
 type PushProtocol struct {
 	node *Node
 	lk   sync.RWMutex
@@ -33,6 +35,7 @@ func (p *PushProtocol) RegisterPushRequestHandler(prh PushRequestHandler) {
 	log.Debugln("Registering push request handler")
 	p.lk.Lock()
 	defer p.lk.Unlock()
+
 	p.prh = prh
 	p.node.SetStreamHandler(ProtocolPushRequest, p.onPushRequest)
 }
@@ -41,6 +44,7 @@ func (p *PushProtocol) UnregisterPushRequestHandler() {
 	log.Debugln("Unregistering push request handler")
 	p.lk.Lock()
 	defer p.lk.Unlock()
+
 	p.node.RemoveStreamHandler(ProtocolPushRequest)
 	p.prh = nil
 }
@@ -49,6 +53,7 @@ func (p *PushProtocol) onPushRequest(s network.Stream) {
 	defer s.Close()
 	defer p.node.ResetOnShutdown(s)()
 
+	// Only allow authenticated peers to talk to us
 	if !p.node.IsAuthenticated(s.Conn().RemotePeer()) {
 		log.Infoln("Received push request from unauthenticated peer")
 		s.Reset() // Tell peer to go away

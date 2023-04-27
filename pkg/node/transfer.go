@@ -126,7 +126,7 @@ func (t *TransferProtocol) Transfer(ctx context.Context, peerID peer.ID, basePat
 	// Open a new stream to our peer.
 	s, err := t.node.NewStream(ctx, peerID, ProtocolTransfer)
 	if err != nil {
-		return err
+		return fmt.Errorf("new transfer stream: %w", err)
 	}
 
 	defer s.Close()
@@ -134,7 +134,7 @@ func (t *TransferProtocol) Transfer(ctx context.Context, peerID peer.ID, basePat
 
 	base, err := os.Stat(basePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("file information for "+basePath+": %w", err)
 	}
 
 	// Get PAKE session key for stream encryption
@@ -146,7 +146,7 @@ func (t *TransferProtocol) Transfer(ctx context.Context, peerID peer.ID, basePat
 	// Initialize new stream encrypter
 	se, err := crypt.NewStreamEncrypter(sKey, s)
 	if err != nil {
-		return err
+		return fmt.Errorf("new stream encrypter: %w", err)
 	}
 
 	// Send the encryption initialization vector to our peer.
@@ -154,7 +154,7 @@ func (t *TransferProtocol) Transfer(ctx context.Context, peerID peer.ID, basePat
 	// https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Initialization_vector_.28IV.29
 	_, err = t.node.WriteBytes(s, se.InitializationVector())
 	if err != nil {
-		return err
+		return fmt.Errorf("write encryption iv: %w", err)
 	}
 
 	tw := tar.NewWriter(se)
@@ -162,7 +162,7 @@ func (t *TransferProtocol) Transfer(ctx context.Context, peerID peer.ID, basePat
 		log.Debugln("Preparing file for transmission:", path)
 		if err != nil {
 			log.Debugln("Error walking file:", err)
-			return err
+			return fmt.Errorf("walking file "+path+": %w", err)
 		}
 
 		hdr, err := tar.FileInfoHeader(info, "")
@@ -193,17 +193,17 @@ func (t *TransferProtocol) Transfer(ctx context.Context, peerID peer.ID, basePat
 
 		bar := progress.DefaultBytes(info.Size(), info.Name())
 		if _, err = io.Copy(io.MultiWriter(tw, bar), f); err != nil {
-			return err
+			return fmt.Errorf("io copy: %w", err)
 		}
 
 		return nil
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("walk filepath: %w", err)
 	}
 
 	if err = tw.Close(); err != nil {
-		log.Debugln("Error closing tar ball", err)
+		log.Debugln("Error closing tar ball:", err)
 	}
 
 	// Send the hash of all sent data, so our recipient can check the data.

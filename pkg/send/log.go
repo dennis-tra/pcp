@@ -356,7 +356,7 @@ func (l *logStatus) connectionStateStr() map[string]string {
 
 		case connTypeDirect:
 			_, found := l.hpStates[p]
-			if found {
+			if found && l.dhtState.Reachability != network.ReachabilityPublic {
 				states[peerID] = log.Bold("Hole punching: ") + log.Green("Succeeded!")
 			} else {
 				states[peerID] = log.Bold("Connection: ") + log.Green("Direct")

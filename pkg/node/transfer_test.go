@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/libp2p/go-libp2p/core/peer"
+
 	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -83,7 +85,7 @@ func TestTransferProtocol_onTransfer_senderNotAuthenticatedAtReceiver(t *testing
 	// Simulate that the receiver is authenticated (from the perspective of the sender)
 	key, err := crypt.DeriveKey([]byte{}, []byte{})
 	require.NoError(t, err)
-	node1.PakeProtocol.sessionKeys.Store(node2.ID(), key)
+	node1.PakeProtocol.states[node2.ID()] = &PakeState{Step: PakeStepStart, Key: key}
 
 	err = net.LinkAll()
 	require.NoError(t, err)
@@ -104,8 +106,8 @@ func TestTransferProtocol_onTransfer_peersDifferentKeys(t *testing.T) {
 	require.NoError(t, err)
 	key2, err := crypt.DeriveKey([]byte{2}, []byte{2})
 	require.NoError(t, err)
-	node1.PakeProtocol.sessionKeys.Store(node2.ID(), key1)
-	node2.PakeProtocol.sessionKeys.Store(node1.ID(), key2)
+	node1.PakeProtocol.states[node2.ID()] = &PakeState{Step: PakeStepStart, Key: key1}
+	node1.PakeProtocol.states[node1.ID()] = &PakeState{Step: PakeStepStart, Key: key2}
 
 	err = net.LinkAll()
 	require.NoError(t, err)
@@ -144,7 +146,7 @@ func TestTransferProtocol_onTransfer_provokeErrCases(t *testing.T) {
 	assert.Contains(t, err.Error(), "session key not found")
 
 	// Session key has wrong format
-	node1.sessionKeys.Store(node2.ID(), []byte{1, 2, 3})
+	node1.PakeProtocol.states[node2.ID()] = &PakeState{Step: PakeStepStart, Key: []byte{1, 2, 3}}
 	err = node1.Transfer(ctx, node2.ID(), relTestDir("transfer_file/file"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid key size 3")
@@ -155,7 +157,10 @@ func setupNode(t *testing.T, net mocknet.Mocknet) (*Node, chan struct{}) {
 	p, err := net.GenPeer()
 	require.NoError(t, err)
 	n := &Node{Service: service.New("node"), Host: p}
-	n.PakeProtocol = PakeProtocol{}
+	n.PakeProtocol = PakeProtocol{
+		node:   n,
+		states: map[peer.ID]*PakeState{},
+	}
 	n.TransferProtocol = NewTransferProtocol(n)
 	done := make(chan struct{})
 	n.RegisterTransferHandler(&TestTransferHandler{handler: tmpWriter(t), done: func() { close(done) }})
@@ -167,8 +172,8 @@ func setupNode(t *testing.T, net mocknet.Mocknet) (*Node, chan struct{}) {
 func authNodes(t *testing.T, node1 *Node, node2 *Node) {
 	key, err := crypt.DeriveKey([]byte{}, []byte{})
 	require.NoError(t, err)
-	node1.PakeProtocol.sessionKeys.Store(node2.ID(), key)
-	node2.PakeProtocol.sessionKeys.Store(node1.ID(), key)
+	node1.PakeProtocol.addSessionKey(node2.ID(), key)
+	node2.PakeProtocol.addSessionKey(node1.ID(), key)
 }
 
 func Test_relPath(t *testing.T) {

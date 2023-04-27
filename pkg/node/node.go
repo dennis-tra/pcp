@@ -39,6 +39,9 @@ import (
 // generated peers won't have proper keys
 var skipMessageAuth = false
 
+// State represents the state the node is in. Most importantly, if the
+// node switches to the Connected state all advertisement/discovery
+// tasks stop, and it doesn't accept new peers to connect.
 type State string
 
 const (
@@ -53,7 +56,8 @@ const (
 	Connected = "connected"
 )
 
-// Node encapsulates the logic for sending and receiving messages.
+// Node encapsulates the logic that's common for the receiving
+// and sending side of the file transfer.
 type Node struct {
 	service.Service
 	host.Host
@@ -66,10 +70,18 @@ type Node struct {
 	TransferProtocol
 	PakeProtocol
 
-	// tracer for hole punching updates
+	// keeps track of hole punching states of particular peers.
+	// The hpAllowList is populated by the receiving side of
+	// the file transfer after it has discovered the peer via
+	// mDNS or in the DHT. If a peer is in the hpAllowList the
+	// hpStates map will track the hole punching state for
+	// that particular peer. The sending side doesn't work
+	// with that map and instead tracks all **incoming** hole
+	// punches. I've observed that the sending side does try
+	// to hole punch peers it finds in the DHT (while advertising).
+	// These are hole punches we're not interested in.
 	hpStatesLk  sync.RWMutex
 	hpStates    map[peer.ID]*HolePunchState
-	hpFailed    map[peer.ID]chan struct{}
 	hpAllowList sync.Map
 
 	// The public key of this node for easy access
@@ -104,7 +116,6 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 	node := &Node{
 		Service:  service.New("node"),
 		hpStates: map[peer.ID]*HolePunchState{},
-		hpFailed: map[peer.ID]chan struct{}{},
 		state:    Initialising,
 		stateLk:  &sync.RWMutex{},
 		Words:    wrds,
@@ -115,17 +126,19 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 	node.TransferProtocol = NewTransferProtocol(node)
 	node.PakeProtocol, err = NewPakeProtocol(node, wrds)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new pake protocol: %w", err)
 	}
 
+	// unnecessary if I knew an API to get the public key from an
+	// initialized libp2p host.
 	key, pub, err := crypto.GenerateEd25519Key(rand.Reader)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gen ed25519 key: %w", err)
 	}
 
 	node.pubKey, err = pub.Raw()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get raw public key: %w", err)
 	}
 
 	// Configure the resource manager to not limit anything
@@ -152,7 +165,7 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 
 	node.Host, err = libp2p.New(opts...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new libp2p host: %w", err)
 	}
 
 	log.Debugln("Initialized libp2p host:", node.ID().String())
@@ -180,14 +193,14 @@ func (n *Node) GetState() State {
 func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
 	defer func() {
 		if err := s.CloseWrite(); err != nil {
-			log.Warningln("Error closing writer part of stream after sending", err)
+			log.Warningln("Error closing writer part of stream after sending:", err)
 		}
 	}()
 
 	// Get own public key.
 	pub, err := crypto.MarshalPublicKey(n.Host.Peerstore().PubKey(n.Host.ID()))
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal public key: %w", err)
 	}
 
 	hdr := &p2p.Header{
@@ -202,14 +215,14 @@ func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
 	// Transform msg to binary to calculate the signature.
 	data, err := proto.Marshal(msg)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal proto message %T: %w", msg, err)
 	}
 
 	// Sign the data and attach the signature.
 	key := n.Host.Peerstore().PrivKey(n.Host.ID())
 	signature, err := key.Sign(data)
 	if err != nil {
-		return err
+		return fmt.Errorf("sign message %T: %w", msg, err)
 	}
 	hdr.Signature = signature
 	msg.SetHeader(hdr) // Maybe unnecessary
@@ -217,7 +230,7 @@ func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
 	// Transform msg + signature to binary.
 	data, err = proto.Marshal(msg)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal signed proto message %T: %w", msg, err)
 	}
 
 	// Encrypt the data with the PAKE session key if it is found
@@ -225,14 +238,14 @@ func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
 	if found {
 		data, err = crypt.Encrypt(sKey, data)
 		if err != nil {
-			return err
+			return fmt.Errorf("encrypt message %T: %w", msg, err)
 		}
 	}
 
 	// Transmit the data.
 	_, err = s.Write(data)
 	if err != nil {
-		return err
+		return fmt.Errorf("write message: %w", err)
 	}
 
 	return nil
@@ -265,18 +278,18 @@ func (n *Node) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
 	// restore peer id binary format from base58 encoded node id msg
 	peerID, err := peer.Decode(msg.GetHeader().NodeId)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("decode msg peer id: %w", err)
 	}
 
 	key, err := crypto.UnmarshalPublicKey(msg.GetHeader().NodePubKey)
 	if err != nil {
-		return false, fmt.Errorf("failed to extract key from message key msg")
+		return false, fmt.Errorf("extract key from message key msg: %w", err)
 	}
 
 	// extract node id from the provided public key
 	idFromKey, err := peer.IDFromPublicKey(key)
 	if err != nil {
-		return false, fmt.Errorf("failed to extract peer id from public key")
+		return false, fmt.Errorf("extract peer id from public key: %w", err)
 	}
 
 	// verify that message author node id matches the provided node public key
@@ -291,7 +304,11 @@ func (n *Node) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
 // it into the protobuf object. It also verifies the authenticity of the message.
 // Read closes the stream for reading but leaves it open for writing.
 func (n *Node) Read(s network.Stream, buf p2p.HeaderMessage) error {
-	defer s.CloseRead()
+	defer func() {
+		if err := s.CloseRead(); err != nil {
+			log.Warningln("Error closing reader part of stream after reading:", err)
+		}
+	}()
 
 	data, err := io.ReadAll(s)
 	if err != nil {
@@ -312,16 +329,14 @@ func (n *Node) Read(s network.Stream, buf p2p.HeaderMessage) error {
 	}
 
 	if err = proto.Unmarshal(data, buf); err != nil {
-		return err
+		return fmt.Errorf("unmarshal received data: %w", err)
 	}
 	log.Debugf("type %T with request ID %s\n", buf, buf.GetHeader().RequestId)
 
 	valid, err := n.authenticateMessage(buf)
 	if err != nil {
-		return err
-	}
-
-	if !valid {
+		return fmt.Errorf("authenticate msg: %w", err)
+	} else if !valid {
 		return fmt.Errorf("failed to authenticate message")
 	}
 
@@ -329,7 +344,7 @@ func (n *Node) Read(s network.Stream, buf p2p.HeaderMessage) error {
 }
 
 // WriteBytes writes the given bytes to the destination writer and
-// prefixes it with a uvarint indicating the length of the data.
+// prefixes it with an uvarint indicating the length of the data.
 func (n *Node) WriteBytes(w io.Writer, data []byte) (int, error) {
 	size := varint.ToUvarint(uint64(len(data)))
 	return w.Write(append(size, data...))
@@ -346,12 +361,15 @@ func (n *Node) ReadBytes(r io.Reader) ([]byte, error) {
 
 	buf := make([]byte, l)
 	_, err = br.Read(buf)
+
 	return buf, err
 }
 
 // ResetOnShutdown resets the given stream if the node receives a shutdown
 // signal to indicate to our peer that we're not interested in the conversation
-// anymore.
+// anymore. Put the following at the top of a new stream handler:
+//
+//	defer n.ResetOnShutdown(stream)()
 func (n *Node) ResetOnShutdown(s network.Stream) context.CancelFunc {
 	cancel := make(chan struct{})
 	go func() {
@@ -366,10 +384,10 @@ func (n *Node) ResetOnShutdown(s network.Stream) context.CancelFunc {
 
 // WaitForEOF waits for an EOF signal on the stream. This indicates that the peer
 // has received all data and won't read from this stream anymore. Alternatively
-// there is a 10 second timeout.
+// there is a 10-second timeout.
 func (n *Node) WaitForEOF(s network.Stream) error {
 	log.Debugln("Waiting for stream reset from peer...")
-	timeout := time.After(3 * time.Minute)
+	timeout := time.After(5 * time.Minute)
 	done := make(chan error)
 	go func() {
 		buf := make([]byte, 1)
@@ -400,6 +418,8 @@ func (n *Node) WaitForDirectConn(peerID peer.ID) error {
 		return nil
 	}
 
+	// directConnChan receives a signal if a new connection was opened
+	// for the given peerID that is a non-relayed address.
 	directConnChan := make(chan struct{})
 	bundle := &network.NotifyBundle{
 		ConnectedF: func(n network.Network, conn network.Conn) {
@@ -439,7 +459,7 @@ func (n *Node) WaitForDirectConn(peerID peer.ID) error {
 	}
 
 	select {
-	case <-n.HolePunchFailed(peerID):
+	case <-n.RegisterHolePunchFailed(peerID):
 		// hole punching failed :/
 		state, found := n.HolePunchStates()[peerID]
 		if found {
@@ -459,6 +479,7 @@ func (n *Node) WaitForDirectConn(peerID peer.ID) error {
 	}
 }
 
+// DebugLogAuthenticatedPeer prints information about the connection and remote peer to the console.
 func (n *Node) DebugLogAuthenticatedPeer(peerID peer.ID) {
 	log.Debugln("Authenticated peer:", peerID)
 
@@ -476,13 +497,24 @@ func (n *Node) DebugLogAuthenticatedPeer(peerID peer.ID) {
 			log.Debugf("  %s\n", p)
 		}
 	}
+	av, err := n.Network().Peerstore().Get(peerID, "AgentVersion")
+	if err != nil {
+		return
+	}
+
+	agentVersion, ok := av.(string)
+	if ok {
+		log.Debugln("Agent version:", agentVersion)
+	}
 }
 
-func IsRelayAddress(a ma.Multiaddr) bool {
-	_, err := a.ValueForProtocol(ma.P_CIRCUIT)
+// IsRelayAddress returns true if the given multiaddress contains the /p2p-circuit protocol.
+func IsRelayAddress(maddr ma.Multiaddr) bool {
+	_, err := maddr.ValueForProtocol(ma.P_CIRCUIT)
 	return err == nil
 }
 
+// HasDirectConnection returns true if we have at least one non-relay connection to the given peer.
 func (n *Node) HasDirectConnection(p peer.ID) bool {
 	for _, conn := range n.Network().ConnsToPeer(p) {
 		if !IsRelayAddress(conn.RemoteMultiaddr()) {
@@ -492,10 +524,26 @@ func (n *Node) HasDirectConnection(p peer.ID) bool {
 	return false
 }
 
+// HasHolePunchFailed returns true if the hole punch state is Failed. In case we don't
+// track the given peer it returns false.
 func (n *Node) HasHolePunchFailed(p peer.ID) bool {
 	state, found := n.HolePunchStates()[p]
 	if !found {
 		return false
 	}
 	return state.Stage == HolePunchStageFailed
+}
+
+// CloseRelayedConnections loops through all known connections to the given peer and
+// closes all that are relayed.
+func (n *Node) CloseRelayedConnections(p peer.ID) {
+	// Close relayed connections
+	for _, conn := range n.Network().ConnsToPeer(p) {
+		if IsRelayAddress(conn.RemoteMultiaddr()) {
+			log.Debugln("Closing relay connection:", conn.RemoteMultiaddr())
+			if err := conn.Close(); err != nil {
+				log.Warningln("error closing relay connection:", err)
+			}
+		}
+	}
 }

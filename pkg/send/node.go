@@ -91,7 +91,7 @@ func (n *Node) Shutdown() {
 			log.Infoln("An error occurred. Run peercp again with the --verbose flag to get more information")
 		}
 
-		// TODO: properly closing the host can take up to 1 minute
+		//TODO: properly closing the host can take up to 1 minute
 		//if err := n.Host.Close(); err != nil {
 		//	log.Warningln("error stopping libp2p node:", err)
 		//}
@@ -241,10 +241,14 @@ func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
 	}
 	n.statusLogger.Shutdown()
 
+	// make sure we don't open the new transfer-stream on the relayed connection.
+	// libp2p claims to not do that, but I have observed strange connection resets.
+	n.CloseRelayedConnections(peerID)
+
 	// Start transferring file
 	err = n.Transfer(peerID)
 	if err != nil {
-		log.Warningln("Error transferring file:", err)
+		log.Errorln("Error transferring file:", err)
 	}
 
 	n.Shutdown()
@@ -270,10 +274,11 @@ func (n *Node) Transfer(peerID peer.ID) error {
 	log.Infoln("Accepted!")
 
 	if err = n.Node.Transfer(n.ServiceContext(), peerID, n.filepath); err != nil {
-		return fmt.Errorf("could not transfer file to peer: %w", err)
+		return fmt.Errorf("transfer file to peer: %w", err)
 	}
 
 	log.Infoln("Successfully sent file/directory!")
+
 	return nil
 }
 

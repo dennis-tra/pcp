@@ -16,7 +16,7 @@ import (
 )
 
 // pattern: /protocol-name/request-or-response-message/version
-const ProtocolPake = "/pcp/pake/0.2.0"
+const ProtocolPake = "/pcp/pake/0.3.0"
 
 type PakeProtocol struct {
 	node *Node
@@ -40,6 +40,9 @@ type PakeProtocol struct {
 	keh   KeyExchangeHandler
 }
 
+// NewPakeProtocol initializes a new PakeProtocol struct by deriving the weak session key
+// from the given words. This is the basis for the strong session key that's derived from
+// the PAKE protocol.
 func NewPakeProtocol(node *Node, words []string) (PakeProtocol, error) {
 	pw := []byte(strings.Join(words, ""))
 	key, err := crypt.DeriveKey(pw, node.pubKey)
@@ -68,7 +71,7 @@ func (p *PakeProtocol) setPakeStep(peerID peer.ID, step PakeStep) {
 	}
 }
 
-// setPakeStep sets the authentication state to the given step.
+// setPakeError sets the authentication state to PakeStepError with the given err value.
 // If the peer isn't tracked yet, its state is created.
 func (p *PakeProtocol) setPakeError(peerID peer.ID, err error) {
 	p.statesLk.Lock()
@@ -124,7 +127,7 @@ func (p *PakeProtocol) IsAuthenticated(peerID peer.ID) bool {
 	return ok && as.Step == PakeStepPeerAuthenticated
 }
 
-// GetSessionKey returns the session key that was obtain via
+// GetSessionKey returns the session key that was obtained via
 // the password authenticated key exchange (PAKE) protocol.
 func (p *PakeProtocol) GetSessionKey(peerID peer.ID) ([]byte, bool) {
 	p.statesLk.RLock()
@@ -146,6 +149,7 @@ func (p *PakeProtocol) RegisterKeyExchangeHandler(keh KeyExchangeHandler) {
 	log.Debugln("Registering key exchange handler")
 	p.kehLk.Lock()
 	defer p.kehLk.Unlock()
+
 	p.keh = keh
 	p.node.SetStreamHandler(ProtocolPake, p.onKeyExchange)
 }
@@ -154,6 +158,7 @@ func (p *PakeProtocol) UnregisterKeyExchangeHandler() {
 	log.Debugln("Unregistering key exchange handler")
 	p.kehLk.Lock()
 	defer p.kehLk.Unlock()
+
 	p.node.RemoveStreamHandler(ProtocolPake)
 	p.keh = nil
 }
@@ -431,60 +436,4 @@ func (p *PakeProtocol) ReceiveVerifyProof(s network.Stream, key []byte) error {
 	}
 
 	return nil
-}
-
-// PakeState holds information for a given peer that we are performing
-// a password authenticated key exchange with. The struct stores the
-// final derived strong session key as well as a potential error that has
-// occurred during the exchange. Further, it keeps track of at which
-// step of the key exchange we are with a given peer.
-type PakeState struct {
-	Step PakeStep
-	Key  []byte
-	Err  error
-}
-
-// PakeStep is an enum type that represents different steps in the
-// password authenticated key exchange protocol.
-type PakeStep uint8
-
-const (
-	PakeStepUnknown PakeStep = iota
-	PakeStepStart
-	PakeStepWaitingForKeyInformation
-	PakeStepCalculatingKeyInformation
-	PakeStepSendingKeyInformation
-	PakeStepWaitingForFinalKeyInformation
-	PakeStepProvingAuthenticityToPeer
-	PakeStepVerifyingProofFromPeer
-	PakeStepWaitingForFinalConfirmation
-	PakeStepPeerAuthenticated
-	PakeStepError
-)
-
-func (s PakeStep) String() string {
-	switch s {
-	case PakeStepStart:
-		return "PakeStepStart"
-	case PakeStepWaitingForKeyInformation:
-		return "PakeStepWaitingForKeyInformation"
-	case PakeStepCalculatingKeyInformation:
-		return "PakeStepCalculatingKeyInformation"
-	case PakeStepSendingKeyInformation:
-		return "PakeStepSendingKeyInformation"
-	case PakeStepWaitingForFinalKeyInformation:
-		return "PakeStepWaitingForFinalKeyInformation"
-	case PakeStepProvingAuthenticityToPeer:
-		return "PakeStepProvingAuthenticityToPeer"
-	case PakeStepVerifyingProofFromPeer:
-		return "PakeStepVerifyingProofFromPeer"
-	case PakeStepWaitingForFinalConfirmation:
-		return "PakeStepWaitingForFinalConfirmation"
-	case PakeStepPeerAuthenticated:
-		return "PakeStepPeerAuthenticated"
-	case PakeStepError:
-		return "PakeStepError"
-	default:
-		return "PakeStepUnknown"
-	}
 }
