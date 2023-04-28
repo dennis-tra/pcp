@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/network"
 
@@ -83,25 +84,34 @@ func InitNode(c *cli.Context, words []string) (*Node, error) {
 	// stop the process if all discoverers error out
 	go node.watchDiscoverErrors()
 
+	// listen for shutdown event
+	go node.listenSigShutdown()
+
 	return node, nil
 }
 
-func (n *Node) Shutdown() {
-	go func() {
-		<-n.SigShutdown()
-		log.Infoln("Starting receive node shutdown procedurre")
-		n.stopDiscovering()
-		n.UnregisterTransferHandler()
-		n.statusLogger.Shutdown()
+func (n *Node) listenSigShutdown() {
+	<-n.SigShutdown()
+	log.Debugln("Starting receive node shutdown procedurre")
+	n.stopDiscovering()
+	n.UnregisterTransferHandler()
+	n.statusLogger.Shutdown()
 
+	hostClosedChan := make(chan struct{})
+	go func() {
 		// TODO: properly closing the host can take up to 1 minute
 		if err := n.Host.Close(); err != nil {
 			log.Warningln("error stopping libp2p node:", err)
 		}
-
-		n.ServiceStopped()
+		close(hostClosedChan)
 	}()
-	n.Service.Shutdown()
+
+	select {
+	case <-hostClosedChan:
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	n.ServiceStopped()
 }
 
 func (n *Node) StartDiscoveringMDNS() {

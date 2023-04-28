@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -76,41 +77,51 @@ func InitNode(c *cli.Context, filepath string, words []string) (*Node, error) {
 	// stop the process if both advertisers error out
 	go node.watchAdvertiseErrors()
 
+	// listen for shutdown event
+	go node.listenSigShutdown()
+
 	// register handler to respond to PAKE handshakes
 	node.RegisterKeyExchangeHandler(node)
 
 	return node, nil
 }
 
-func (n *Node) Shutdown() {
+// listenSigShutdown listens for the service shutdown signal.
+// Putting all the below into a method that overwrites Shutdown would block until ServiceStopped is called.
+// This call signals e.g., the statusLogger that the node is shutting down,
+// and we're cancelling the process.
+// That's why we put the other shutdown stuff in the go routine at the top. (listenSigShutdown)
+// If we called n.statusLogger.Shutdown() without shutting down this service
+// it wouldn't know that we cancelled the process and would just stop as normal.
+// What we want is, that it shows "cancelled" in the log output. That's why
+// we need the signal to be present when n.statusLogger.Shutdown() is called.
+func (n *Node) listenSigShutdown() {
+	<-n.SigShutdown()
+
+	n.stopAdvertising()
+	n.UnregisterKeyExchangeHandler()
+	n.statusLogger.Shutdown()
+
+	if n.mdnsAdvertiser.State().Stage == mdns.StageError && n.dhtAdvertiser.State().Stage == dht.StageError {
+		log.Infoln("An error occurred. Run peercp again with the --verbose flag to get more information")
+	}
+
+	hostClosedChan := make(chan struct{})
 	go func() {
-		<-n.SigShutdown()
-
-		n.stopAdvertising()
-		n.UnregisterKeyExchangeHandler()
-		n.statusLogger.Shutdown()
-
-		if n.mdnsAdvertiser.State().Stage == mdns.StageError && n.dhtAdvertiser.State().Stage == dht.StageError {
-			log.Infoln("An error occurred. Run peercp again with the --verbose flag to get more information")
-		}
-
 		// TODO: properly closing the host can take up to 1 minute
 		if err := n.Host.Close(); err != nil {
 			log.Warningln("error stopping libp2p node:", err)
 		}
-
-		n.ServiceStopped()
+		close(hostClosedChan)
 	}()
 
-	// Blocks until ServiceStopped is called.
-	// This call signals e.g., the statusLogger that the node is shutting down,
-	// and we're cancelling the process.
-	// That's why we put the other shutdown stuff in the go routine at the top.
-	// If we called n.statusLogger.Shutdown() without shutting down this service
-	// it wouldn't know that we cancelled the process and would just stop as normal.
-	// What we want is, that it shows "cancelled" in the log output. That's why
-	// we need the signal to be present when n.statusLogger.Shutdown() is called.
-	n.Service.Shutdown()
+	select {
+	case <-hostClosedChan:
+	case <-time.After(500 * time.Millisecond):
+		log.Debugln("Ran into timeout after closing host.")
+	}
+
+	n.ServiceStopped()
 }
 
 func (n *Node) StartAdvertisingMDNS() {

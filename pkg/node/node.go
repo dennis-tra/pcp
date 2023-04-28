@@ -440,6 +440,7 @@ func (n *Node) WaitForDirectConn(peerID peer.ID) error {
 		return nil
 	}
 
+	log.Debugln("Waiting for direct connection...")
 	select {
 	case <-n.RegisterHolePunchFailed(peerID):
 		// hole punching failed :/

@@ -335,11 +335,20 @@ func (l *logStatus) connectionStateStr() map[string]string {
 			peerID = peerID[:16]
 		}
 
+		if pakeState, found := l.pakeStates[p]; found {
+			if pakeState.Step == node.PakeStepError {
+				continue
+			}
+		}
+
 		switch connType {
 		case connTypeRelayed:
 			hpStateStr := ""
-			hpState, ok := l.hpStates[p]
-			if !ok {
+			hpState, hpStateFound := l.hpStates[p]
+			pakeState, pakeStateFound := l.pakeStates[p]
+			if pakeStateFound && pakeState.Step == node.PakeStepError {
+				hpStateStr = log.Gray("-")
+			} else if !hpStateFound {
 				hpStateStr = log.Gray(l.spinnerChar)
 			} else {
 				switch hpState.Stage {
