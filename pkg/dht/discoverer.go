@@ -53,7 +53,7 @@ func (d *Discoverer) setError(err error) {
 func (d *Discoverer) setState(fn func(state *DiscoverState)) {
 	d.stateLk.Lock()
 	fn(d.state)
-	log.Debugln("DHT DiscoverState:", d.state)
+	log.Debugln("DHT - DiscoverState:", d.state)
 	d.stateLk.Unlock()
 }
 
@@ -118,7 +118,7 @@ func (d *Discoverer) Discover(chanID int) {
 		}
 		cancel()
 
-		log.Debugln("DHT - Discovering", did, " done.")
+		log.Debugln("DHT - Discovering", did, "done")
 
 		select {
 		case <-d.SigShutdown():

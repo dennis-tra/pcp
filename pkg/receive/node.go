@@ -3,6 +3,7 @@ package receive
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -88,6 +89,7 @@ func InitNode(c *cli.Context, words []string) (*Node, error) {
 func (n *Node) Shutdown() {
 	go func() {
 		<-n.SigShutdown()
+		log.Infoln("Starting receive node shutdown procedurre")
 		n.stopDiscovering()
 		n.UnregisterTransferHandler()
 		n.statusLogger.Shutdown()
@@ -115,33 +117,10 @@ func (n *Node) StartDiscoveringDHT() {
 }
 
 func (n *Node) stopDiscovering() {
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		n.mdnsDiscoverer.Shutdown()
-		wg.Done()
-	}()
-
-	wg.Add(1)
-	go func() {
-		n.mdnsDiscovererOffset.Shutdown()
-		wg.Done()
-	}()
-
-	wg.Add(1)
-	go func() {
-		n.dhtDiscoverer.Shutdown()
-		wg.Done()
-	}()
-
-	wg.Add(1)
-	go func() {
-		n.dhtDiscovererOffset.Shutdown()
-		wg.Done()
-	}()
-
-	wg.Wait()
+	n.mdnsDiscoverer.Shutdown()
+	n.mdnsDiscovererOffset.Shutdown()
+	n.dhtDiscoverer.Shutdown()
+	n.dhtDiscovererOffset.Shutdown()
 }
 
 func (n *Node) watchDiscoverErrors() {
@@ -232,7 +211,11 @@ func (n *Node) HandlePeerFound(pi peer.AddrInfo) {
 	// Negotiate PAKE
 	if _, err := n.StartKeyExchange(n.ServiceContext(), pi.ID); err != nil {
 		log.Errorln("Peer didn't pass authentication:", err)
-		n.peerStates.Store(pi.ID, FailedAuthentication)
+		if err == io.EOF {
+			n.peerStates.Store(pi.ID, FailedConnecting)
+		} else {
+			n.peerStates.Store(pi.ID, FailedAuthentication)
+		}
 		return
 	}
 	n.peerStates.Store(pi.ID, Authenticated)
@@ -326,7 +309,6 @@ func (n *Node) HandlePushRequest(pr *p2p.PushRequest) (bool, error) {
 
 		// Reject the file transfer
 		if input == "n" {
-			go n.Shutdown()
 			return false, nil
 		}
 
@@ -359,7 +341,7 @@ func (n *Node) TransferFinishHandler(size int64) chan int64 {
 		if received == size {
 			log.Infoln("Successfully received file/directory!")
 		} else {
-			log.Infof("WARNING: Only received %d of %d bytes!\n", received, size)
+			log.Infof(log.Yellow("WARNING: Only received %d of %d bytes!\n"), received, size)
 		}
 
 		n.Shutdown()

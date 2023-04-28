@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -92,31 +93,33 @@ func (p *PushProtocol) onPushRequest(s network.Stream) {
 
 	req := &p2p.PushRequest{}
 	if err := p.node.Read(s, req); err != nil {
-		log.Infoln(err)
+		log.Warningln(err)
 		return
 	}
 	log.Debugln("Received push request", req.Name, req.Size)
 
 	p.lk.RLock()
 	defer p.lk.RUnlock()
+
+	// Asking user if they want to accept
 	accept, err := p.prh.HandlePushRequest(req)
 	if err != nil {
-		log.Infoln(err)
+		log.Warningln(err)
 		accept = false
 		// Fall through and tell peer we won't handle the request
 	}
 
-	if err := p.node.Send(s, p2p.NewPushResponse(accept)); err != nil {
-		log.Infoln(err)
+	if !accept {
+		defer p.node.Shutdown()
+	}
+
+	if err = p.node.Send(s, p2p.NewPushResponse(accept)); err != nil {
+		log.Warningln(fmt.Errorf("send push response: %w", err))
 		return
 	}
 
-	if err = s.CloseWrite(); err != nil {
-		log.Warningln("Error closing writer side of stream:", err)
-	}
-
 	if err = p.node.WaitForEOF(s); err != nil {
-		log.Infoln(err)
+		log.Warningln(fmt.Errorf("wait EOF: %w", err))
 		return
 	}
 }
@@ -124,18 +127,19 @@ func (p *PushProtocol) onPushRequest(s network.Stream) {
 func (p *PushProtocol) SendPushRequest(ctx context.Context, peerID peer.ID, filename string, size int64, isDir bool) (bool, error) {
 	s, err := p.node.NewStream(ctx, peerID, ProtocolPushRequest)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("new stream: %w", err)
 	}
 	defer s.Close()
+	defer p.node.ResetOnShutdown(s)()
 
 	log.Debugln("Sending push request", filename, size)
 	if err = p.node.Send(s, p2p.NewPushRequest(filename, size, isDir)); err != nil {
-		return false, err
+		return false, fmt.Errorf("send: %w", err)
 	}
 
 	resp := &p2p.PushResponse{}
 	if err = p.node.Read(s, resp); err != nil {
-		return false, err
+		return false, fmt.Errorf("read: %w", err)
 	}
 
 	return resp.Accept, nil

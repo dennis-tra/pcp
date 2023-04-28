@@ -2,6 +2,7 @@ package send
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -18,6 +19,8 @@ import (
 	"github.com/dennis-tra/pcp/pkg/mdns"
 	pcpnode "github.com/dennis-tra/pcp/pkg/node"
 )
+
+var ErrRejectedFileTransfer = fmt.Errorf("rejected file transfer")
 
 // Node encapsulates the logic of advertising and transmitting
 // a particular file to a peer.
@@ -121,21 +124,8 @@ func (n *Node) StartAdvertisingDHT() {
 }
 
 func (n *Node) stopAdvertising() {
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		n.mdnsAdvertiser.Shutdown()
-		wg.Done()
-	}()
-
-	wg.Add(1)
-	go func() {
-		n.dhtAdvertiser.Shutdown()
-		wg.Done()
-	}()
-
-	wg.Wait()
+	n.mdnsAdvertiser.Shutdown()
+	n.dhtAdvertiser.Shutdown()
 }
 
 func (n *Node) watchAdvertiseErrors() {
@@ -247,7 +237,7 @@ func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
 
 	// Start transferring file
 	err = n.Transfer(peerID)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrRejectedFileTransfer) {
 		log.Errorln("Error transferring file:", err)
 	}
 
@@ -264,14 +254,14 @@ func (n *Node) Transfer(peerID peer.ID) error {
 	log.Infof("Asking for confirmation... ")
 	accepted, err := n.SendPushRequest(n.ServiceContext(), peerID, filename, size, false)
 	if err != nil {
-		return err
+		return fmt.Errorf("send push request: %w", err)
 	}
 
 	if !accepted {
-		log.Infoln("Rejected!")
-		return fmt.Errorf("rejected file transfer")
+		log.Infoln(log.Red("Rejected!"))
+		return ErrRejectedFileTransfer
 	}
-	log.Infoln("Accepted!")
+	log.Infoln(log.Green("Accepted!"))
 
 	if err = n.Node.Transfer(n.ServiceContext(), peerID, n.filepath); err != nil {
 		return fmt.Errorf("transfer file to peer: %w", err)

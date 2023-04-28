@@ -75,3 +75,30 @@ func TestPushProtocol_RegisterPushRequestHandler_unauthenticated(t *testing.T) {
 	assert.Contains(t, err.Error(), "stream reset")
 	assert.False(t, accept)
 }
+
+func TestPushProtocol_RegisterPushRequestHandler_rejected(t *testing.T) {
+	ctx := context.Background()
+	net := mocknet.New()
+
+	node1, _ := setupNode(t, net)
+	node2, _ := setupNode(t, net)
+	authNodes(t, node1, node2)
+
+	err := net.LinkAll()
+	require.NoError(t, err)
+
+	tprh := &TestPushRequestHandler{
+		handler: func(pr *p2p.PushRequest) (bool, error) {
+			return false, nil
+		},
+	}
+
+	node2.RegisterPushRequestHandler(tprh)
+
+	accepted, err := node1.SendPushRequest(ctx, node2.ID(), "filename", 1000, true)
+	require.NoError(t, err)
+
+	node2.UnregisterPushRequestHandler()
+
+	assert.False(t, accepted)
+}

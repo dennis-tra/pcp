@@ -168,12 +168,6 @@ func (n *Node) GetState() State {
 // Send prepares the message msg to be sent over the network stream s.
 // Send closes the stream for writing but leaves it open for reading.
 func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
-	defer func() {
-		if err := s.CloseWrite(); err != nil {
-			log.Warningln("Error closing writer part of stream after sending:", err)
-		}
-	}()
-
 	// Get own public key.
 	pub, err := crypto.MarshalPublicKey(n.Host.Peerstore().PubKey(n.Host.ID()))
 	if err != nil {
@@ -220,7 +214,8 @@ func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
 	}
 
 	// Transmit the data.
-	_, err = s.Write(data)
+	size := varint.ToUvarint(uint64(len(data)))
+	_, err = s.Write(append(size, data...))
 	if err != nil {
 		return fmt.Errorf("write message: %w", err)
 	}
@@ -275,13 +270,7 @@ func (n *Node) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
 // it into the protobuf object. It also verifies the authenticity of the message.
 // Read closes the stream for reading but leaves it open for writing.
 func (n *Node) Read(s network.Stream, buf p2p.HeaderMessage) error {
-	defer func() {
-		if err := s.CloseRead(); err != nil {
-			log.Warningln("Error closing reader part of stream after reading:", err)
-		}
-	}()
-
-	data, err := io.ReadAll(s)
+	data, err := n.ReadBytes(s)
 	if err != nil {
 		if err2 := s.Reset(); err2 != nil {
 			err = fmt.Errorf("%s: %w", err2.Error(), err)
@@ -392,6 +381,8 @@ func (n *Node) WaitForEOF(s network.Stream) error {
 		close(done)
 	}()
 	select {
+	case <-n.ServiceContext().Done():
+		return n.ServiceContext().Err()
 	case <-timeout:
 		return fmt.Errorf("timeout")
 	case err := <-done:
