@@ -40,6 +40,7 @@ func (th *TransferHandler) HandleFile(hdr *tar.Header, src io.Reader) {
 		if err != nil {
 			log.Warningln("error creating directory:", joined, err)
 		}
+		return
 	}
 	newFile, err := os.OpenFile(joined, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, finfo.Mode().Perm())
 	if err != nil {

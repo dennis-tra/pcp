@@ -187,7 +187,7 @@ func (l *logStatus) dhtStateStr() string {
 		return l.spinnerChar + "(bootstrapping)"
 	case dht.StageAnalyzingNetwork:
 		if l.relayFinderActive {
-			return l.spinnerChar + "(finding relays)"
+			return l.spinnerChar + "(finding signaling peers)"
 		} else {
 			return l.spinnerChar + "(analyzing network)"
 		}
