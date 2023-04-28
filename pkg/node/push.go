@@ -109,18 +109,20 @@ func (p *PushProtocol) onPushRequest(s network.Stream) {
 		// Fall through and tell peer we won't handle the request
 	}
 
-	if !accept {
-		defer p.node.Shutdown()
-	}
-
 	if err = p.node.Send(s, p2p.NewPushResponse(accept)); err != nil {
 		log.Warningln(fmt.Errorf("send push response: %w", err))
+		p.node.Shutdown()
 		return
 	}
 
 	if err = p.node.WaitForEOF(s); err != nil {
 		log.Warningln(fmt.Errorf("wait EOF: %w", err))
+		p.node.Shutdown()
 		return
+	}
+
+	if !accept {
+		p.node.Shutdown()
 	}
 }
 
