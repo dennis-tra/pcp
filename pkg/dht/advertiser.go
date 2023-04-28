@@ -38,6 +38,7 @@ func NewAdvertiser(h host.Host, dht wrap.IpfsDHT) *Advertiser {
 			NATTypeUDP:   network.NATDeviceTypeUnknown,
 		},
 	}
+
 	// populate the address slices
 	a.state.populateAddrs(h.Addrs())
 
