@@ -16,10 +16,8 @@ import (
 	"github.com/dennis-tra/pcp/internal/wrap"
 )
 
-const (
-	// Timeout for pushing our data to the DHT.
-	provideTimeout = 30 * time.Second
-)
+// Timeout for pushing our data to the DHT.
+var provideTimeout = 30 * time.Second
 
 // Advertiser is responsible for writing and renewing the DHT entry.
 type Advertiser struct {
@@ -56,7 +54,7 @@ func (a *Advertiser) setError(err error) {
 func (a *Advertiser) setState(fn func(state *AdvertiseState)) {
 	a.stateLk.Lock()
 	fn(a.state)
-	log.Debugln("DHT AdvertiseState:", a.state)
+	log.Debugln("DHT - AdvertiseState", a.state)
 	a.stateLk.Unlock()
 }
 

@@ -300,6 +300,11 @@ func (l *logStatus) pakeStatesStr() ([]string, map[string]string) {
 			if l.ctxCancelled {
 				peerStates[peerID] = log.Gray("cancelled")
 			}
+		case node.PakeStepExchangingSalt:
+			peerStates[peerID] = "Exchanging password salt... " + l.spinnerChar
+			if l.ctxCancelled {
+				peerStates[peerID] = log.Gray("cancelled")
+			}
 		case node.PakeStepProvingAuthenticityToPeer:
 			peerStates[peerID] = "Proving authenticity to peer... " + l.spinnerChar
 			if l.ctxCancelled {

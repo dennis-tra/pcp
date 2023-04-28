@@ -1,16 +1,12 @@
 package node
 
 import (
-	"bufio"
 	"context"
-	"crypto/rand"
 	"fmt"
 	"io"
 	"strconv"
 	"sync"
 	"time"
-
-	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
@@ -25,6 +21,7 @@ import (
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/multiformats/go-varint"
 	"github.com/urfave/cli/v2"
 
@@ -34,10 +31,6 @@ import (
 	"github.com/dennis-tra/pcp/pkg/service"
 	"github.com/dennis-tra/pcp/pkg/words"
 )
-
-// Is set to true during test runs because the
-// generated peers won't have proper keys
-var skipMessageAuth = false
 
 // State represents the state the node is in. Most importantly, if the
 // node switches to the Connected state all advertisement/discovery
@@ -84,9 +77,6 @@ type Node struct {
 	hpStates    map[peer.ID]*HolePunchState
 	hpAllowList sync.Map
 
-	// The public key of this node for easy access
-	pubKey []byte
-
 	// DHT is an accessor that is needed in the DHT discoverer/advertiser.
 	DHT        *kaddht.IpfsDHT
 	NATManager basichost.NATManager
@@ -129,16 +119,6 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 		return nil, fmt.Errorf("new pake protocol: %w", err)
 	}
 
-	key, pub, err := crypto.GenerateEd25519Key(rand.Reader)
-	if err != nil {
-		return nil, fmt.Errorf("gen ed25519 key: %w", err)
-	}
-
-	node.pubKey, err = pub.Raw()
-	if err != nil {
-		return nil, fmt.Errorf("get raw public key: %w", err)
-	}
-
 	// Configure the resource manager to not limit anything
 	limiter := rcmgr.NewFixedLimiter(rcmgr.InfiniteLimits)
 	rm, err := rcmgr.NewResourceManager(limiter)
@@ -147,7 +127,6 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 	}
 
 	opts = append(opts,
-		libp2p.Identity(key),
 		libp2p.UserAgent("pcp/"+c.App.Version),
 		libp2p.ResourceManager(rm),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
@@ -253,18 +232,12 @@ func (n *Node) Send(s network.Stream, msg p2p.HeaderMessage) error {
 // It takes the given signature and verifies it against the given public
 // key.
 func (n *Node) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
-	// This will be set to true during unit test runs as the
-	// generated peers from mocknet won't have proper keys.
-	if skipMessageAuth {
-		return true, nil
-	}
-
 	// store a temp ref to signature and remove it from message msg
 	// sign is a string to allow easy reset to zero-value (empty string)
 	signature := msg.GetHeader().Signature
 	msg.GetHeader().Signature = nil
 
-	// marshall msg without the signature to protobufs3 binary format
+	// marshall msg without the signature to protobuf binary format
 	bin, err := proto.Marshal(msg)
 	if err != nil {
 		return false, err
@@ -348,10 +321,30 @@ func (n *Node) WriteBytes(w io.Writer, data []byte) (int, error) {
 	return w.Write(append(size, data...))
 }
 
+// byteReader turns an io.byteReader into an io.ByteReader.
+type byteReader struct {
+	io.Reader
+}
+
+func (r *byteReader) ReadByte() (byte, error) {
+	var buf [1]byte
+	n, err := r.Reader.Read(buf[:])
+	if err != nil {
+		return 0, err
+	}
+	if n == 0 {
+		return 0, io.ErrNoProgress
+	}
+	return buf[0], nil
+}
+
 // ReadBytes reads an uvarint from the source reader to know how
 // much data is following.
 func (n *Node) ReadBytes(r io.Reader) ([]byte, error) {
-	br := bufio.NewReader(r) // init byte reader
+	// bufio.NewReader wouldn't work because it would read the bytes
+	// until its buffer (4096 bytes by default) is full. This data
+	// isn't available outside of this function.
+	br := &byteReader{r}
 	l, err := varint.ReadUvarint(br)
 	if err != nil {
 		return nil, err

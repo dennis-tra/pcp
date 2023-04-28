@@ -26,7 +26,6 @@ func setup(t *testing.T) (*gomock.Controller, host.Host, mocknet.Mocknet) {
 	net := mocknet.New()
 
 	tmpTruncateDuration := discovery.TruncateDuration
-	tmpPubAddrInter := pubAddrInter
 	tmpProvideTimeout := provideTimeout
 
 	local, err := net.GenPeer()
@@ -36,7 +35,6 @@ func setup(t *testing.T) (*gomock.Controller, host.Host, mocknet.Mocknet) {
 		ctrl.Finish()
 
 		discovery.TruncateDuration = tmpTruncateDuration
-		pubAddrInter = tmpPubAddrInter
 		provideTimeout = tmpProvideTimeout
 
 		wrapDHT = wrap.DHT{}

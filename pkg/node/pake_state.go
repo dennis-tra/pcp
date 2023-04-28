@@ -22,6 +22,7 @@ const (
 	PakeStepCalculatingKeyInformation
 	PakeStepSendingKeyInformation
 	PakeStepWaitingForFinalKeyInformation
+	PakeStepExchangingSalt
 	PakeStepProvingAuthenticityToPeer
 	PakeStepVerifyingProofFromPeer
 	PakeStepWaitingForFinalConfirmation
@@ -41,6 +42,8 @@ func (s PakeStep) String() string {
 		return "PakeStepSendingKeyInformation"
 	case PakeStepWaitingForFinalKeyInformation:
 		return "PakeStepWaitingForFinalKeyInformation"
+	case PakeStepExchangingSalt:
+		return "PakeStepExchangingSalt"
 	case PakeStepProvingAuthenticityToPeer:
 		return "PakeStepProvingAuthenticityToPeer"
 	case PakeStepVerifyingProofFromPeer:

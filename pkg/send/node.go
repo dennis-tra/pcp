@@ -91,10 +91,10 @@ func (n *Node) Shutdown() {
 			log.Infoln("An error occurred. Run peercp again with the --verbose flag to get more information")
 		}
 
-		//TODO: properly closing the host can take up to 1 minute
-		//if err := n.Host.Close(); err != nil {
-		//	log.Warningln("error stopping libp2p node:", err)
-		//}
+		// TODO: properly closing the host can take up to 1 minute
+		if err := n.Host.Close(); err != nil {
+			log.Warningln("error stopping libp2p node:", err)
+		}
 
 		n.ServiceStopped()
 	}()

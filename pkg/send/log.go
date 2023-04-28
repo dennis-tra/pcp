@@ -196,7 +196,11 @@ func (l *logStatus) dhtStateStr() string {
 	case dht.StageRetrying:
 		return l.spinnerChar + log.Yellow("(retry writing to DHT)")
 	case dht.StageProvided:
-		return log.Green("ready")
+		if l.dhtState.Reachability == network.ReachabilityPrivate && len(l.dhtState.RelayAddrs) == 0 {
+			return log.Yellow("lost relay reservations")
+		} else {
+			return log.Green("ready")
+		}
 	case dht.StageStopped:
 		return log.Green("stopped")
 	default:
@@ -403,6 +407,11 @@ func (l *logStatus) pakeStatesStr() ([]string, map[string]string) {
 			}
 		case node.PakeStepWaitingForFinalKeyInformation:
 			peerStates[peerID] = "Waiting for final key information... " + l.spinnerChar
+			if l.ctxCancelled {
+				peerStates[peerID] = log.Gray("cancelled")
+			}
+		case node.PakeStepExchangingSalt:
+			peerStates[peerID] = "Exchanging password salt... " + l.spinnerChar
 			if l.ctxCancelled {
 				peerStates[peerID] = log.Gray("cancelled")
 			}

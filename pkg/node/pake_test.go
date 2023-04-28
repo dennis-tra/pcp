@@ -21,13 +21,11 @@ func (t TestPakeRequestHandler) HandleSuccessfulKeyExchange(peerID peer.ID) {
 }
 
 func TestPakeProtocol_happyPath(t *testing.T) {
-	t.Skipf("doesn't work :/")
 	ctx := context.Background()
 	net := mocknet.New()
 
 	node1, _ := setupNode(t, net)
 	node2, _ := setupNode(t, net)
-	authNodes(t, node1, node2)
 
 	err := net.LinkAll()
 	require.NoError(t, err)

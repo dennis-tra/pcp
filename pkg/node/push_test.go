@@ -21,8 +21,6 @@ func (prh *TestPushRequestHandler) HandlePushRequest(pr *p2p.PushRequest) (bool,
 }
 
 func TestPushProtocol_RegisterPushRequestHandler_happyPath(t *testing.T) {
-	skipMessageAuth = true
-
 	ctx := context.Background()
 	net := mocknet.New()
 
@@ -57,8 +55,6 @@ func TestPushProtocol_RegisterPushRequestHandler_happyPath(t *testing.T) {
 }
 
 func TestPushProtocol_RegisterPushRequestHandler_unauthenticated(t *testing.T) {
-	skipMessageAuth = true
-
 	ctx := context.Background()
 	net := mocknet.New()
 

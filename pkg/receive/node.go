@@ -28,6 +28,7 @@ const (
 	NotConnected PeerState = iota
 	Connecting
 	Connected
+	Authenticated
 	FailedConnecting
 	FailedAuthentication
 )
@@ -92,9 +93,9 @@ func (n *Node) Shutdown() {
 		n.statusLogger.Shutdown()
 
 		// TODO: properly closing the host can take up to 1 minute
-		//if err := n.Host.Close(); err != nil {
-		//	log.Warningln("error stopping libp2p node:", err)
-		//}
+		if err := n.Host.Close(); err != nil {
+			log.Warningln("error stopping libp2p node:", err)
+		}
 
 		n.ServiceStopped()
 	}()
@@ -170,6 +171,7 @@ func (n *Node) watchDiscoverErrors() {
 		// stop this go routine.
 		if mdnsState.Stage.IsTermination() && mdnsOffsetState.Stage.IsTermination() &&
 			dhtState.Stage.IsTermination() && dhtOffsetState.Stage.IsTermination() {
+			log.Debugln("Stop watching discoverer errors")
 			return
 		}
 	}
@@ -188,29 +190,44 @@ func (n *Node) HandlePeerFound(pi peer.AddrInfo) {
 	n.AddToHolePunchAllowList(pi.ID)
 
 	// Check if we have already seen the peer and exit early to not connect again.
-	peerState, _ := n.peerStates.LoadOrStore(pi.ID, NotConnected)
-	switch peerState.(PeerState) {
-	case NotConnected:
-	case Connecting:
-		log.Debugln("Skipping node as we're already trying to connect", pi.ID)
-		return
-	case FailedConnecting:
-		// TODO: Check if multiaddrs have changed and only connect if that's the case
-		log.Debugln("We tried to connect previously but couldn't establish a connection, try again", pi.ID)
-	case FailedAuthentication:
-		log.Debugln("We tried to connect previously but the node didn't pass authentication  -> skipping", pi.ID)
-		return
+	peerState, loaded := n.peerStates.LoadOrStore(pi.ID, Connecting)
+	if loaded {
+		switch peerState.(PeerState) {
+		case NotConnected:
+		case Connected:
+			log.Debugln("Ignoring discovered peer because as we're already connected", pi.ID)
+			return
+		case Connecting:
+			log.Debugln("Ignoring discovered peer as we're already trying to connect", pi.ID)
+			return
+		case Authenticated:
+			log.Debugln("Ignoring discovered peer as it's already authenticated", pi.ID)
+			return
+		case FailedConnecting:
+			// TODO: Check if multiaddrs have changed and only connect if that's the case
+			log.Debugln("We tried to connect previously but couldn't establish a connection, try again", pi.ID)
+		case FailedAuthentication:
+			log.Debugln("We tried to connect previously but the node didn't pass authentication -> skipping", pi.ID)
+			return
+		}
 	}
 
 	log.Debugln("Connecting to peer:", pi.ID)
-	n.peerStates.Store(pi.ID, Connecting)
 	if err := n.Connect(n.ServiceContext(), pi); err != nil {
 		log.Debugln("Error connecting to peer:", pi.ID, err)
 		n.peerStates.Store(pi.ID, FailedConnecting)
 		return
 	}
+	n.peerStates.Store(pi.ID, Connected)
 
 	n.DebugLogAuthenticatedPeer(pi.ID)
+
+	// lock push request handler until this handler has finished
+	// sometimes the push request comes too fast which messes up
+	// the log output. So we lock the other handler until
+	// all functions from this HandlePeerFound handler have finished.
+	n.LockHandler(pi.ID)
+	defer n.UnlockHandler(pi.ID)
 
 	// Negotiate PAKE
 	if _, err := n.StartKeyExchange(n.ServiceContext(), pi.ID); err != nil {
@@ -218,42 +235,33 @@ func (n *Node) HandlePeerFound(pi peer.AddrInfo) {
 		n.peerStates.Store(pi.ID, FailedAuthentication)
 		return
 	}
-	n.peerStates.Store(pi.ID, Connected)
+	n.peerStates.Store(pi.ID, Authenticated)
 
 	// We're authenticated so can initiate a transfer
-	if n.GetState() == pcpnode.Connected {
+	if n.SetState(pcpnode.Connected) == pcpnode.Connected {
 		log.Debugln("already connected and authenticated with another node")
 		return
 	}
 
-	// can't stopNotify in Shutdown -> deadlock - but don't understand why
-	//n.netNotifeeLk.Lock()
-	//n.netNotifee = &network.NotifyBundle{
-	//	DisconnectedF: func(net network.Network, conn network.Conn) {
-	//		if conn.RemotePeer() != pi.ID {
-	//			return
-	//		}
-	//
-	//		if net.Connectedness(conn.RemotePeer()) == network.Connected {
-	//			return
-	//		}
-	//
-	//		log.Warningln("Lost connection to remote peer - shutting down")
-	//
-	//		n.Shutdown()
-	//	},
-	//}
-	//n.netNotifeeLk.Unlock()
-	//
-	//n.Network().Notify(n.netNotifee)
+	// Stop the discovering process as we have found the valid peer
+	n.stopDiscovering()
 
-	// between registering to be notified until here we could have been disconnected,
-	// so check again here.
-	if n.Network().Connectedness(pi.ID) == network.NotConnected {
+	// wait until the hole punch has succeeded
+	err := n.WaitForDirectConn(pi.ID)
+	if err != nil {
+		n.statusLogger.Shutdown()
 		n.Shutdown()
+		log.Infoln("Hole punching failed:", err)
 		return
 	}
+	n.statusLogger.Shutdown()
 
+	// make sure we don't open the new transfer-stream on the relayed connection.
+	// libp2p claims to not do that, but I have observed strange connection resets.
+	n.CloseRelayedConnections(pi.ID)
+}
+
+func (n *Node) SetConnected(pi peer.AddrInfo) {
 	n.SetState(pcpnode.Connected)
 
 	// Stop the discovering process as we have found the valid peer

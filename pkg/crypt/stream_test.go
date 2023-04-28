@@ -11,6 +11,7 @@ import (
 func TestStreamEncrypterDecrypter(t *testing.T) {
 	salt := []byte("salt")
 	pw := []byte("password")
+
 	key, err := DeriveKey(pw, salt)
 	assert.Nil(t, err)
 

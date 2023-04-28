@@ -3,6 +3,7 @@ package node
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"fmt"
 	"strings"
 	"sync"
@@ -21,12 +22,8 @@ const ProtocolPake = "/pcp/pake/0.3.0"
 type PakeProtocol struct {
 	node *Node
 
-	// pwKey holds a scrypt derived key based on the users
-	// given words that has the correct length to create
-	// a new block cipher. It uses the key derivation
-	// function (KDF) of scrypt. This is not the key that
-	// is used to ultimately encrypt the communication.
-	// This is the input key for PAKE.
+	// pwKey holds the weak password of the PAKE protocol.
+	// In our case it's the four words with dashes in between.
 	pwKey []byte
 
 	// A map of peers and their respective state in the
@@ -44,31 +41,30 @@ type PakeProtocol struct {
 // from the given words. This is the basis for the strong session key that's derived from
 // the PAKE protocol.
 func NewPakeProtocol(node *Node, words []string) (PakeProtocol, error) {
-	pw := []byte(strings.Join(words, ""))
-	key, err := crypt.DeriveKey(pw, node.pubKey)
-	if err != nil {
-		return PakeProtocol{}, err
-	}
-
 	return PakeProtocol{
 		node:   node,
-		pwKey:  key,
+		pwKey:  []byte(strings.Join(words, "-")),
 		states: map[peer.ID]*PakeState{},
 	}, nil
 }
 
 // setPakeStep sets the authentication state to the given step.
 // If the peer isn't tracked yet, its state is created.
-func (p *PakeProtocol) setPakeStep(peerID peer.ID, step PakeStep) {
+// It returns the previously stored step.
+func (p *PakeProtocol) setPakeStep(peerID peer.ID, step PakeStep) PakeStep {
 	p.statesLk.Lock()
 	defer p.statesLk.Unlock()
 
 	log.Debugf("Pake %s: %s\n", peerID.String()[:16], step)
+	prevStep := PakeStepUnknown
 	if _, ok := p.states[peerID]; ok {
+		prevStep = p.states[peerID].Step
 		p.states[peerID].Step = step
 	} else {
 		p.states[peerID] = &PakeState{Step: step}
 	}
+
+	return prevStep
 }
 
 // setPakeError sets the authentication state to PakeStepError with the given err value.
@@ -170,7 +166,17 @@ func (p *PakeProtocol) onKeyExchange(s network.Stream) {
 	remotePeer := s.Conn().RemotePeer()
 
 	// Authenticating peer...
-	p.setPakeStep(remotePeer, PakeStepStart)
+
+	// In case the same remote peer "calls" onKeyExchange multiple times.
+	// We only allow one concurrent key exchange per remote peer.
+	prevStep := p.setPakeStep(remotePeer, PakeStepStart)
+	switch prevStep {
+	case PakeStepUnknown:
+	case PakeStepError:
+	default:
+		log.Debugln("Rejecting key exchange request. Current step:", prevStep.String())
+		return
+	}
 
 	// initialize recipient Q ("1" indicates recipient)
 	Q, err := pake.InitCurve(p.pwKey, 1, "siec")
@@ -227,14 +233,35 @@ func (p *PakeProtocol) onKeyExchange(s network.Stream) {
 	}
 
 	// Access session key
-	key, err := Q.SessionKey()
+	skey, err := Q.SessionKey()
 	if err != nil {
+		p.setPakeError(remotePeer, err)
+		return
+	}
+
+	p.setPakeStep(remotePeer, PakeStepExchangingSalt)
+
+	// Generating session key salt
+	salt := make([]byte, 8)
+	if _, err = rand.Read(salt); err != nil {
+		p.setPakeError(remotePeer, fmt.Errorf("read randomness: %w", err))
+		return
+	}
+
+	// Sending salt
+	if _, err = p.node.WriteBytes(s, salt); err != nil {
 		p.setPakeError(remotePeer, err)
 		return
 	}
 
 	// Proving authenticity to peer...
 	p.setPakeStep(remotePeer, PakeStepProvingAuthenticityToPeer)
+
+	key, err := crypt.DeriveKey(skey, salt)
+	if err != nil {
+		p.setPakeError(remotePeer, err)
+		return
+	}
 
 	// Send P encryption proof
 	if err := p.SendProof(s, key); err != nil {
@@ -343,10 +370,25 @@ func (p *PakeProtocol) StartKeyExchange(ctx context.Context, peerID peer.ID) ([]
 	}
 
 	// Extract calculated key
-	key, err := P.SessionKey()
+	skey, err := P.SessionKey()
 	if err != nil {
 		p.setPakeError(remotePeer, err)
 		return nil, err
+	}
+
+	p.setPakeStep(remotePeer, PakeStepExchangingSalt)
+
+	// Reading salt
+	salt, err := p.node.ReadBytes(s)
+	if err != nil {
+		p.setPakeError(remotePeer, err)
+		return nil, err
+	}
+
+	// derive key from PAKE session key + salt
+	key, err := crypt.DeriveKey(skey, salt)
+	if err != nil {
+		return nil, fmt.Errorf("derive key from session key and salt: %w", err)
 	}
 
 	// Verifying proof from peer...
@@ -400,7 +442,12 @@ func (p *PakeProtocol) StartKeyExchange(ctx context.Context, peerID peer.ID) ([]
 // the PAKE-derived session key. The recipient can decrypt the key
 // and verify that it matches.
 func (p *PakeProtocol) SendProof(s network.Stream, key []byte) error {
-	challenge, err := crypt.Encrypt(key, p.node.pubKey)
+	pubKey, err := p.node.Peerstore().PubKey(p.node.ID()).Raw()
+	if err != nil {
+		return fmt.Errorf("get node pub key: %w", err)
+	}
+
+	challenge, err := crypt.Encrypt(key, pubKey)
 	if err != nil {
 		return err
 	}

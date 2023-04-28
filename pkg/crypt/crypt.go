@@ -7,9 +7,12 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"encoding/hex"
 	"io"
 
 	"golang.org/x/crypto/scrypt"
+
+	"github.com/dennis-tra/pcp/internal/log"
 )
 
 const NonceLength = 12
@@ -21,7 +24,12 @@ const NonceLength = 12
 // parameters below are taken from an example test in the scrypt
 // package.
 func DeriveKey(pw []byte, salt []byte) ([]byte, error) {
-	return scrypt.Key(pw, salt, 1<<15, 8, 1, 32)
+	log.Debugln("Deriving Session Key:")
+	log.Debugln("\tSALT:", hex.EncodeToString(salt))
+	log.Debugln("\tPW:  ", hex.EncodeToString(pw))
+	key, err := scrypt.Key(pw, salt, 1<<15, 8, 1, 32)
+	log.Debugln("\tKEY: ", hex.EncodeToString(key))
+	return key, err
 }
 
 // Encrypt will encrypt the data with the given key.
