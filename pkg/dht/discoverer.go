@@ -2,9 +2,7 @@ package dht
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/event"
@@ -24,49 +22,23 @@ const (
 // Discoverer is responsible for reading the DHT for an
 // entry with the channel ID given below.
 type Discoverer struct {
-	*protocol
-
-	stateLk sync.RWMutex
-	state   *DiscoverState
+	*protocol[*DiscoverState]
 
 	notifee discovery.Notifee
 }
 
 // NewDiscoverer creates a new Discoverer.
 func NewDiscoverer(h host.Host, dht wrap.IpfsDHT, notifee discovery.Notifee) *Discoverer {
-	return &Discoverer{
-		protocol: newProtocol(h, dht),
+	d := &Discoverer{
+		protocol: newProtocol[*DiscoverState](h, dht),
 		notifee:  notifee,
-		state: &DiscoverState{
-			Stage: StageIdle,
-		},
 	}
-}
 
-func (d *Discoverer) setError(err error) {
-	d.stateLk.Lock()
-	d.state.Stage = StageError
-	d.state.Err = err
-	d.stateLk.Unlock()
-}
+	d.protocol.state = &DiscoverState{
+		Stage: StageIdle,
+	}
 
-func (d *Discoverer) setState(fn func(state *DiscoverState)) {
-	d.stateLk.Lock()
-	fn(d.state)
-	log.Debugln("DHT - DiscoverState:", d.state)
-	d.stateLk.Unlock()
-}
-
-func (d *Discoverer) setStage(stage Stage) {
-	d.setState(func(s *DiscoverState) { s.Stage = stage })
-}
-
-func (d *Discoverer) State() DiscoverState {
-	d.stateLk.RLock()
-	state := d.state
-	d.stateLk.RUnlock()
-
-	return *state
+	return d
 }
 
 // Discover establishes a connection to a set of bootstrap peers
@@ -80,20 +52,14 @@ func (d *Discoverer) Discover(chanID int) {
 
 	d.setStage(StageBootstrapping)
 	err := d.bootstrap()
-	if errors.Is(err, context.Canceled) {
-		d.setStage(StageStopped)
-		return
-	} else if err != nil {
+	if err != nil {
 		d.setError(err)
 		return
 	}
 
 	d.setStage(StageWaitingForPublicAddrs)
 	err = d.waitPublicAddresses()
-	if errors.Is(err, context.Canceled) {
-		d.setStage(StageStopped)
-		return
-	} else if err != nil {
+	if err != nil {
 		d.setError(err)
 		return
 	}

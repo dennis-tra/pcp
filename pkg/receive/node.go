@@ -159,7 +159,7 @@ func (n *Node) watchDiscoverErrors() {
 		// experienced an error), we have found and successfully connected to a peer. This means, all good - just
 		// stop this go routine.
 		if mdnsState.Stage.IsTermination() && mdnsOffsetState.Stage.IsTermination() &&
-			dhtState.Stage.IsTermination() && dhtOffsetState.Stage.IsTermination() {
+			dhtState.Stage.IsTerminated() && dhtOffsetState.Stage.IsTerminated() {
 			log.Debugln("Stop watching discoverer errors")
 			return
 		}

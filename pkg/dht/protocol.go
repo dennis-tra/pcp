@@ -1,10 +1,14 @@
 package dht
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"sync"
+	"time"
 
-	kaddht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/dennis-tra/pcp/internal/log"
+
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 
@@ -20,9 +24,19 @@ var (
 	wrapmanet wrap.Maneter = wrap.Manet{}
 )
 
+// The interval between two discover/advertise operations
+var (
+	tickInterval = 5 * time.Second
+)
+
+type State interface {
+	SetStage(Stage)
+	SetError(error)
+}
+
 // protocol encapsulates the logic for discovering peers
 // through providing it in the IPFS DHT.
-type protocol struct {
+type protocol[T State] struct {
 	host.Host
 
 	// Service holds an abstraction of a long-running
@@ -30,10 +44,14 @@ type protocol struct {
 	service.Service
 	dht wrap.IpfsDHT
 	did discovery.ID
+
+	// State
+	stateLk sync.RWMutex
+	state   T
 }
 
-func newProtocol(h host.Host, dht wrap.IpfsDHT) *protocol {
-	p := &protocol{
+func newProtocol[T State](h host.Host, dht wrap.IpfsDHT) *protocol[T] {
+	p := &protocol[T]{
 		Host:    h,
 		dht:     dht,
 		Service: service.New("DHT"),
@@ -43,10 +61,40 @@ func newProtocol(h host.Host, dht wrap.IpfsDHT) *protocol {
 	return p
 }
 
+func (p *protocol[T]) setError(err error) {
+	p.stateLk.Lock()
+	if errors.Is(err, context.Canceled) {
+		p.state.SetStage(StageStopped)
+	} else {
+		p.state.SetStage(StageError)
+		p.state.SetError(err)
+	}
+	p.stateLk.Unlock()
+}
+
+func (p *protocol[T]) setState(fn func(state State)) {
+	p.stateLk.Lock()
+	fn(p.state)
+	log.Debugln("DHT - AdvertiseState", p.state)
+	p.stateLk.Unlock()
+}
+
+func (p *protocol[T]) setStage(stage Stage) {
+	p.setState(func(s State) { s.SetStage(stage) })
+}
+
+func (p *protocol[T]) State() T {
+	p.stateLk.RLock()
+	state := p.state
+	p.stateLk.RUnlock()
+
+	return state
+}
+
 // bootstrap connects to a set of bootstrap nodes to connect
 // to the DHT.
-func (p *protocol) bootstrap() error {
-	peers := kaddht.GetDefaultBootstrapPeerAddrInfos()
+func (p *protocol[T]) bootstrap() error {
+	peers := wrapDHT.GetDefaultBootstrapPeerAddrInfos()
 	peerCount := len(peers)
 	if peerCount == 0 {
 		return fmt.Errorf("no bootstrap peers configured")

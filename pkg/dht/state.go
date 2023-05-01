@@ -50,7 +50,7 @@ func (s Stage) String() string {
 	}
 }
 
-func (s Stage) IsTermination() bool {
+func (s Stage) IsTerminated() bool {
 	return s == StageStopped || s == StageError
 }
 
@@ -63,6 +63,14 @@ type AdvertiseState struct {
 	PrivateAddrs []ma.Multiaddr
 	RelayAddrs   []ma.Multiaddr
 	Err          error
+}
+
+func (s *AdvertiseState) SetStage(stage Stage) {
+	s.Stage = stage
+}
+
+func (s *AdvertiseState) SetError(err error) {
+	s.Err = err
 }
 
 func (s *AdvertiseState) String() string {
@@ -89,6 +97,14 @@ type DiscoverState struct {
 	PublicAddrs  []ma.Multiaddr
 	PrivateAddrs []ma.Multiaddr
 	Err          error
+}
+
+func (s *DiscoverState) SetStage(stage Stage) {
+	s.Stage = stage
+}
+
+func (s *DiscoverState) SetError(err error) {
+	s.Err = err
 }
 
 func (s *DiscoverState) String() string {

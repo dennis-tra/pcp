@@ -162,7 +162,7 @@ func (n *Node) watchAdvertiseErrors() {
 		// if both advertisers reached a termination stage (e.g., both were stopped or one was stopped, the other
 		// experienced an error), we have found and successfully connected to a peer. This means, all good - just
 		// stop this go routine.
-		if mdnsState.Stage.IsTermination() && dhtState.Stage.IsTermination() {
+		if mdnsState.Stage.IsTermination() && dhtState.Stage.IsTerminated() {
 			return
 		}
 	}

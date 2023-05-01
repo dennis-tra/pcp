@@ -2,9 +2,7 @@ package dht
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/event"
@@ -17,58 +15,32 @@ import (
 )
 
 // Timeout for pushing our data to the DHT.
-var provideTimeout = 30 * time.Second
+var (
+	provideTimeout = 30 * time.Second
+)
 
 // Advertiser is responsible for writing and renewing the DHT entry.
 type Advertiser struct {
-	*protocol
-
-	stateLk sync.RWMutex
-	state   *AdvertiseState
+	*protocol[*AdvertiseState]
 }
 
 // NewAdvertiser creates a new Advertiser.
 func NewAdvertiser(h host.Host, dht wrap.IpfsDHT) *Advertiser {
 	a := &Advertiser{
-		protocol: newProtocol(h, dht),
-		state: &AdvertiseState{
-			Stage:        StageIdle,
-			Reachability: network.ReachabilityUnknown,
-			NATTypeTCP:   network.NATDeviceTypeUnknown,
-			NATTypeUDP:   network.NATDeviceTypeUnknown,
-		},
+		protocol: newProtocol[*AdvertiseState](h, dht),
+	}
+
+	a.protocol.state = &AdvertiseState{
+		Stage:        StageIdle,
+		Reachability: network.ReachabilityUnknown,
+		NATTypeTCP:   network.NATDeviceTypeUnknown,
+		NATTypeUDP:   network.NATDeviceTypeUnknown,
 	}
 
 	// populate the address slices
 	a.state.populateAddrs(h.Addrs())
 
 	return a
-}
-
-func (a *Advertiser) setError(err error) {
-	a.stateLk.Lock()
-	a.state.Stage = StageError
-	a.state.Err = err
-	a.stateLk.Unlock()
-}
-
-func (a *Advertiser) setState(fn func(state *AdvertiseState)) {
-	a.stateLk.Lock()
-	fn(a.state)
-	log.Debugln("DHT - AdvertiseState", a.state)
-	a.stateLk.Unlock()
-}
-
-func (a *Advertiser) setStage(stage Stage) {
-	a.setState(func(s *AdvertiseState) { s.Stage = stage })
-}
-
-func (a *Advertiser) State() AdvertiseState {
-	a.stateLk.RLock()
-	state := a.state
-	a.stateLk.RUnlock()
-
-	return *state
 }
 
 // Advertise establishes a connection to a set of bootstrap peers
@@ -91,30 +63,27 @@ func (a *Advertiser) Advertise(chanID int) {
 	}
 	defer a.ServiceStopped()
 
+	// bootstrap
 	a.setStage(StageBootstrapping)
 	err := a.bootstrap()
-	if errors.Is(err, context.Canceled) {
-		a.setStage(StageStopped)
-		return
-	} else if err != nil {
+	if err != nil {
 		a.setError(err)
 		return
 	}
+
 	a.setStage(StageAnalyzingNetwork)
 	err = a.analyzeNetwork()
-	if errors.Is(err, context.Canceled) {
-		a.setStage(StageStopped)
-		return
-	} else if err != nil {
+	if err != nil {
 		a.setError(err)
 		return
 	}
 
-	did := a.did.DiscoveryID(chanID)
-
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(tickInterval)
 	a.setStage(StageProviding)
 	for {
+
+		// Always regenerate discovery ID
+		did := a.did.DiscoveryID(chanID)
 
 		err := a.provide(a.ServiceContext(), did)
 		if err != nil {
@@ -164,12 +133,18 @@ func (a *Advertiser) analyzeNetwork() error {
 	defer sub.Close()
 
 	for {
-		var e interface{}
+		var (
+			e    interface{}
+			more bool
+		)
 
 		select {
 		case <-a.ServiceContext().Done():
 			return a.ServiceContext().Err()
-		case e = <-sub.Out():
+		case e, more = <-sub.Out():
+			if !more {
+				return fmt.Errorf("subscription closed")
+			}
 		}
 		a.stateLk.Lock()
 		switch evt := e.(type) {
@@ -205,9 +180,4 @@ func (a *Advertiser) analyzeNetwork() error {
 			return nil
 		}
 	}
-}
-
-// Shutdown stops the advertisement mechanics.
-func (a *Advertiser) Shutdown() {
-	a.Service.Shutdown()
 }
