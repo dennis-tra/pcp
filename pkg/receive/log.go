@@ -360,7 +360,11 @@ func (l *logStatus) connectionStateStr() map[string]string {
 				case node.HolePunchStageSucceeded:
 					hpStateStr = log.Green("Succeeded!")
 				case node.HolePunchStageFailed:
-					hpStateStr = log.Red("Failed")
+					if hpState.Attempts < 2 {
+						hpStateStr = log.Yellow("Retrying")
+					} else {
+						hpStateStr = log.Red("Failed")
+					}
 				default:
 					hpStateStr = log.Yellow(fmt.Sprintf("unexpected: %d", hpState.Stage))
 				}

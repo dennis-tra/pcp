@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -280,7 +281,11 @@ func (n *Node) Transfer(peerID peer.ID) error {
 	log.Infoln(log.Green("Accepted!"))
 
 	if err = n.Node.Transfer(n.ServiceContext(), peerID, n.filepath); err != nil {
-		return fmt.Errorf("transfer file to peer: %w", err)
+		// sometimes I get this error: Application error 0x0 but
+		// the file was transferred successfully -> ignore it.
+		if !strings.Contains(err.Error(), "Application error 0x0") {
+			return fmt.Errorf("transfer file to peer: %w", err)
+		}
 	}
 
 	log.Infoln("Successfully sent file/directory!")

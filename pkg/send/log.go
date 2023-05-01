@@ -197,7 +197,7 @@ func (l *logStatus) dhtStateStr() string {
 		return l.spinnerChar + log.Yellow("(retry writing to DHT)")
 	case dht.StageProvided:
 		if l.dhtState.Reachability == network.ReachabilityPrivate && len(l.dhtState.RelayAddrs) == 0 {
-			return log.Yellow("lost relay reservations")
+			return l.spinnerChar + log.Yellow("(no signaling reservations)")
 		} else {
 			return log.Green("ready")
 		}
