@@ -103,7 +103,7 @@ func (n *Node) listenSigShutdown() {
 	n.statusLogger.Shutdown()
 
 	if n.mdnsAdvertiser.State().Stage == mdns.StageError && n.dhtAdvertiser.State().Stage == dht.StageError {
-		log.Infoln("An error occurred. Run peercp again with the --verbose flag to get more information")
+		log.Infoln("An error occurred. Run pcp again with the --verbose flag to get more information")
 	}
 
 	hostClosedChan := make(chan struct{})

@@ -24,7 +24,7 @@ var Command = &cli.Command{
 			Name:    "auto-accept",
 			Aliases: []string{"yes", "y"},
 			Usage:   "automatically accept the file transfer",
-			EnvVars: []string{"PEERCP_AUTO_ACCEPT", "PCP_AUTO_ACCEPT" /* legacy */},
+			EnvVars: []string{"PCP_AUTO_ACCEPT", "PCP_AUTO_ACCEPT" /* legacy */},
 		},
 	},
 	Description: `The receive subcommand starts searching for peers in your local 
@@ -54,7 +54,7 @@ any files with the same name. If the transmission fails the file
 will contain the partial written bytes.`,
 }
 
-// Action is the function that is called when running peercp receive.
+// Action is the function that is called when running pcp receive.
 func Action(c *cli.Context) error {
 	// Read config file and fill context with it.
 	c, err := config.FillContext(c)

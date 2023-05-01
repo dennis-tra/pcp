@@ -40,7 +40,7 @@ func (l *statusLogger) startLogging() {
 	defer l.ServiceStopped()
 
 	log.Infoln("On the other machine run:")
-	log.Infoln("\tpeercp receive", strings.Join(l.node.Words, "-"))
+	log.Infoln("\tpcp receive", strings.Join(l.node.Words, "-"))
 
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
@@ -67,7 +67,7 @@ type logStatus struct {
 	verbose           bool
 	words             []string
 	mdnsState         mdns.State
-	dhtState          dht.AdvertiseState
+	dhtState          *dht.AdvertiseState
 	pakeStates        map[peer.ID]*node.PakeState
 	hpStates          map[peer.ID]node.HolePunchState
 	portMappings      []nat.Mapping

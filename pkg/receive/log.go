@@ -59,7 +59,7 @@ type logStatus struct {
 	verbose      bool
 	words        []string
 	mdnsState    mdns.State
-	dhtState     dht.DiscoverState
+	dhtState     *dht.DiscoverState
 	pakeStates   map[peer.ID]*node.PakeState
 	hpStates     map[peer.ID]node.HolePunchState
 	portMappings []nat.Mapping

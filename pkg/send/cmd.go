@@ -47,7 +47,7 @@ the file transfer the transmission is started.
 `,
 }
 
-// Action contains the logic for the `send` subcommand of the peercp program. It is
+// Action contains the logic for the `send` subcommand of the pcp program. It is
 // mainly responsible for input parsing and service initialisation.
 func Action(c *cli.Context) error {
 	// Read config file and fill context with it.
