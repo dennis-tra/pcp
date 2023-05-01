@@ -72,9 +72,6 @@ func Action(c *cli.Context) error {
 		return fmt.Errorf("failed to initialize node: %w", err)
 	}
 
-	// Search for identifier
-	log.Infof("Looking for peer: %s... \n", c.Args().First())
-
 	// if mDNS is active, start searching in the local network
 	if isMDNSActive(c) {
 		go node.StartDiscoveringMDNS()

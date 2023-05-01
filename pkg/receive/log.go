@@ -51,6 +51,7 @@ func (l *statusLogger) startLogging() {
 		case <-ticker.C:
 			l.newLogStatus(log.SpinnerChars[i]).writeStatus(l.writer)
 			_ = l.writer.Flush()
+			l.writer.Newline()
 		}
 	}
 }
@@ -110,6 +111,7 @@ func (l *statusLogger) newLogStatus(spinnerChar string) *logStatus {
 }
 
 func (l *logStatus) writeStatus(writer io.Writer) {
+	fmt.Fprintf(writer, "Looking for peer: %s... \n", strings.Join(l.words, "-"))
 	if l.verbose {
 		fmt.Fprintf(writer, "Code:          %s\n", strings.Join(l.words, "-"))
 		fmt.Fprintf(writer, "mDNS:          %s\n", l.mdnsStateStr())
