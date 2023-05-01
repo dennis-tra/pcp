@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gosuri/uilive"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/net/nat"
@@ -24,14 +23,14 @@ import (
 type statusLogger struct {
 	service.Service
 	node   *Node
-	writer *uilive.Writer
+	writer *log.UILiveWriter
 }
 
 func newStatusLogger(n *Node) *statusLogger {
 	return &statusLogger{
 		Service: service.New("status-logger"),
 		node:    n,
-		writer:  uilive.New(),
+		writer:  log.NewUILive(),
 	}
 }
 

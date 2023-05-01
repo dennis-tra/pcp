@@ -10,7 +10,6 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
-	"github.com/gosuri/uilive"
 	"github.com/libp2p/go-libp2p"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -101,7 +100,7 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 	}
 
 	// set to something large, we're manually flushing the output
-	uilive.RefreshInterval = 100 * time.Hour
+	log.RefreshInterval = 100 * time.Hour
 
 	node := &Node{
 		Service:  service.New("node"),
