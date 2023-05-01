@@ -48,7 +48,7 @@ func printTimestamp() {
 	if level > DebugLevel {
 		return
 	}
-	fmt.Printf("[%s] ", time.Now().Format(time.RFC3339Nano))
+	fmt.Fprintf(Out, "[%s] ", time.Now().Format(time.RFC3339Nano))
 }
 
 func Info(a ...interface{}) {

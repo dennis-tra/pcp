@@ -284,30 +284,30 @@ func TestAdvertiser_analyzeNetwork(t *testing.T) {
 		Reachability: network.ReachabilityPrivate,
 	}
 	eventsChan <- struct{}{} // makes sure the event was consumed
-	assert.Equal(t, a.state.Reachability, network.ReachabilityPrivate)
+	assert.Equal(t, a.state.Reachability.String(), network.ReachabilityPrivate.String())
 	eventsChan <- event.EvtLocalReachabilityChanged{
 		Reachability: network.ReachabilityUnknown,
 	}
 	eventsChan <- struct{}{} // makes sure the event was consumed
-	assert.Equal(t, a.state.Reachability, network.ReachabilityUnknown)
+	assert.Equal(t, a.state.Reachability.String(), network.ReachabilityUnknown.String())
 
 	// test NAT type UDP
-	assert.Equal(t, a.state.NATTypeUDP, network.NATDeviceTypeUnknown)
+	assert.Equal(t, a.state.NATTypeUDP.String(), network.NATDeviceTypeUnknown.String())
 	eventsChan <- event.EvtNATDeviceTypeChanged{
 		NatDeviceType:     network.NATDeviceTypeSymmetric,
 		TransportProtocol: network.NATTransportUDP,
 	}
 	eventsChan <- struct{}{} // makes sure the event was consumed
-	assert.Equal(t, a.state.NATTypeUDP, network.NATDeviceTypeSymmetric)
+	assert.Equal(t, a.state.NATTypeUDP.String(), network.NATDeviceTypeSymmetric.String())
 
 	// test NAT type TCP
-	assert.Equal(t, a.state.NATTypeTCP, network.NATDeviceTypeUnknown)
+	assert.Equal(t, a.state.NATTypeTCP.String(), network.NATDeviceTypeUnknown.String())
 	eventsChan <- event.EvtNATDeviceTypeChanged{
 		NatDeviceType:     network.NATDeviceTypeSymmetric,
 		TransportProtocol: network.NATTransportTCP,
 	}
 	eventsChan <- struct{}{} // makes sure the event was consumed
-	assert.Equal(t, a.state.NATTypeTCP, network.NATDeviceTypeSymmetric)
+	assert.Equal(t, a.state.NATTypeTCP.String(), network.NATDeviceTypeSymmetric.String())
 
 	// test address update
 	assert.Len(t, a.state.PrivateAddrs, 0)

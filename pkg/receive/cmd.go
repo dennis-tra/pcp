@@ -24,7 +24,7 @@ var Command = &cli.Command{
 			Name:    "auto-accept",
 			Aliases: []string{"yes", "y"},
 			Usage:   "automatically accept the file transfer",
-			EnvVars: []string{"PCP_AUTO_ACCEPT", "PCP_AUTO_ACCEPT" /* legacy */},
+			EnvVars: []string{"PCP_AUTO_ACCEPT"},
 		},
 	},
 	Description: `The receive subcommand starts searching for peers in your local 

@@ -71,6 +71,7 @@ func (a *Advertiser) Advertise(chanID int) {
 		return
 	}
 
+AnalyzeNetwork:
 	a.setStage(StageAnalyzingNetwork)
 	err = a.analyzeNetwork()
 	if err != nil {
@@ -78,14 +79,26 @@ func (a *Advertiser) Advertise(chanID int) {
 		return
 	}
 
+	go func() {
+		if err := a.watchNetwork(); err != nil {
+			a.Shutdown()
+		}
+	}()
+
 	ticker := time.NewTicker(tickInterval)
 	a.setStage(StageProviding)
 	for {
 
+		canDirectConn, err := a.isDirectConnectivityPossible()
+		if !canDirectConn && err == nil {
+			log.Debugln("Analyzing network again because we lost direct connectivity possibility")
+			goto AnalyzeNetwork
+		}
+
 		// Always regenerate discovery ID
 		did := a.did.DiscoveryID(chanID)
 
-		err := a.provide(a.ServiceContext(), did)
+		err = a.provide(a.ServiceContext(), did)
 		if err != nil {
 			a.setStage(StageRetrying)
 		} else {
@@ -121,6 +134,9 @@ func (a *Advertiser) provide(ctx context.Context, did string) error {
 
 // analyzeNetwork subscribes to a couple of libp2p events that fire after certain network conditions where determined.
 func (a *Advertiser) analyzeNetwork() error {
+	log.Debugln("Start analyzing network")
+	defer log.Debugln("Stop analyzing network")
+
 	evtTypes := []interface{}{
 		new(event.EvtLocalReachabilityChanged),
 		new(event.EvtNATDeviceTypeChanged),
@@ -133,51 +149,93 @@ func (a *Advertiser) analyzeNetwork() error {
 	defer sub.Close()
 
 	for {
-		var (
-			e    interface{}
-			more bool
-		)
-
-		select {
-		case <-a.ServiceContext().Done():
-			return a.ServiceContext().Err()
-		case e, more = <-sub.Out():
-			if !more {
-				return fmt.Errorf("subscription closed")
-			}
-		}
-		a.stateLk.Lock()
-		switch evt := e.(type) {
-		case event.EvtLocalReachabilityChanged:
-			a.state.Reachability = evt.Reachability
-		case event.EvtNATDeviceTypeChanged:
-			switch evt.TransportProtocol {
-			case network.NATTransportUDP:
-				a.state.NATTypeUDP = evt.NatDeviceType
-			case network.NATTransportTCP:
-				a.state.NATTypeTCP = evt.NatDeviceType
-			}
-		case event.EvtLocalAddressesUpdated:
-			maddrs := make([]ma.Multiaddr, len(evt.Current))
-			for i, update := range evt.Current {
-				maddrs[i] = update.Address
-			}
-			a.state.populateAddrs(maddrs)
-		}
-		a.stateLk.Unlock()
-
-		if a.state.Reachability == network.ReachabilityPrivate && a.state.NATTypeUDP == network.NATDeviceTypeSymmetric && a.state.NATTypeTCP == network.NATDeviceTypeSymmetric {
-			return fmt.Errorf("private network with symmetric NAT")
-		}
-
-		// we have public reachability, we're good to go with the DHT
-		if a.state.Reachability == network.ReachabilityPublic && len(a.state.PublicAddrs) > 0 {
+		canDirectConn, err := a.isDirectConnectivityPossible()
+		if canDirectConn {
 			return nil
+		} else if err != nil {
+			return err
 		}
 
-		// we are in a private network, but have at least one cone NAT and at least one relay address
-		if a.state.Reachability == network.ReachabilityPrivate && (a.state.NATTypeUDP == network.NATDeviceTypeCone || a.state.NATTypeTCP == network.NATDeviceTypeCone) && len(a.state.RelayAddrs) > 0 {
-			return nil
+		if err := a.consumeEvent(sub); err != nil {
+			return fmt.Errorf("consume event: %w", err)
 		}
 	}
+}
+
+func (a *Advertiser) isDirectConnectivityPossible() (bool, error) {
+	if a.state.Reachability == network.ReachabilityPrivate && a.state.NATTypeUDP == network.NATDeviceTypeSymmetric && a.state.NATTypeTCP == network.NATDeviceTypeSymmetric {
+		return false, fmt.Errorf("private network with symmetric NAT")
+	}
+
+	// we have public reachability, we're good to go with the DHT
+	if a.state.Reachability == network.ReachabilityPublic && len(a.state.PublicAddrs) > 0 {
+		return true, nil
+	}
+
+	// we are in a private network, but have at least one cone NAT and at least one relay address
+	if a.state.Reachability == network.ReachabilityPrivate && (a.state.NATTypeUDP == network.NATDeviceTypeCone || a.state.NATTypeTCP == network.NATDeviceTypeCone) && len(a.state.RelayAddrs) > 0 {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (a *Advertiser) watchNetwork() error {
+	log.Debugln("Start watching network")
+	defer log.Debugln("Stop watching network")
+
+	evtTypes := []interface{}{
+		new(event.EvtLocalReachabilityChanged),
+		new(event.EvtNATDeviceTypeChanged),
+		new(event.EvtLocalAddressesUpdated),
+	}
+	sub, err := a.EventBus().Subscribe(evtTypes)
+	if err != nil {
+		return fmt.Errorf("subscribe to libp2p eventbus: %w", err)
+	}
+	defer sub.Close()
+
+	for {
+		if err := a.consumeEvent(sub); err != nil {
+			return fmt.Errorf("consume event: %w", err)
+		}
+	}
+}
+
+func (a *Advertiser) consumeEvent(sub event.Subscription) error {
+	var (
+		e    interface{}
+		more bool
+	)
+
+	select {
+	case <-a.ServiceContext().Done():
+		return a.ServiceContext().Err()
+	case e, more = <-sub.Out():
+		if !more {
+			return fmt.Errorf("subscription closed")
+		}
+	}
+
+	a.stateLk.Lock()
+	switch evt := e.(type) {
+	case event.EvtLocalReachabilityChanged:
+		a.state.Reachability = evt.Reachability
+	case event.EvtNATDeviceTypeChanged:
+		switch evt.TransportProtocol {
+		case network.NATTransportUDP:
+			a.state.NATTypeUDP = evt.NatDeviceType
+		case network.NATTransportTCP:
+			a.state.NATTypeTCP = evt.NatDeviceType
+		}
+	case event.EvtLocalAddressesUpdated:
+		maddrs := make([]ma.Multiaddr, len(evt.Current))
+		for i, update := range evt.Current {
+			maddrs[i] = update.Address
+		}
+		a.state.populateAddrs(maddrs)
+	}
+	a.stateLk.Unlock()
+
+	return nil
 }

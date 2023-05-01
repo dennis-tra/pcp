@@ -145,6 +145,10 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 		return nil, fmt.Errorf("new libp2p host: %w", err)
 	}
 
+	if c.Bool("debug") {
+		go node.debugLogEvents()
+	}
+
 	log.Debugln("Initialized libp2p host:", node.ID().String())
 
 	return node, node.ServiceStarted()

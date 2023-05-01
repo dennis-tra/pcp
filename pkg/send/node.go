@@ -171,6 +171,8 @@ func (n *Node) watchAdvertiseErrors() {
 // autoRelayPeerSource is a function that queries the DHT for a random peer ID with CPL 0.
 // The found peers are used as candidates for circuit relay v2 peers.
 func (n *Node) autoRelayPeerSource(ctx context.Context, num int) <-chan peer.AddrInfo {
+	log.Debugln("Looking for auto relay peers...")
+
 	out := make(chan peer.AddrInfo)
 
 	go func() {
@@ -200,12 +202,15 @@ func (n *Node) autoRelayPeerSource(ctx context.Context, num int) <-chan peer.Add
 				continue
 			}
 
+			log.Debugln("Found auto relay peer:", p.String()[:16])
 			select {
 			case out <- peer.AddrInfo{ID: p, Addrs: addrs}:
 			case <-ctx.Done():
 				return
 			}
 		}
+
+		log.Debugln("Looking for auto relay peers... Done!")
 	}()
 
 	return out
@@ -236,8 +241,8 @@ func (n *Node) HandleSuccessfulKeyExchange(peerID peer.ID) {
 	err := n.WaitForDirectConn(peerID)
 	if err != nil {
 		n.statusLogger.Shutdown()
-		n.Shutdown()
 		log.Infoln("Hole punching failed:", err)
+		n.Shutdown()
 		return
 	}
 	n.statusLogger.Shutdown()
