@@ -3,6 +3,8 @@ package log
 import (
 	"bytes"
 	"io"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
@@ -10,9 +12,7 @@ import (
 // ESC is the ASCII code for escape character
 const ESC = 27
 
-// ASCII_END_COLOR_CODE is the last character in an ASCII escape code that
-// changes the color
-const ASCII_END_COLOR_CODE = 'm'
+var AnsiEscapeCharRegex = regexp.MustCompile(`[\x1b\x9b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]`)
 
 // RefreshInterval is the default refresh interval to update the ui
 var RefreshInterval = time.Millisecond
@@ -69,33 +69,13 @@ func (w *UILiveWriter) Flush() error {
 	}
 	w.clearLines()
 
-	var (
-		lines      int
-		lineLength int
-		escaping   bool
-	)
-
-	output := w.buf.Bytes()
-	outputLen := len(output)
-	for i, b := range output {
-		if b == '\n' {
-			lines++
-			lineLength = 0
-		} else if b == ESC && i < outputLen-1 && output[i+1] >= 0x40 && output[i+1] <= 0x5F {
-			escaping = true
-		} else if escaping && b == ASCII_END_COLOR_CODE {
-			escaping = false
-		}
-
-		if !escaping {
-			lineLength += 1
-		}
-		if overFlowHandled && lineLength > termWidth {
-			lines++
-			lineLength = 0
-		}
+	w.lineCount = 0
+	cleaned := AnsiEscapeCharRegex.ReplaceAllString(string(w.buf.Bytes()), "")
+	lines := strings.Split(cleaned, "\n")
+	for _, line := range lines {
+		w.lineCount += 1 + len(line)/termWidth
 	}
-	w.lineCount = lines
+	w.lineCount -= 1
 
 	_, err := w.Out.Write(w.buf.Bytes())
 	w.buf.Reset()

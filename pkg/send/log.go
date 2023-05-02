@@ -185,18 +185,26 @@ func (l *logStatus) dhtStateStr() string {
 	case dht.StageBootstrapping:
 		return l.spinnerChar + "(bootstrapping)"
 	case dht.StageAnalyzingNetwork:
-		if l.relayFinderActive {
+		if l.relayFinderActive && len(l.dhtState.RelayAddrs) == 0 {
 			return l.spinnerChar + "(finding signaling peers)"
 		} else {
 			return l.spinnerChar + "(analyzing network)"
 		}
 	case dht.StageProviding:
-		return l.spinnerChar + "(writing to DHT)"
+		if (l.dhtState.NATTypeTCP != network.NATDeviceTypeCone && l.dhtState.NATTypeUDP == network.NATDeviceTypeSymmetric) ||
+			(l.dhtState.NATTypeUDP != network.NATDeviceTypeCone && l.dhtState.NATTypeTCP == network.NATDeviceTypeSymmetric) {
+			return l.spinnerChar + log.Yellow("(writing to DHT)")
+		} else {
+			return l.spinnerChar + "(writing to DHT)"
+		}
 	case dht.StageRetrying:
 		return l.spinnerChar + log.Yellow("(retry writing to DHT)")
 	case dht.StageProvided:
 		if l.dhtState.Reachability == network.ReachabilityPrivate && len(l.dhtState.RelayAddrs) == 0 {
 			return l.spinnerChar + log.Yellow("(no signaling reservations)")
+		} else if (l.dhtState.NATTypeTCP != network.NATDeviceTypeCone && l.dhtState.NATTypeUDP == network.NATDeviceTypeSymmetric) ||
+			(l.dhtState.NATTypeUDP != network.NATDeviceTypeCone && l.dhtState.NATTypeTCP == network.NATDeviceTypeSymmetric) {
+			return log.Yellow("ready (symmetric NAT)")
 		} else {
 			return log.Green("ready")
 		}
@@ -246,9 +254,9 @@ func (l *logStatus) natStr(deviceType network.NATDeviceType) string {
 			return l.spinnerChar
 		}
 	case network.NATDeviceTypeCone:
-		return log.Green(strings.ToLower(l.dhtState.NATTypeUDP.String()))
+		return log.Green(strings.ToLower(deviceType.String()))
 	case network.NATDeviceTypeSymmetric:
-		return log.Red(strings.ToLower(l.dhtState.NATTypeUDP.String()))
+		return log.Red(strings.ToLower(deviceType.String()))
 	default:
 		return log.Red(fmt.Sprintf("unknown: %s", deviceType))
 	}
