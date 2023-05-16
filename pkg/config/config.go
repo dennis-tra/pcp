@@ -13,18 +13,53 @@ import (
 )
 
 const (
-	Prefix     = "pcp"
-	ContextKey = "config"
+	Prefix = "pcp"
 )
-
-// settingsFile contains the path suffix that's appended to
-// an XDG compliant directory to find the settings file.
-var settingsFile = filepath.Join(Prefix, "settings.json")
 
 var (
 	appIoutil wrap.Ioutiler = wrap.Ioutil{}
 	appXdg    wrap.Xdger    = wrap.Xdg{}
+
+	// relFilePath contains the path suffix that's appended to
+	// an XDG compliant directory to find the settings file.
+	relFilePath = filepath.Join(Prefix, "config.yaml")
 )
+
+type GlobalConfig struct {
+	LogFile        string
+	LogLevel       int
+	LogAppend      bool
+	DHT            bool
+	MDNS           bool
+	Homebrew       bool
+	TelemetryHost  string
+	TelemetryPort  int
+	ConfigFile     string
+	BootstrapPeers cli.StringSlice
+}
+
+func (c GlobalConfig) String() string {
+	return fmt.Sprintf(
+		"LogFile=%s LogLevel=%d LogAppend=%v DHT=%v MDNS=%v Homebrew=%v TelemetryHost=%s TelemetryPort=%d ConfigFile=%s",
+		c.LogFile, c.LogLevel, c.LogAppend, c.DHT, c.MDNS, c.Homebrew, c.TelemetryHost, c.TelemetryPort, c.ConfigFile,
+	)
+}
+
+var Global = GlobalConfig{}
+
+func DefaultPath() (string, error) {
+	return appXdg.ConfigFile(relFilePath)
+}
+
+type SendConfig struct {
+	WordCount int
+}
+
+func (c SendConfig) String() string {
+	return fmt.Sprintf("WordCount=%d", c.WordCount)
+}
+
+var Send = SendConfig{}
 
 // Config contains general user settings and peer identity
 // information. The configuration is split, so the identity
@@ -63,21 +98,8 @@ func FillContext(c *cli.Context) (*cli.Context, error) {
 	if err != nil {
 		return c, err
 	}
-	c.Context = context.WithValue(c.Context, ContextKey, conf)
+	c.Context = context.WithValue(c.Context, "ContextKey", conf)
 	return c, nil
-}
-
-func FromContext(ctx context.Context) (*Config, error) {
-	obj := ctx.Value(ContextKey)
-	if obj == nil {
-		return nil, fmt.Errorf("config not found in context")
-	}
-	config, ok := obj.(*Config)
-	if !ok {
-		return nil, fmt.Errorf("config not found in context")
-	}
-
-	return config, nil
 }
 
 func save(relPath string, obj interface{}, perm os.FileMode) error {

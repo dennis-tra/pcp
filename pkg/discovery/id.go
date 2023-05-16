@@ -12,7 +12,7 @@ import (
 
 var (
 	// TruncateDuration represents the time slot to which the current time is truncated.
-	TruncateDuration = 5 * time.Minute
+	TruncateDuration = 1 * time.Minute
 
 	// wraptime wraps the time package for testing
 	wraptime wrap.Timer = wrap.Time{}
@@ -20,6 +20,10 @@ var (
 
 type ID struct {
 	offset time.Duration
+}
+
+func NewID(offset time.Duration) *ID {
+	return &ID{offset: offset}
 }
 
 // TimeSlotStart returns the time when the current time slot started.

@@ -54,7 +54,7 @@ func TestLoadSettings_returnsErrorOfReadFile(t *testing.T) {
 
 	mxdg.
 		EXPECT().
-		ConfigFile(gomock.Eq(settingsFile)).
+		ConfigFile(gomock.Eq(relFilePath)).
 		Return("path", nil)
 
 	expectedErr := fmt.Errorf("some error")
@@ -80,7 +80,7 @@ func TestLoadSettings_returnsErrorOnUnparsableData(t *testing.T) {
 
 	mxdg.
 		EXPECT().
-		ConfigFile(gomock.Eq(settingsFile)).
+		ConfigFile(gomock.Eq(relFilePath)).
 		Return("path", nil)
 
 	data := []byte(`unparsable`)
@@ -106,7 +106,7 @@ func TestLoadSettings_returnsEmptySettingsIfFileDoesNotExist(t *testing.T) {
 
 	mxdg.
 		EXPECT().
-		ConfigFile(gomock.Eq(settingsFile)).
+		ConfigFile(gomock.Eq(relFilePath)).
 		Return("path", nil)
 
 	mioutil.
@@ -132,7 +132,7 @@ func TestLoadSettings_happyPath(t *testing.T) {
 
 	mxdg.
 		EXPECT().
-		ConfigFile(gomock.Eq(settingsFile)).
+		ConfigFile(gomock.Eq(relFilePath)).
 		Return("path", nil)
 
 	data := []byte(`{}`)

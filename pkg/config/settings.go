@@ -11,7 +11,7 @@ type Settings struct {
 }
 
 func LoadSettings() (*Settings, error) {
-	path, err := appXdg.ConfigFile(settingsFile)
+	path, err := appXdg.ConfigFile(relFilePath)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +32,7 @@ func LoadSettings() (*Settings, error) {
 }
 
 func (s *Settings) Save() error {
-	err := save(settingsFile, s, 0o744)
+	err := save(relFilePath, s, 0o744)
 	if err == nil {
 		s.Exists = true
 	}

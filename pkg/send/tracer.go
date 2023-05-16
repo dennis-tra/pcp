@@ -1,44 +1,39 @@
 package send
 
 import (
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 )
 
-func (n *Node) RelayFinderStatus(isActive bool) {
-	n.relayFinderActiveLk.Lock()
-	n.relayFinderActive = isActive
-	n.relayFinderActiveLk.Unlock()
+type relayFinderStatus struct {
+	isActive bool
 }
 
-func (n *Node) ReservationEnded(cnt int) {
+func (s *Model) RelayFinderStatus(isActive bool) {
+	s.rfsEmitter.Emit(relayFinderStatus{isActive: isActive})
 }
 
-func (n *Node) ReservationOpened(cnt int) {
-}
+func (s *Model) ReservationEnded(cnt int) {}
 
-func (n *Node) ReservationRequestFinished(isRefresh bool, err error) {
-}
+func (s *Model) ReservationOpened(cnt int) {}
 
-func (n *Node) RelayAddressCount(i int) {
-}
+func (s *Model) ReservationRequestFinished(isRefresh bool, err error) {}
 
-func (n *Node) RelayAddressUpdated() {
-}
+func (s *Model) RelayAddressCount(i int) {}
 
-func (n *Node) CandidateChecked(supportsCircuitV2 bool) {
-}
+func (s *Model) RelayAddressUpdated() {}
 
-func (n *Node) CandidateAdded(cnt int) {
-}
+func (s *Model) CandidateChecked(supportsCircuitV2 bool) {}
 
-func (n *Node) CandidateRemoved(cnt int) {
-}
+func (s *Model) CandidateAdded(cnt int) {}
 
-func (n *Node) CandidateLoopState(state autorelay.CandidateLoopState) {
-}
+func (s *Model) CandidateRemoved(cnt int) {}
 
-func (n *Node) ScheduledWorkUpdated(scheduledWork *autorelay.ScheduledWorkTimes) {
-}
+func (s *Model) CandidateLoopState(state autorelay.CandidateLoopState) {}
 
-func (n *Node) DesiredReservations(i int) {
+func (s *Model) ScheduledWorkUpdated(scheduledWork *autorelay.ScheduledWorkTimes) {}
+
+func (s *Model) DesiredReservations(i int) {}
+
+func (s *Model) HandleSuccessfulKeyExchange(peerID peer.ID) {
 }
