@@ -184,6 +184,7 @@ func beforeFunc(cCtx *cli.Context) error {
 		if err != nil {
 			return fmt.Errorf("open log file at %s: %w", config.Global.LogFile, err)
 		}
+
 		log.SetOutput(logFile)
 	}
 
@@ -237,15 +238,15 @@ func getVersion() string {
 }
 
 func getBootstrapPeerMaddrStrings() []string {
-	var bpMaddrs []string
+	var maddrs []string
 	for _, bp := range kaddht.GetDefaultBootstrapPeerAddrInfos() {
 		for _, maddr := range bp.Addrs {
 			comp, err := ma.NewComponent(ma.ProtocolWithCode(ma.P_P2P).Name, bp.ID.String())
 			if err != nil {
 				panic(err)
 			}
-			bpMaddrs = append(bpMaddrs, maddr.Encapsulate(comp).String())
+			maddrs = append(maddrs, maddr.Encapsulate(comp).String())
 		}
 	}
-	return bpMaddrs
+	return maddrs
 }

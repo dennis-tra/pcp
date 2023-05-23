@@ -61,12 +61,13 @@ func Action(cCtx *cli.Context) error {
 		return fmt.Errorf("new send state: %w", err)
 	}
 
-	teaFilter := tea.WithFilter(func(m tea.Model, msg tea.Msg) tea.Msg {
+	filter := tea.WithFilter(func(m tea.Model, msg tea.Msg) tea.Msg {
 		log.Tracef("tea filter: %T\n", msg)
 		return msg
 	})
 
-	p := tea.NewProgram(state, tea.WithoutSignalHandler(), teaFilter)
+	p := tea.NewProgram(state, tea.WithoutSignalHandler(), filter)
+
 	_, err = p.Run()
 	return err
 }

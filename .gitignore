@@ -17,6 +17,7 @@ out/**
 
 .idea
 pcp
+!cmd/pcp
 
 dist
 
