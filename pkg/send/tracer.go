@@ -10,7 +10,7 @@ type relayFinderStatus struct {
 }
 
 func (s *Model) RelayFinderStatus(isActive bool) {
-	s.rfsEmitter.Emit(relayFinderStatus{isActive: isActive})
+	s.program.Send(relayFinderStatus{isActive: isActive})
 }
 
 func (s *Model) ReservationEnded(cnt int) {}

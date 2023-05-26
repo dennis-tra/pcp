@@ -56,18 +56,22 @@ the file transfer the transmission is started.
 // Action contains the logic for the `send` subcommand of the pcp program. It is
 // mainly responsible for input parsing and service initialisation.
 func Action(cCtx *cli.Context) error {
-	state, err := send.NewState(cCtx.Context, cCtx.Args().First())
+	program := tea.NewProgram(
+		tea.WithoutSignalHandler(),
+		tea.WithFilter(filterFn),
+	)
+
+	state, err := send.NewState(cCtx.Context, program, cCtx.Args().First())
 	if err != nil {
 		return fmt.Errorf("new send state: %w", err)
 	}
 
-	filter := tea.WithFilter(func(m tea.Model, msg tea.Msg) tea.Msg {
-		log.Tracef("tea filter: %T\n", msg)
-		return msg
-	})
+	_, err = program.Run(state)
 
-	p := tea.NewProgram(state, tea.WithoutSignalHandler(), filter)
-
-	_, err = p.Run()
 	return err
+}
+
+func filterFn(m tea.Model, msg tea.Msg) tea.Msg {
+	log.Tracef("tea filter: %T\n", msg)
+	return msg
 }

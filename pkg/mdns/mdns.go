@@ -17,7 +17,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/dennis-tra/pcp/pkg/discovery"
-	"github.com/dennis-tra/pcp/pkg/events"
 )
 
 var log = logrus.WithField("comp", "mdns")
@@ -51,7 +50,7 @@ func (s State) String() string {
 type MDNS struct {
 	host.Host
 	ctx      context.Context
-	emitter  *events.Emitter[PeerMsg]
+	program  *tea.Program
 	chanID   int
 	services map[time.Duration]mdns.Service
 	spinner  spinner.Model
@@ -65,10 +64,11 @@ type (
 	updateMsg struct{ offset time.Duration }
 )
 
-func New(ctx context.Context, h host.Host) *MDNS {
+func New(ctx context.Context, h host.Host, program *tea.Program) *MDNS {
 	m := &MDNS{
 		Host:    h,
 		ctx:     ctx,
+		program: program,
 		spinner: spinner.New(spinner.WithSpinner(spinner.Dot)),
 	}
 
@@ -115,7 +115,6 @@ func (m *MDNS) Start(chanID int, offsets ...time.Duration) (*MDNS, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	m.chanID = chanID
-	m.emitter = events.NewEmitter[PeerMsg]()
 	m.Err = nil
 
 	for _, offset := range offsets {
@@ -135,7 +134,7 @@ func (m *MDNS) Start(chanID int, offsets ...time.Duration) (*MDNS, tea.Cmd) {
 		cmds = append(cmds, m.wait(offset))
 	}
 
-	return m, tea.Batch(append(cmds, m.emitter.Subscribe)...)
+	return m, tea.Batch(cmds...)
 }
 
 func (m *MDNS) Stop() tea.Cmd {
@@ -145,7 +144,7 @@ func (m *MDNS) Stop() tea.Cmd {
 }
 
 func (m *MDNS) Update(msg tea.Msg) (*MDNS, tea.Cmd) {
-	log.WithField("type", fmt.Sprintf("%T", msg)).Tracef("handle message: %T\n", msg)
+	m.logEntry().WithField("type", fmt.Sprintf("%T", msg)).Tracef("handle message: %T\n", msg)
 
 	var (
 		cmd  tea.Cmd
@@ -232,12 +231,7 @@ func (m *MDNS) reset() {
 		}
 	}
 
-	if m.emitter != nil {
-		m.emitter.Close()
-	}
-
 	m.chanID = -1
-	m.emitter = nil
 	m.services = map[time.Duration]mdns.Service{}
 	m.State = StateIdle
 	m.Err = nil
@@ -277,7 +271,7 @@ func (m *MDNS) HandlePeerFound(pi peer.AddrInfo) {
 	}
 
 	logEntry.Infoln("Found peer via mDNS!")
-	m.emitter.Emit(PeerMsg(pi))
+	m.program.Send(PeerMsg(pi))
 }
 
 // Filter out addresses that are public - only allow private ones.

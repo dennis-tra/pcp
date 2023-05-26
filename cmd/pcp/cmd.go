@@ -9,10 +9,8 @@ import (
 	"runtime/debug"
 	"strconv"
 
-	ma "github.com/multiformats/go-multiaddr"
-
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
-
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"

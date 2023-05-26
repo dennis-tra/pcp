@@ -24,7 +24,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/dennis-tra/pcp/pkg/dht"
-	"github.com/dennis-tra/pcp/pkg/events"
 	"github.com/dennis-tra/pcp/pkg/mdns"
 	"github.com/dennis-tra/pcp/pkg/words"
 )
@@ -34,16 +33,16 @@ var log = logrus.WithField("comp", "host")
 // Host encapsulates the logic that's common for the receiving
 // and sending side of the file transfer.
 type Host struct {
-	ctx context.Context
-
 	host.Host
-
-	verbose bool
 
 	// give host protocol capabilities
 	*PakeProtocol
 	//*PushProtocol
 	//*TransferProtocol
+
+	ctx     context.Context
+	program *tea.Program
+	Verbose bool
 
 	// keeps track of hole punching states of particular peers.
 	// The hpAllowList is populated by the receiving side of
@@ -72,30 +71,18 @@ type Host struct {
 	PrivateAddrs []ma.Multiaddr
 	RelayAddrs   []ma.Multiaddr
 
+	connections int
+
 	ChanID int
 	Words  []string
-
-	hpEmitter   *events.Emitter[*holepunch.Event]
-	connEmitter *events.Emitter[network.Conn]
-	ebSub       events.Subscription[interface{}]
+	evtSub event.Subscription
 }
 
-type Option func()
-
 // New creates a new, fully initialized host with the given options.
-func New(ctx context.Context, wrds []string, opts ...libp2p.Option) (*Host, error) {
+func New(ctx context.Context, program *tea.Program, wrds []string, opts ...libp2p.Option) (*Host, error) {
 	ints, err := words.ToInts(wrds)
 	if err != nil {
 		return nil, fmt.Errorf("words to ints: %w", err)
-	}
-
-	pcpHost := &Host{
-		ctx: ctx,
-		// hpStates:    map[peer.ID]*HolePunchState{},
-		Words:       wrds,
-		ChanID:      ints[0],
-		hpEmitter:   events.NewEmitter[*holepunch.Event](),
-		connEmitter: events.NewEmitter[network.Conn](),
 	}
 
 	// Configure the resource manager to not limit anything
@@ -105,66 +92,71 @@ func New(ctx context.Context, wrds []string, opts ...libp2p.Option) (*Host, erro
 		return nil, fmt.Errorf("new resource manager: %w", err)
 	}
 
+	var (
+		ipfsDHT *kaddht.IpfsDHT
+		nat     basichost.NATManager
+	)
 	opts = append(opts,
 		// libp2p.UserAgent("pcp/"+c.App.Version),
 		libp2p.ResourceManager(rm),
+		libp2p.EnableHolePunching(holepunch.WithTracer(&holePunchTracer{program: program})),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
-			pcpHost.IpfsDHT, err = kaddht.New(ctx, h, kaddht.EnableOptimisticProvide())
-			return pcpHost.IpfsDHT, err
+			ipfsDHT, err = kaddht.New(ctx, h, kaddht.EnableOptimisticProvide())
+			return ipfsDHT, err
 		}),
-		libp2p.EnableHolePunching(holepunch.WithTracer(pcpHost)),
 		libp2p.NATManager(func(network network.Network) basichost.NATManager {
-			pcpHost.NATManager = basichost.NewNATManager(network)
-			return pcpHost.NATManager
+			nat = basichost.NewNATManager(network)
+			return nat
 		}),
 	)
 
-	pcpHost.Host, err = libp2p.New(opts...)
+	h, err := libp2p.New(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("new libp2p host: %w", err)
 	}
 
-	pcpHost.PakeProtocol = NewPakeProtocol(ctx, pcpHost.Host, wrds)
-	// host.PushProtocol = NewPushProtocol(host)
-	// host.TransferProtocol = NewTransferProtocol(host)
-
-	pcpHost.Network().Notify(&network.NotifyBundle{
-		ConnectedF: func(net network.Network, conn network.Conn) {
-			pcpHost.connEmitter.Emit(conn)
-		},
-	})
-
-	evtTypes := []interface{}{
+	evtSub, err := h.EventBus().Subscribe([]interface{}{
 		new(event.EvtLocalAddressesUpdated),
 		new(event.EvtNATDeviceTypeChanged),
 		new(event.EvtLocalReachabilityChanged),
-	}
-
-	sub, err := pcpHost.EventBus().Subscribe(evtTypes)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("event bus subscription: %w", err)
 	}
-	pcpHost.ebSub = events.NewSubscription(sub.Out())
 
-	log.WithField("peerID", pcpHost.ID().String()).Infoln("Initialized libp2p host")
+	log.WithField("peerID", h.ID().String()).Infoln("Initialized libp2p host")
+
+	pcpHost := &Host{
+		ctx:          ctx,
+		Host:         h,
+		IpfsDHT:      ipfsDHT,
+		program:      program,
+		Words:        wrds,
+		ChanID:       ints[0],
+		MDNS:         mdns.New(ctx, h, program),
+		DHT:          dht.New(ctx, h, ipfsDHT),
+		evtSub:       evtSub,
+		NATManager:   nat,
+		PakeProtocol: NewPakeProtocol(ctx, h, program, wrds),
+		// PushProtocol: NewPushProtocol(host)
+		// TransferProtocol: NewTransferProtocol(host)
+	}
+
+	pcpHost.Network().Notify(pcpHost)
 
 	// Extract addresses from host AFTER we have subscribed to the address
 	// change events. Otherwise, there could have been a race condition.
 	pcpHost.populateAddrs(pcpHost.Addrs())
 
-	pcpHost.MDNS = mdns.New(ctx, pcpHost)
-	pcpHost.DHT = dht.New(ctx, pcpHost, pcpHost.IpfsDHT)
-
 	return pcpHost, nil
 }
 
 func (h *Host) Init() tea.Cmd {
+	h.RegisterKeyExchangeHandler()
+
 	return tea.Batch(
 		h.watchSignals,
-		h.ebSub.Subscribe,
-		h.hpEmitter.Subscribe,
-		h.connEmitter.Subscribe,
-		h.RegisterKeyExchangeHandler(),
+		h.watchEvents,
 		h.MDNS.Init(),
 		h.DHT.Init(),
 	)
@@ -176,11 +168,14 @@ func Shutdown() tea.Msg {
 	return ShutdownMsg{}
 }
 
-func (h *Host) Update(msg tea.Msg) (*Host, tea.Cmd) {
-	log.WithFields(logrus.Fields{
+func (h *Host) logEntry() *logrus.Entry {
+	return log.WithFields(logrus.Fields{
 		"comp": "host",
-		"type": fmt.Sprintf("%T", msg),
-	}).Tracef("handle message: %T\n", msg)
+	})
+}
+
+func (h *Host) Update(msg tea.Msg) (*Host, tea.Cmd) {
+	h.logEntry().WithField("type", fmt.Sprintf("%T", msg)).Tracef("handle message: %T\n", msg)
 
 	var (
 		cmd  tea.Cmd
@@ -188,41 +183,25 @@ func (h *Host) Update(msg tea.Msg) (*Host, tea.Cmd) {
 	)
 
 	switch msg := msg.(type) {
+	case connectedMsg:
+		h.connections += 1
+	case disconnectedMsg:
+		h.connections -= 1
 	case tea.KeyMsg:
-		log.Infoln(msg.Type.String())
-		switch msg.String() {
-		case "v":
-			h.verbose = !h.verbose
-		case "ctrl+c":
-			return h, Shutdown
-		}
-
-	case events.Msg[*holepunch.Event]:
-		cmds = append(cmds, msg.Listen)
-	case events.Msg[network.Conn]:
-		cmds = append(cmds, msg.Listen)
-	case events.Msg[interface{}]:
-		switch evt := msg.Value.(type) {
-		case event.EvtLocalAddressesUpdated:
-			maddrs := make([]ma.Multiaddr, len(evt.Current))
-			for i, update := range evt.Current {
-				maddrs[i] = update.Address
-			}
-			h.populateAddrs(maddrs)
-			cmds = append(cmds, msg.Listen)
-		case event.EvtNATDeviceTypeChanged:
-			switch evt.TransportProtocol {
-			case network.NATTransportUDP:
-				h.NATTypeUDP = evt.NatDeviceType
-			case network.NATTransportTCP:
-				h.NATTypeTCP = evt.NatDeviceType
-			}
-			cmds = append(cmds, msg.Listen)
-		case event.EvtLocalReachabilityChanged:
-			h.Reachability = evt.Reachability
-			cmds = append(cmds, msg.Listen)
-		}
-		cmds = append(cmds, msg.Listen)
+		h, cmd = h.handleKeyMsg(msg)
+		cmds = append(cmds, cmd)
+	case *holepunch.Event:
+		h, cmd = h.handleHolePunchEvent(msg)
+		cmds = append(cmds, cmd)
+	case event.EvtLocalAddressesUpdated:
+		h, cmd = h.handleLocalAddressesUpdated(msg)
+		cmds = append(cmds, cmd)
+	case event.EvtNATDeviceTypeChanged:
+		h, cmd = h.handleNATDeviceTypeChanged(msg)
+		cmds = append(cmds, cmd)
+	case event.EvtLocalReachabilityChanged:
+		h, cmd = h.handleLocalReachabilityChanged(msg)
+		cmds = append(cmds, cmd)
 	}
 
 	h.MDNS, cmd = h.MDNS.Update(msg)
@@ -238,7 +217,7 @@ func (h *Host) Update(msg tea.Msg) (*Host, tea.Cmd) {
 }
 
 func (h *Host) View() string {
-	if !h.verbose {
+	if !h.Verbose {
 		return ""
 	}
 
@@ -246,6 +225,7 @@ func (h *Host) View() string {
 	out += fmt.Sprintf("DHT:           %s\n", h.DHT.State.String())
 	out += fmt.Sprintf("mDNS:          %s\n", h.MDNS.State.String())
 	out += fmt.Sprintf("Reachability:  %s\n", h.Reachability.String())
+	out += fmt.Sprintf("Connections:   %d\n", h.connections)
 	out += fmt.Sprintf("NAT (udp/tcp): %s / %s\n", h.NATTypeUDP.String(), h.NATTypeTCP.String())
 	out += fmt.Sprintf("Addresses:\n")
 	out += fmt.Sprintf("  Private:     %d\n", len(h.PrivateAddrs))
@@ -285,6 +265,16 @@ func (h *Host) watchSignals() tea.Msg {
 	}
 }
 
+func (h *Host) watchEvents() tea.Msg {
+	select {
+	case evt := <-h.evtSub.Out():
+		h.logEntry().Warnln("New Event!", evt)
+		return evt
+	case <-h.ctx.Done():
+		return nil
+	}
+}
+
 func (h *Host) IsDirectConnectivityPossible() (bool, error) {
 	if h.Reachability == network.ReachabilityPrivate && h.NATTypeUDP == network.NATDeviceTypeSymmetric && h.NATTypeTCP == network.NATDeviceTypeSymmetric {
 		return false, fmt.Errorf("private network with symmetric NAT")
@@ -318,11 +308,38 @@ func (h *Host) populateAddrs(addrs []ma.Multiaddr) {
 	}
 }
 
-func (h *Host) Trace(evt *holepunch.Event) {
-	h.hpEmitter.Emit(evt)
-}
-
 func isRelayedMaddr(maddr ma.Multiaddr) bool {
 	_, err := maddr.ValueForProtocol(ma.P_CIRCUIT)
 	return err == nil
+}
+
+type holePunchTracer struct {
+	program *tea.Program
+}
+
+func (h *holePunchTracer) Trace(evt *holepunch.Event) {
+	h.program.Send(evt)
+}
+
+type (
+	connectedMsg struct {
+		net  network.Network
+		conn network.Conn
+	}
+	disconnectedMsg struct {
+		net  network.Network
+		conn network.Conn
+	}
+)
+
+func (h *Host) Listen(n network.Network, multiaddr ma.Multiaddr) {}
+
+func (h *Host) ListenClose(n network.Network, multiaddr ma.Multiaddr) {}
+
+func (h *Host) Connected(n network.Network, conn network.Conn) {
+	h.program.Send(connectedMsg{net: n, conn: conn})
+}
+
+func (h *Host) Disconnected(n network.Network, conn network.Conn) {
+	h.program.Send(disconnectedMsg{net: n, conn: conn})
 }

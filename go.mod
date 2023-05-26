@@ -23,6 +23,7 @@ require (
 	github.com/stretchr/testify v1.8.2
 	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/urfave/cli/v2 v2.25.3
+	go4.org v0.0.0-20180809161055-417644f6feb5
 	golang.org/x/crypto v0.8.0
 	google.golang.org/protobuf v1.30.0
 )
@@ -146,4 +147,7 @@ require (
 	lukechampine.com/blake3 v1.1.7 // indirect
 )
 
-replace github.com/libp2p/go-libp2p v0.27.1 => github.com/dennis-tra/go-libp2p v0.0.0-20230512142639-41cfb265df11
+replace (
+	github.com/charmbracelet/bubbletea v0.24.0 => github.com/dennis-tra/bubbletea v0.0.0-20230524072925-b1f490a1851f
+	github.com/libp2p/go-libp2p v0.27.1 => github.com/dennis-tra/go-libp2p v0.0.0-20230512142639-41cfb265df11
+)

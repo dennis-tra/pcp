@@ -9,7 +9,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
 
-	"github.com/dennis-tra/pcp/pkg/events"
 	"github.com/dennis-tra/pcp/pkg/io"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
 )
@@ -21,22 +20,23 @@ const ProtocolPushRequest = "/pcp/push/0.0.1"
 // about the data that's about to be transmitted and asking for confirmation
 // to start the transfer
 type PushProtocol struct {
-	ctx           context.Context
-	host          *Host
-	onPushRequest events.Emitter[pushRequest]
+	ctx     context.Context
+	host    *Host
+	program *tea.Program
 }
 
-func NewPushProtocol(ctx context.Context, host *Host) PushProtocol {
+func NewPushProtocol(ctx context.Context, host *Host, program *tea.Program) PushProtocol {
 	return PushProtocol{
-		ctx:  ctx,
-		host: host,
+		ctx:     ctx,
+		host:    host,
+		program: program,
 	}
 }
 
 func (p *PushProtocol) RegisterPushRequestHandler() {
 	log.Debugln("Registering push request handler")
 	p.host.SetStreamHandler(ProtocolPushRequest, func(s network.Stream) {
-		p.onPushRequest.Emit(pakeOnKeyExchange(s))
+		p.program.Send(pakeOnKeyExchange(s))
 	})
 }
 
@@ -52,8 +52,8 @@ func (p *PushProtocol) Update(msg tea.Msg) (*PushProtocol, tea.Cmd) {
 	}).Tracef("handle message: %T\n", msg)
 
 	switch msg := msg.(type) {
-	case events.Msg[pushRequest]:
-		stream := msg.Value
+	case pushRequest:
+		stream := msg
 
 		// Only allow authenticated peers to talk to us
 		if !p.host.IsAuthenticated(stream.Conn().RemotePeer()) {

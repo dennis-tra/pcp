@@ -18,7 +18,6 @@ import (
 
 	"github.com/dennis-tra/pcp/pkg/config"
 	"github.com/dennis-tra/pcp/pkg/dht"
-	"github.com/dennis-tra/pcp/pkg/events"
 	pcphost "github.com/dennis-tra/pcp/pkg/host"
 	"github.com/dennis-tra/pcp/pkg/mdns"
 	"github.com/dennis-tra/pcp/pkg/words"
@@ -29,12 +28,12 @@ var log = logrus.WithField("comp", "send")
 type Model struct {
 	ctx               context.Context
 	host              *pcphost.Host
+	program           *tea.Program
 	filepath          string
-	rfsEmitter        *events.Emitter[relayFinderStatus]
 	relayFinderActive bool
 }
 
-func NewState(ctx context.Context, filepath string) (*Model, error) {
+func NewState(ctx context.Context, program *tea.Program, filepath string) (*Model, error) {
 	if !config.Global.DHT && !config.Global.MDNS {
 		return nil, fmt.Errorf("either the DHT or mDNS discovery mechanism need to be active")
 	}
@@ -59,9 +58,9 @@ func NewState(ctx context.Context, filepath string) (*Model, error) {
 
 	// Start the libp2p node
 	model := &Model{
-		ctx:        ctx,
-		filepath:   filepath,
-		rfsEmitter: events.NewEmitter[relayFinderStatus](),
+		ctx:      ctx,
+		filepath: filepath,
+		program:  program,
 	}
 
 	opt := libp2p.EnableAutoRelayWithPeerSource(
@@ -72,7 +71,7 @@ func NewState(ctx context.Context, filepath string) (*Model, error) {
 		autorelay.WithNumRelays(1),
 	)
 
-	model.host, err = pcphost.New(ctx, wrds, opt)
+	model.host, err = pcphost.New(ctx, program, wrds, opt)
 	if err != nil {
 		return nil, err
 	}
@@ -82,11 +81,7 @@ func NewState(ctx context.Context, filepath string) (*Model, error) {
 
 func (s *Model) Init() tea.Cmd {
 	log.Traceln("tea init")
-
-	return tea.Batch(
-		s.rfsEmitter.Subscribe,
-		s.host.Init(),
-	)
+	return s.host.Init()
 }
 
 func (s *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -101,12 +96,10 @@ func (s *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	switch msg := msg.(type) {
-	case events.Msg[relayFinderStatus]:
-		s.relayFinderActive = msg.Value.isActive
-	case events.Msg[dht.PeerMsg]:
-		cmds = append(cmds, msg.Listen)
-	case events.Msg[mdns.PeerMsg]:
-		cmds = append(cmds, msg.Listen)
+	case relayFinderStatus:
+		s.relayFinderActive = msg.isActive
+	case dht.PeerMsg:
+	case mdns.PeerMsg:
 	case syscall.Signal:
 		cmds = append(cmds, s.handleSignal(msg))
 	case tea.KeyMsg:
@@ -155,6 +148,14 @@ func (s *Model) View() string {
 	style := lipgloss.NewStyle().Bold(true)
 
 	out += s.host.View()
+
+	if s.host.Verbose {
+		relayFinderState := "inactive"
+		if s.relayFinderActive {
+			relayFinderState = "active"
+		}
+		out += fmt.Sprintf("Relay finder:  %s\n", relayFinderState)
+	}
 
 	internet := s.host.DHT.View()
 	if s.host.Reachability == network.ReachabilityPrivate && s.relayFinderActive && s.host.DHT.State == dht.StateBootstrapped {
