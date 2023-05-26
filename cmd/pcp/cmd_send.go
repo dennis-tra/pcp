@@ -16,7 +16,7 @@ var sendCmd = &cli.Command{
 	Name:    "send",
 	Usage:   "make the given file available to your peer",
 	Aliases: []string{"s"},
-	Action:  Action,
+	Action:  sendAction,
 	Flags: []cli.Flag{
 		&cli.IntFlag{
 			Name:        "w",
@@ -53,9 +53,9 @@ the file transfer the transmission is started.
 `,
 }
 
-// Action contains the logic for the `send` subcommand of the pcp program. It is
+// sendAction contains the logic for the `send` subcommand of the pcp program. It is
 // mainly responsible for input parsing and service initialisation.
-func Action(cCtx *cli.Context) error {
+func sendAction(cCtx *cli.Context) error {
 	program := tea.NewProgram(
 		tea.WithoutSignalHandler(),
 		tea.WithFilter(filterFn),
@@ -69,9 +69,4 @@ func Action(cCtx *cli.Context) error {
 	_, err = program.Run(state)
 
 	return err
-}
-
-func filterFn(m tea.Model, msg tea.Msg) tea.Msg {
-	log.Tracef("tea filter: %T\n", msg)
-	return msg
 }

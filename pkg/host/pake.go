@@ -91,13 +91,49 @@ func (p *PakeProtocol) Update(msg tea.Msg) (*PakeProtocol, tea.Cmd) {
 			case PakeStepError:
 			default:
 				log.Debugln("Rejecting key exchange request. Current step:", prevState.Step.String())
+				return p, nil
 			}
 		}
 
-		p.states[remotePeer].Step = PakeStepStart
+		p.states[remotePeer] = &PakeState{Step: PakeStepStart}
 		return p, p.exchangeKeys(msg)
+
 	}
+
 	return p, nil
+}
+
+func (p *PakeProtocol) PakeStateStr(peerID peer.ID) string {
+	s, ok := p.states[peerID]
+	if !ok {
+		return "no key exchange started"
+	}
+	switch s.Step {
+	case PakeStepStart:
+		return "key exchange started"
+	case PakeStepWaitingForKeyInformation:
+		return "waiting for key information"
+	case PakeStepCalculatingKeyInformation:
+		return "calculating key information"
+	case PakeStepSendingKeyInformation:
+		return "sending key information"
+	case PakeStepWaitingForFinalKeyInformation:
+		return "waiting for final key information"
+	case PakeStepExchangingSalt:
+		return "exchanging salt"
+	case PakeStepProvingAuthenticityToPeer:
+		return "proving authenticity"
+	case PakeStepVerifyingProofFromPeer:
+		return "verifying proof from peer"
+	case PakeStepWaitingForFinalConfirmation:
+		return "waiting for final confirmation"
+	case PakeStepPeerAuthenticated:
+		return "peer authenticated"
+	case PakeStepError:
+		return "auth failed: " + s.Err.Error()
+	default:
+		return "unknown key exchange state"
+	}
 }
 
 // IsAuthenticated checks if the given peer ID has successfully
@@ -247,6 +283,8 @@ func (p *PakeProtocol) exchangeKeys(s network.Stream) tea.Cmd {
 }
 
 func (p *PakeProtocol) StartKeyExchange(ctx context.Context, remotePeer peer.ID) tea.Cmd {
+	p.states[remotePeer] = &PakeState{Step: PakeStepStart}
+
 	return func() tea.Msg {
 		s, err := p.host.NewStream(ctx, remotePeer, ProtocolPake)
 		if err != nil {
@@ -257,8 +295,6 @@ func (p *PakeProtocol) StartKeyExchange(ctx context.Context, remotePeer peer.ID)
 		defer io.ResetOnShutdown(p.ctx, s)()
 
 		// Authenticating peer...
-		p.sendPakeMsg(remotePeer, PakeStepStart)
-
 		// initialize sender p ("0" indicates sender)
 		P, err := pake.InitCurve(p.pwKey, 0, "siec")
 		if err != nil {

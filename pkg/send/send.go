@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 	"syscall"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -79,12 +78,12 @@ func NewState(ctx context.Context, program *tea.Program, filepath string) (*Mode
 	return model, nil
 }
 
-func (s *Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	log.Traceln("tea init")
-	return s.host.Init()
+	return m.host.Init()
 }
 
-func (s *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	log.WithField("type", fmt.Sprintf("%T", msg)).Tracef("handle message: %T\n", msg)
 
 	var (
@@ -92,87 +91,91 @@ func (s *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds []tea.Cmd
 	)
 
-	s.host, cmd = s.host.Update(msg)
+	m.host, cmd = m.host.Update(msg)
 	cmds = append(cmds, cmd)
 
 	switch msg := msg.(type) {
 	case relayFinderStatus:
-		s.relayFinderActive = msg.isActive
+		m.relayFinderActive = msg.isActive
 	case dht.PeerMsg:
 	case mdns.PeerMsg:
 	case syscall.Signal:
-		cmds = append(cmds, s.handleSignal(msg))
+		cmds = append(cmds, m.handleSignal(msg))
 	case tea.KeyMsg:
-		cmds = append(cmds, s.handleKeyMsg(msg))
+		cmds = append(cmds, m.handleKeyMsg(msg))
 	case pcphost.ShutdownMsg:
-		return s, tea.Quit
+		return m, tea.Quit
 	}
 
-	switch s.host.MDNS.State {
+	switch m.host.MDNS.State {
 	case mdns.StateIdle:
-		if len(s.host.PrivateAddrs) > 0 {
-			s.host.MDNS, cmd = s.host.MDNS.Start(s.host.ChanID, time.Duration(0))
+		if config.Global.MDNS && len(m.host.PrivateAddrs) > 0 {
+			m.host.MDNS, cmd = m.host.MDNS.Start(0)
 			cmds = append(cmds, cmd)
 		}
 	}
 
-	switch s.host.DHT.State {
+	switch m.host.DHT.State {
 	case dht.StateIdle:
-		s.host.DHT, cmd = s.host.DHT.Bootstrap()
-		cmds = append(cmds, cmd)
+		if config.Global.DHT {
+			m.host.DHT, cmd = m.host.DHT.Bootstrap()
+			cmds = append(cmds, cmd)
+		}
 	case dht.StateBootstrapping:
 	case dht.StateBootstrapped:
-		possible, err := s.host.IsDirectConnectivityPossible()
+		possible, err := m.host.IsDirectConnectivityPossible()
 		if err != nil {
-			s.host.DHT, cmd = s.host.DHT.StopWithReason(err)
+			m.host.DHT, cmd = m.host.DHT.StopWithReason(err)
 			cmds = append(cmds, cmd)
 		} else if possible {
-			s.host.DHT, cmd = s.host.DHT.Advertise(s.host.ChanID, 0)
+			m.host.DHT, cmd = m.host.DHT.Advertise(0)
 			cmds = append(cmds, cmd)
 		}
 	}
 
 	//	// TODO: if dht + mdns are in error -> stop
 
-	return s, tea.Batch(cmds...)
+	return m, tea.Batch(cmds...)
 }
 
-func (s *Model) View() string {
+func (m *Model) View() string {
 	out := ""
 
-	code := strings.Join(s.host.Words, "-")
+	code := strings.Join(m.host.Words, "-")
 	out += fmt.Sprintf("Code is: %s\n", code)
 	out += fmt.Sprintf("On the other machine run:\n")
 	out += fmt.Sprintf("\tpcp receive %s\n", code)
 
 	style := lipgloss.NewStyle().Bold(true)
 
-	out += s.host.View()
+	out += m.host.View()
 
-	if s.host.Verbose {
+	if m.host.Verbose {
 		relayFinderState := "inactive"
-		if s.relayFinderActive {
+		if m.relayFinderActive {
 			relayFinderState = "active"
 		}
 		out += fmt.Sprintf("Relay finder:  %s\n", relayFinderState)
 	}
 
-	internet := s.host.DHT.View()
-	if s.host.Reachability == network.ReachabilityPrivate && s.relayFinderActive && s.host.DHT.State == dht.StateBootstrapped {
+	internet := m.host.DHT.View()
+	if m.host.Reachability == network.ReachabilityPrivate && m.relayFinderActive && m.host.DHT.State == dht.StateBootstrapped {
 		internet = "finding signaling peers"
 	}
 
-	out += fmt.Sprintf("%s %s\t %s %s\n", style.Render("Local Network:"), s.host.MDNS.View(), style.Render("Internet:"), internet)
+	out += fmt.Sprintf("%s %s\t %s %s\n", style.Render("Local Network:"), m.host.MDNS.View(), style.Render("Internet:"), internet)
+
+	out += m.host.ViewPeerStates()
 
 	return out
 }
 
-func (s *Model) handleSignal(sig syscall.Signal) tea.Cmd {
+func (m *Model) handleSignal(sig syscall.Signal) tea.Cmd {
 	log.WithField("sig", sig.String()).Infoln("received signal")
 	return tea.Quit
 }
 
-func (s *Model) handleKeyMsg(keyMsg tea.KeyMsg) tea.Cmd {
+func (m *Model) handleKeyMsg(keyMsg tea.KeyMsg) tea.Cmd {
 	switch keyMsg.Type {
 	}
 	return nil
@@ -192,7 +195,7 @@ func validateFile(filepath string) error {
 
 // autoRelayPeerSource is a function that queries the DHT for a random peer ID with CPL 0.
 // The found peers are used as candidates for circuit relay v2 peers.
-func (s *Model) autoRelayPeerSource(ctx context.Context, num int) <-chan peer.AddrInfo {
+func (m *Model) autoRelayPeerSource(ctx context.Context, num int) <-chan peer.AddrInfo {
 	log.Debugln("Looking for auto relay peers...")
 
 	out := make(chan peer.AddrInfo)
@@ -201,13 +204,13 @@ func (s *Model) autoRelayPeerSource(ctx context.Context, num int) <-chan peer.Ad
 		defer log.Debugln("Looking for auto relay peers... Done!")
 		defer close(out)
 
-		peerID, err := s.host.IpfsDHT.RoutingTable().GenRandPeerID(0)
+		peerID, err := m.host.IpfsDHT.RoutingTable().GenRandPeerID(0)
 		if err != nil {
 			log.Debugln("error generating random peer ID:", err.Error())
 			return
 		}
 
-		closestPeers, err := s.host.IpfsDHT.GetClosestPeers(ctx, peerID.String())
+		closestPeers, err := m.host.IpfsDHT.GetClosestPeers(ctx, peerID.String())
 		if err != nil {
 			return
 		}
@@ -220,7 +223,7 @@ func (s *Model) autoRelayPeerSource(ctx context.Context, num int) <-chan peer.Ad
 		for i := 0; i < maxLen; i++ {
 			p := closestPeers[i]
 
-			addrs := s.host.Peerstore().Addrs(p)
+			addrs := m.host.Peerstore().Addrs(p)
 			if len(addrs) == 0 {
 				continue
 			}

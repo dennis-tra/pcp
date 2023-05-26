@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/dennis-tra/pcp/pkg/config"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -45,11 +47,12 @@ type DHT struct {
 	Err   error
 }
 
-func New(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT) *DHT {
+func New(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, chanID int) *DHT {
 	return &DHT{
 		ctx:      ctx,
 		Host:     h,
 		dht:      dht,
+		chanID:   chanID,
 		services: map[time.Duration]context.CancelFunc{},
 		spinner:  spinner.New(spinner.WithSpinner(spinner.Dot)),
 		State:    StateIdle,
@@ -144,6 +147,10 @@ func (d *DHT) Update(msg tea.Msg) (*DHT, tea.Cmd) {
 }
 
 func (d *DHT) View() string {
+	if !config.Global.DHT {
+		return "-"
+	}
+
 	switch d.State {
 	case StateIdle:
 		style := lipgloss.NewStyle().Faint(true)

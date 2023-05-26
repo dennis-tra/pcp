@@ -61,6 +61,16 @@ func (c SendConfig) String() string {
 
 var Send = SendConfig{}
 
+type ReceiveConfig struct {
+	AutoAccept bool
+}
+
+func (c ReceiveConfig) String() string {
+	return fmt.Sprintf("AutoAccept=%v", c.AutoAccept)
+}
+
+var Receive = ReceiveConfig{}
+
 // Config contains general user settings and peer identity
 // information. The configuration is split, so the identity
 // information can easier be saved with more restrict

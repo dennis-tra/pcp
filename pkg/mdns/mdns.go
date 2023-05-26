@@ -64,10 +64,11 @@ type (
 	updateMsg struct{ offset time.Duration }
 )
 
-func New(ctx context.Context, h host.Host, program *tea.Program) *MDNS {
+func New(ctx context.Context, h host.Host, program *tea.Program, chanID int) *MDNS {
 	m := &MDNS{
 		Host:    h,
 		ctx:     ctx,
+		chanID:  chanID,
 		program: program,
 		spinner: spinner.New(spinner.WithSpinner(spinner.Dot)),
 	}
@@ -106,7 +107,7 @@ func (m *MDNS) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
-func (m *MDNS) Start(chanID int, offsets ...time.Duration) (*MDNS, tea.Cmd) {
+func (m *MDNS) Start(offsets ...time.Duration) (*MDNS, tea.Cmd) {
 	if m.State == StateStarted {
 		log.Fatal("mDNS service already running")
 		return m, nil
@@ -114,7 +115,6 @@ func (m *MDNS) Start(chanID int, offsets ...time.Duration) (*MDNS, tea.Cmd) {
 
 	var cmds []tea.Cmd
 
-	m.chanID = chanID
 	m.Err = nil
 
 	for _, offset := range offsets {

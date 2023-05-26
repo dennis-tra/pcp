@@ -70,10 +70,10 @@ type Host struct {
 	PublicAddrs  []ma.Multiaddr
 	PrivateAddrs []ma.Multiaddr
 	RelayAddrs   []ma.Multiaddr
+	PeerStates   map[peer.ID]PeerState
 
 	connections int
 
-	ChanID int
 	Words  []string
 	evtSub event.Subscription
 }
@@ -126,17 +126,18 @@ func New(ctx context.Context, program *tea.Program, wrds []string, opts ...libp2
 
 	log.WithField("peerID", h.ID().String()).Infoln("Initialized libp2p host")
 
+	chanID := ints[0]
 	pcpHost := &Host{
 		ctx:          ctx,
 		Host:         h,
 		IpfsDHT:      ipfsDHT,
 		program:      program,
 		Words:        wrds,
-		ChanID:       ints[0],
-		MDNS:         mdns.New(ctx, h, program),
-		DHT:          dht.New(ctx, h, ipfsDHT),
+		MDNS:         mdns.New(ctx, h, program, chanID),
+		DHT:          dht.New(ctx, h, ipfsDHT, chanID),
 		evtSub:       evtSub,
 		NATManager:   nat,
+		PeerStates:   map[peer.ID]PeerState{},
 		PakeProtocol: NewPakeProtocol(ctx, h, program, wrds),
 		// PushProtocol: NewPushProtocol(host)
 		// TransferProtocol: NewTransferProtocol(host)
@@ -187,6 +188,8 @@ func (h *Host) Update(msg tea.Msg) (*Host, tea.Cmd) {
 		h.connections += 1
 	case disconnectedMsg:
 		h.connections -= 1
+	case pakeOnKeyExchange:
+		h.PeerStates[msg.Conn().RemotePeer()] = PeerStateAuthenticating
 	case tea.KeyMsg:
 		h, cmd = h.handleKeyMsg(msg)
 		cmds = append(cmds, cmd)
@@ -222,6 +225,7 @@ func (h *Host) View() string {
 	}
 
 	out := ""
+	out += fmt.Sprintf("PeerID:        %s\n", h.ID())
 	out += fmt.Sprintf("DHT:           %s\n", h.DHT.State.String())
 	out += fmt.Sprintf("mDNS:          %s\n", h.MDNS.State.String())
 	out += fmt.Sprintf("Reachability:  %s\n", h.Reachability.String())
@@ -247,6 +251,11 @@ func (h *Host) View() string {
 	return out
 }
 
+func (h *Host) StartKeyExchange(ctx context.Context, remotePeer peer.ID) tea.Cmd {
+	h.PeerStates[remotePeer] = PeerStateAuthenticating
+	return h.PakeProtocol.StartKeyExchange(ctx, remotePeer)
+}
+
 func (h *Host) watchSignals() tea.Msg {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
@@ -268,7 +277,6 @@ func (h *Host) watchSignals() tea.Msg {
 func (h *Host) watchEvents() tea.Msg {
 	select {
 	case evt := <-h.evtSub.Out():
-		h.logEntry().Warnln("New Event!", evt)
 		return evt
 	case <-h.ctx.Done():
 		return nil

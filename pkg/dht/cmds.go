@@ -36,7 +36,7 @@ func (d *DHT) Bootstrap() (*DHT, tea.Cmd) {
 	}
 }
 
-func (d *DHT) Advertise(chanID int, offsets ...time.Duration) (*DHT, tea.Cmd) {
+func (d *DHT) Advertise(offsets ...time.Duration) (*DHT, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	if d.State == StateProviding || d.State == StateLookup {
@@ -44,7 +44,6 @@ func (d *DHT) Advertise(chanID int, offsets ...time.Duration) (*DHT, tea.Cmd) {
 		return d, nil
 	}
 
-	d.chanID = chanID
 	d.Err = nil
 
 	for _, offset := range offsets {
@@ -62,7 +61,7 @@ func (d *DHT) Advertise(chanID int, offsets ...time.Duration) (*DHT, tea.Cmd) {
 	return d, tea.Batch(cmds...)
 }
 
-func (d *DHT) Discover(chanID int, offsets ...time.Duration) (*DHT, tea.Cmd) {
+func (d *DHT) Discover(offsets ...time.Duration) (*DHT, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	if d.State == StateProviding || d.State == StateLookup {
@@ -70,7 +69,6 @@ func (d *DHT) Discover(chanID int, offsets ...time.Duration) (*DHT, tea.Cmd) {
 		return d, nil
 	}
 
-	d.chanID = chanID
 	d.Err = nil
 
 	for _, offset := range offsets {

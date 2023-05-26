@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 	"strconv"
 
+	tea "github.com/charmbracelet/bubbletea"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -49,8 +50,8 @@ func main() {
 		Usage:   "Peer Copy, a peer-to-peer data transfer tool.",
 		Version: version,
 		Commands: []*cli.Command{
-			//	receive.Command,
 			sendCmd,
+			receiveCmd,
 		},
 		Before: beforeFunc,
 		Flags: []cli.Flag{
@@ -190,6 +191,20 @@ func beforeFunc(cCtx *cli.Context) error {
 		go metricsListenAndServe(config.Global.TelemetryHost, config.Global.TelemetryPort)
 	}
 
+	if cCtx.IsSet("mdns") {
+		config.Global.MDNS = cCtx.Bool("mdns")
+		config.Global.DHT = false
+		if cCtx.IsSet("dht") {
+			config.Global.DHT = cCtx.Bool("dht")
+		}
+	} else if cCtx.IsSet("dht") {
+		config.Global.DHT = cCtx.Bool("dht")
+		config.Global.MDNS = false
+		if cCtx.IsSet("mdns") {
+			config.Global.MDNS = cCtx.Bool("mdns")
+		}
+	}
+
 	return nil
 }
 
@@ -247,4 +262,9 @@ func getBootstrapPeerMaddrStrings() []string {
 		}
 	}
 	return maddrs
+}
+
+func filterFn(m tea.Model, msg tea.Msg) tea.Msg {
+	log.Tracef("tea filter: %T\n", msg)
+	return msg
 }

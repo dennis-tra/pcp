@@ -1,0 +1,30 @@
+time="2023-05-26T22:49:17+02:00" level=debug msg="Validating given file: cmd.go" comp=send
+time="2023-05-26T22:49:17+02:00" level=info msg="Random words: bind-february-allow-wood" comp=send
+time="2023-05-26T22:49:17+02:00" level=info msg="Initialized libp2p host" comp=host peerID=12D3KooWDq3MDCvN5vPQCouVMpUCfbFx5UohwXbvqyDHh6ASUosE
+time="2023-05-26T22:49:17+02:00" level=info msg="Registering key exchange handler" comp=host
+time="2023-05-26T22:49:17+02:00" level=info msg="Starting mDNS service" chanID=-1 comp=mdns did=/pcp/1685134140000000000/-1 offset=0s state=StateIdle
+time="2023-05-26T22:49:17+02:00" level=debug msg="Watch OS signals" comp=host
+time="2023-05-26T22:49:17+02:00" level=warning msg="New Event! {true [{/ip4/127.0.0.1/tcp/49539 1} {/ip4/127.0.0.1/udp/52008/quic 1} {/ip4/127.0.0.1/udp/52008/quic-v1 1} {/ip4/127.0.0.1/udp/58229/quic-v1/webtransport/certhash/uEiBHBPB2dRykxa6IfhZdHjdzexrahMMRh0J_J55RuRUpIw/certhash/uEiAct0wSUcrrHH7X46eNqU0zinjL8ipqZkjJu2RHfJvWng 1} {/ip4/192.168.1.108/tcp/49539 1} {/ip4/192.168.1.108/udp/52008/quic 1} {/ip4/192.168.1.108/udp/52008/quic-v1 1} {/ip4/192.168.1.108/udp/58229/quic-v1/webtransport/certhash/uEiBHBPB2dRykxa6IfhZdHjdzexrahMMRh0J_J55RuRUpIw/certhash/uEiAct0wSUcrrHH7X46eNqU0zinjL8ipqZkjJu2RHfJvWng 1} {/ip6/::1/tcp/49542 1} {/ip6/::1/udp/61968/quic-v1/webtransport/certhash/uEiBHBPB2dRykxa6IfhZdHjdzexrahMMRh0J_J55RuRUpIw/certhash/uEiAct0wSUcrrHH7X46eNqU0zinjL8ipqZkjJu2RHfJvWng 1} {/ip6/::1/udp/64076/quic 1} {/ip6/::1/udp/64076/quic-v1 1}] [] 0x14000208480}" comp=host
+time="2023-05-26T22:49:17+02:00" level=info msg="Local addresses updated" comp=host count=12 diff=true
+time="2023-05-26T22:49:25+02:00" level=debug msg="\tprivate - /ip6/::1/udp/50432/quic\n" comp=mdns
+time="2023-05-26T22:49:25+02:00" level=debug msg="\tprivate - /ip6/::1/udp/50432/quic-v1\n" comp=mdns
+time="2023-05-26T22:49:25+02:00" level=debug msg="\tprivate - /ip6/::1/udp/55676/quic-v1/webtransport/certhash/uEiDwTMsk4H0zIDC8kqdqFYVvk4enn-Y0P5BvTmLbHs8a1g/certhash/uEiDcKfOy_0qFZS7Vs9b9RBBqJwmYd88BWAXJKh3ncwVjlQ\n" comp=mdns
+time="2023-05-26T22:49:25+02:00" level=debug msg="\tprivate - /ip4/127.0.0.1/tcp/49555\n" comp=mdns
+time="2023-05-26T22:49:25+02:00" level=debug msg="\tprivate - /ip4/192.168.1.108/tcp/49555\n" comp=mdns
+time="2023-05-26T22:49:25+02:00" level=debug msg="\tprivate - /ip4/192.168.255.6/tcp/49555\n" comp=mdns
+time="2023-05-26T22:49:25+02:00" level=debug msg="\tprivate - /ip6/::1/tcp/49558\n" comp=mdns
+time="2023-05-26T22:49:25+02:00" level=debug msg="\tprivate - /ip4/127.0.0.1/udp/63305/quic-v1\n" comp=mdns
+time="2023-05-26T22:49:25+02:00" level=debug msg="\tprivate - /ip4/192.168.1.108/udp/63305/quic-v1\n" comp=mdns
+time="2023-05-26T22:49:25+02:00" level=debug msg="\tprivate - /ip4/192.168.255.6/udp/63305/quic-v1\n" comp=mdns
+time="2023-05-26T22:49:25+02:00" level=debug msg="\tprivate - /ip4/127.0.0.1/udp/57684/quic-v1/webtransport/certhash/uEiDwTMsk4H0zIDC8kqdqFYVvk4enn-Y0P5BvTmLbHs8a1g/certhash/uEiDcKfOy_0qFZS7Vs9b9RBBqJwmYd88BWAXJKh3ncwVjlQ\n" comp=mdns
+time="2023-05-26T22:49:25+02:00" level=debug msg="\tprivate - /ip4/192.168.1.108/udp/57684/quic-v1/webtransport/certhash/uEiDwTMsk4H0zIDC8kqdqFYVvk4enn-Y0P5BvTmLbHs8a1g/certhash/uEiDcKfOy_0qFZS7Vs9b9RBBqJwmYd88BWAXJKh3ncwVjlQ\n" comp=mdns
+time="2023-05-26T22:49:25+02:00" level=debug msg="\tprivate - /ip4/192.168.255.6/udp/57684/quic-v1/webtransport/certhash/uEiDwTMsk4H0zIDC8kqdqFYVvk4enn-Y0P5BvTmLbHs8a1g/certhash/uEiDcKfOy_0qFZS7Vs9b9RBBqJwmYd88BWAXJKh3ncwVjlQ\n" comp=mdns
+time="2023-05-26T22:49:25+02:00" level=debug msg="\tprivate - /ip4/127.0.0.1/udp/63305/quic\n" comp=mdns
+time="2023-05-26T22:49:25+02:00" level=debug msg="\tprivate - /ip4/192.168.1.108/udp/63305/quic\n" comp=mdns
+time="2023-05-26T22:49:25+02:00" level=debug msg="\tprivate - /ip4/192.168.255.6/udp/63305/quic\n" comp=mdns
+time="2023-05-26T22:49:25+02:00" level=info msg="Found peer via mDNS!" comp=mdns peerID=12D3KooWHXfnAMW6
+time="2023-05-26T22:49:27+02:00" level=warning msg="New Event! {true [{/ip4/77.57.53.108/tcp/36740 1} {/ip4/77.57.53.108/tcp/55047 1} {/ip4/77.57.53.108/udp/14975/quic-v1/webtransport/certhash/uEiBHBPB2dRykxa6IfhZdHjdzexrahMMRh0J_J55RuRUpIw/certhash/uEiAct0wSUcrrHH7X46eNqU0zinjL8ipqZkjJu2RHfJvWng 1} {/ip4/77.57.53.108/udp/29978/quic 1} {/ip4/77.57.53.108/udp/29978/quic-v1 1} {/ip4/77.57.53.108/udp/52656/quic-v1/webtransport/certhash/uEiBHBPB2dRykxa6IfhZdHjdzexrahMMRh0J_J55RuRUpIw/certhash/uEiAct0wSUcrrHH7X46eNqU0zinjL8ipqZkjJu2RHfJvWng 1} {/ip4/77.57.53.108/udp/64172/quic 1} {/ip4/77.57.53.108/udp/64172/quic-v1 1} {/ip4/127.0.0.1/tcp/49539 2} {/ip4/127.0.0.1/udp/52008/quic 2} {/ip4/127.0.0.1/udp/52008/quic-v1 2} {/ip4/127.0.0.1/udp/58229/quic-v1/webtransport/certhash/uEiBHBPB2dRykxa6IfhZdHjdzexrahMMRh0J_J55RuRUpIw/certhash/uEiAct0wSUcrrHH7X46eNqU0zinjL8ipqZkjJu2RHfJvWng 2} {/ip4/192.168.1.108/tcp/49539 2} {/ip4/192.168.1.108/udp/52008/quic 2} {/ip4/192.168.1.108/udp/52008/quic-v1 2} {/ip4/192.168.1.108/udp/58229/quic-v1/webtransport/certhash/uEiBHBPB2dRykxa6IfhZdHjdzexrahMMRh0J_J55RuRUpIw/certhash/uEiAct0wSUcrrHH7X46eNqU0zinjL8ipqZkjJu2RHfJvWng 2} {/ip6/::1/tcp/49542 2} {/ip6/::1/udp/61968/quic-v1/webtransport/certhash/uEiBHBPB2dRykxa6IfhZdHjdzexrahMMRh0J_J55RuRUpIw/certhash/uEiAct0wSUcrrHH7X46eNqU0zinjL8ipqZkjJu2RHfJvWng 2} {/ip6/::1/udp/64076/quic 2} {/ip6/::1/udp/64076/quic-v1 2}] [] 0x1400031d950}" comp=host
+time="2023-05-26T22:49:27+02:00" level=info msg="Local addresses updated" comp=host count=20 diff=true
+time="2023-05-26T22:49:28+02:00" level=debug msg="Waiting for stream reset from peer..."
+time="2023-05-26T22:49:30+02:00" level=info msg="Key msg ctrl+c" comp=host key=ctrl+c
+time="2023-05-26T22:49:30+02:00" level=debug msg="Closing log file."

@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 
 	progress "github.com/schollz/progressbar/v3"
-
-	"github.com/dennis-tra/pcp/internal/log"
 )
 
 type TransferHandler struct {

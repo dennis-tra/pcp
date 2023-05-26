@@ -9,31 +9,31 @@ type relayFinderStatus struct {
 	isActive bool
 }
 
-func (s *Model) RelayFinderStatus(isActive bool) {
-	s.program.Send(relayFinderStatus{isActive: isActive})
+func (m *Model) RelayFinderStatus(isActive bool) {
+	m.program.Send(relayFinderStatus{isActive: isActive})
 }
 
-func (s *Model) ReservationEnded(cnt int) {}
+func (m *Model) ReservationEnded(cnt int) {}
 
-func (s *Model) ReservationOpened(cnt int) {}
+func (m *Model) ReservationOpened(cnt int) {}
 
-func (s *Model) ReservationRequestFinished(isRefresh bool, err error) {}
+func (m *Model) ReservationRequestFinished(isRefresh bool, err error) {}
 
-func (s *Model) RelayAddressCount(i int) {}
+func (m *Model) RelayAddressCount(i int) {}
 
-func (s *Model) RelayAddressUpdated() {}
+func (m *Model) RelayAddressUpdated() {}
 
-func (s *Model) CandidateChecked(supportsCircuitV2 bool) {}
+func (m *Model) CandidateChecked(supportsCircuitV2 bool) {}
 
-func (s *Model) CandidateAdded(cnt int) {}
+func (m *Model) CandidateAdded(cnt int) {}
 
-func (s *Model) CandidateRemoved(cnt int) {}
+func (m *Model) CandidateRemoved(cnt int) {}
 
-func (s *Model) CandidateLoopState(state autorelay.CandidateLoopState) {}
+func (m *Model) CandidateLoopState(state autorelay.CandidateLoopState) {}
 
-func (s *Model) ScheduledWorkUpdated(scheduledWork *autorelay.ScheduledWorkTimes) {}
+func (m *Model) ScheduledWorkUpdated(scheduledWork *autorelay.ScheduledWorkTimes) {}
 
-func (s *Model) DesiredReservations(i int) {}
+func (m *Model) DesiredReservations(i int) {}
 
-func (s *Model) HandleSuccessfulKeyExchange(peerID peer.ID) {
+func (m *Model) HandleSuccessfulKeyExchange(peerID peer.ID) {
 }
