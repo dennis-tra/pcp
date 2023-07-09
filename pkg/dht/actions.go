@@ -38,7 +38,7 @@ func (d *DHT) connectToBootstrapper() tea.Msg {
 
 	peerCount := len(peers)
 	if peerCount < 4 {
-		return bootstrapResult{err: fmt.Errorf("too few Bootstrap peers configured (min %d)", ConnThreshold)}
+		return bootstrapResultMsg{err: fmt.Errorf("too few Bootstrap peers configured (min %d)", ConnThreshold)}
 	}
 
 	// Asynchronously connect to all bootstrap peers and send
@@ -91,11 +91,11 @@ func (d *DHT) connectToBootstrapper() tea.Msg {
 		case <-d.ctx.Done():
 			return d.ctx.Err()
 		default:
-			return bootstrapResult{err: errs}
+			return bootstrapResultMsg{err: errs}
 		}
 	}
 
-	return bootstrapResult{err: nil}
+	return bootstrapResultMsg{err: nil}
 }
 
 func (d *DHT) provide(ctx context.Context, offset time.Duration) tea.Cmd {

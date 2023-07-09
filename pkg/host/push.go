@@ -21,11 +21,11 @@ const ProtocolPushRequest = "/pcp/push/0.0.1"
 // to start the transfer
 type PushProtocol struct {
 	ctx     context.Context
-	host    *Host
+	host    *Model
 	program *tea.Program
 }
 
-func NewPushProtocol(ctx context.Context, host *Host, program *tea.Program) PushProtocol {
+func NewPushProtocol(ctx context.Context, host *Model, program *tea.Program) PushProtocol {
 	return PushProtocol{
 		ctx:     ctx,
 		host:    host,
@@ -36,7 +36,7 @@ func NewPushProtocol(ctx context.Context, host *Host, program *tea.Program) Push
 func (p *PushProtocol) RegisterPushRequestHandler() {
 	log.Debugln("Registering push request handler")
 	p.host.SetStreamHandler(ProtocolPushRequest, func(s network.Stream) {
-		p.program.Send(pakeOnKeyExchange(s))
+		// p.sender.Send(pakeOnKeyExchange(s))
 	})
 }
 

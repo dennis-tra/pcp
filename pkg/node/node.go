@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/libp2p/go-libp2p"
@@ -24,10 +26,8 @@ import (
 	"github.com/multiformats/go-varint"
 	"github.com/urfave/cli/v2"
 
-	"github.com/dennis-tra/pcp/internal/log"
 	"github.com/dennis-tra/pcp/pkg/crypt"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
-	"github.com/dennis-tra/pcp/pkg/service"
 	"github.com/dennis-tra/pcp/pkg/words"
 )
 
@@ -51,7 +51,6 @@ const (
 // Node encapsulates the logic that's common for the receiving
 // and sending side of the file transfer.
 type Node struct {
-	service.Service
 	host.Host
 
 	// if verbose logging is activated
@@ -100,10 +99,8 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 	}
 
 	// set to something large, we're manually flushing the output
-	log.RefreshInterval = 100 * time.Hour
 
 	node := &Node{
-		Service:  service.New("node"),
 		hpStates: map[peer.ID]*HolePunchState{},
 		state:    Initialising,
 		stateLk:  &sync.RWMutex{},
@@ -150,7 +147,7 @@ func New(c *cli.Context, wrds []string, opts ...libp2p.Option) (*Node, error) {
 
 	log.Debugln("Initialized libp2p host:", node.ID().String())
 
-	return node, node.ServiceStarted()
+	return node, nil
 }
 
 func (n *Node) SetState(s State) State {
@@ -357,8 +354,6 @@ func (n *Node) ResetOnShutdown(s network.Stream) context.CancelFunc {
 	cancel := make(chan struct{})
 	go func() {
 		select {
-		case <-n.SigShutdown():
-			s.Reset()
 		case <-cancel:
 		}
 	}()
@@ -384,8 +379,6 @@ func (n *Node) WaitForEOF(s network.Stream) error {
 		close(done)
 	}()
 	select {
-	case <-n.ServiceContext().Done():
-		return n.ServiceContext().Err()
 	case <-timeout:
 		return fmt.Errorf("timeout")
 	case err := <-done:
@@ -459,9 +452,6 @@ func (n *Node) WaitForDirectConn(peerID peer.ID) error {
 	case <-time.After(15 * time.Second):
 		// we ran into a timeout :/
 		return fmt.Errorf("timed out after 15s")
-	case <-n.ServiceContext().Done():
-		// we were instructed to shut down
-		return n.ServiceContext().Err()
 	}
 }
 

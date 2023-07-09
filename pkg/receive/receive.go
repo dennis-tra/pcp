@@ -4,12 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sirupsen/logrus"
 
 	"github.com/dennis-tra/pcp/pkg/config"
@@ -23,7 +21,7 @@ var log = logrus.WithField("comp", "receive")
 
 type Model struct {
 	ctx               context.Context
-	host              *pcphost.Host
+	host              *pcphost.Model
 	program           *tea.Program
 	relayFinderActive bool
 }
@@ -52,26 +50,10 @@ func NewState(ctx context.Context, program *tea.Program, words []string) (*Model
 
 func (m *Model) Init() tea.Cmd {
 	log.Traceln("tea init")
+
+	m.host.RegisterKeyExchangeHandler(pcphost.PakeRoleReceiver)
+
 	return m.host.Init()
-}
-
-type connectMsg struct {
-	id  peer.ID
-	err error
-}
-
-func (m *Model) connect(pi peer.AddrInfo) tea.Cmd {
-	return func() tea.Msg {
-		log.Debugln("Connecting to peer:", pi.ID)
-		err := m.host.Connect(m.ctx, peer.AddrInfo(pi))
-		if err != nil {
-			log.Debugln("Error connecting to peer:", pi.ID, err)
-		}
-		return connectMsg{
-			id:  pi.ID,
-			err: err,
-		}
-	}
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -86,46 +68,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	switch msg := msg.(type) {
-	case dht.PeerMsg:
-	case mdns.PeerMsg:
-
-		peerState, found := m.host.PeerStates[msg.ID]
-		if found {
-			switch peerState {
-			case pcphost.PeerStateNotConnected:
-				m.host.PeerStates[msg.ID] = pcphost.PeerStateConnecting
-				cmds = append(cmds, m.connect(peer.AddrInfo(msg)))
-			case pcphost.PeerStateConnecting:
-				log.Debugln("Ignoring discovered peer as we're already trying to connect", msg.ID)
-			case pcphost.PeerStateConnected:
-				log.Debugln("Ignoring discovered peer because as we're already connected", msg.ID)
-			case pcphost.PeerStateAuthenticated:
-				log.Debugln("Ignoring discovered peer as it's already authenticated", msg.ID)
-			case pcphost.PeerStateFailedConnecting:
-				log.Debugln("We tried to connect previously but couldn't establish a connection, try again", msg.ID)
-				m.host.PeerStates[msg.ID] = pcphost.PeerStateConnecting
-				cmds = append(cmds, m.connect(peer.AddrInfo(msg)))
-			case pcphost.PeerStateFailedAuthentication:
-				log.Debugln("We tried to connect previously but the node didn't pass authentication -> skipping", msg.ID)
-			}
+	case pcphost.PeerConnectMsg:
+		if msg.Err != nil {
+			log.WithError(msg.Err).Debugln("Error connecting to peer:", msg.ID)
+			m.host.PeerStates[msg.ID] = pcphost.PeerStateFailedConnecting
 		} else {
-			m.host.PeerStates[msg.ID] = pcphost.PeerStateConnecting
-			cmds = append(cmds, m.connect(peer.AddrInfo(msg)))
+			log.Debugln("Connected to peer:", msg.ID)
+			m.host.PeerStates[msg.ID] = pcphost.PeerStateConnected
+			cmds = append(cmds, m.host.StartKeyExchange(m.ctx, msg.ID))
 		}
-	case connectMsg:
-		if msg.err == nil {
-			m.host.PeerStates[msg.id] = pcphost.PeerStateConnected
-			cmds = append(cmds, m.host.StartKeyExchange(m.ctx, msg.id))
-		} else {
-			m.host.PeerStates[msg.id] = pcphost.PeerStateFailedConnecting
-		}
-
-	case syscall.Signal:
-		cmds = append(cmds, m.handleSignal(msg))
-	case tea.KeyMsg:
-		cmds = append(cmds, m.handleKeyMsg(msg))
 	case pcphost.ShutdownMsg:
-		return m, tea.Quit
+		// cleanup
 	}
 
 	switch m.host.MDNS.State {
@@ -181,15 +134,4 @@ func (m *Model) View() string {
 	out += m.host.ViewPeerStates()
 
 	return out
-}
-
-func (m *Model) handleSignal(sig syscall.Signal) tea.Cmd {
-	log.WithField("sig", sig.String()).Infoln("received signal")
-	return tea.Quit
-}
-
-func (m *Model) handleKeyMsg(keyMsg tea.KeyMsg) tea.Cmd {
-	switch keyMsg.Type {
-	}
-	return nil
 }

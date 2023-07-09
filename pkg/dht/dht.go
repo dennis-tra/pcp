@@ -98,7 +98,7 @@ func (d *DHT) Update(msg tea.Msg) (*DHT, tea.Cmd) {
 		provideCtx, cancel := context.WithTimeout(d.ctx, provideTimeout)
 		d.services[msg.offset] = cancel
 		cmds = append(cmds, d.provide(provideCtx, msg.offset))
-	case bootstrapResult:
+	case bootstrapResultMsg:
 		if msg.err != nil {
 			d.reset()
 			d.State = StateError
@@ -196,7 +196,6 @@ func (d *DHT) reset() {
 		cancel()
 	}
 
-	d.chanID = -1
 	d.services = map[time.Duration]context.CancelFunc{}
 	d.State = StateIdle
 	d.Err = nil

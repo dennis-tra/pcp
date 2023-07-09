@@ -10,9 +10,8 @@ import (
 	"encoding/hex"
 	"io"
 
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/scrypt"
-
-	"github.com/dennis-tra/pcp/internal/log"
 )
 
 const NonceLength = 12

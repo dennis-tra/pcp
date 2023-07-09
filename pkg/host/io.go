@@ -19,16 +19,16 @@ import (
 
 // Send prepares the message msg to be sent over the network stream s.
 // Send closes the stream for writing but leaves it open for reading.
-func (h *Host) Send(s network.Stream, msg p2p.HeaderMessage) error {
+func (m *Model) Send(s network.Stream, msg p2p.HeaderMessage) error {
 	// Get own public key.
-	pub, err := crypto.MarshalPublicKey(h.Host.Peerstore().PubKey(h.Host.ID()))
+	pub, err := crypto.MarshalPublicKey(m.Host.Peerstore().PubKey(m.Host.ID()))
 	if err != nil {
 		return fmt.Errorf("marshal public key: %w", err)
 	}
 
 	hdr := &p2p.Header{
 		RequestId:  uuid.New().String(),
-		NodeId:     h.Host.ID().String(),
+		NodeId:     m.Host.ID().String(),
 		NodePubKey: pub,
 		Timestamp:  time.Now().Unix(),
 	}
@@ -46,7 +46,7 @@ func (h *Host) Send(s network.Stream, msg p2p.HeaderMessage) error {
 	}
 
 	// Sign the data and attach the signature.
-	key := h.Host.Peerstore().PrivKey(h.Host.ID())
+	key := m.Host.Peerstore().PrivKey(m.Host.ID())
 	signature, err := key.Sign(data)
 	if err != nil {
 		return fmt.Errorf("sign message %T: %w", msg, err)
@@ -61,7 +61,7 @@ func (h *Host) Send(s network.Stream, msg p2p.HeaderMessage) error {
 	}
 
 	// Encrypt the data with the PAKE session key if it is found
-	sKey, found := h.GetSessionKey(s.Conn().RemotePeer())
+	sKey, found := m.GetSessionKey(s.Conn().RemotePeer())
 	if found {
 		data, err = crypt.Encrypt(sKey, data)
 		if err != nil {
@@ -82,7 +82,7 @@ func (h *Host) Send(s network.Stream, msg p2p.HeaderMessage) error {
 // authenticateMessage verifies the authenticity of the message payload.
 // It takes the given signature and verifies it against the given public
 // key.
-func (h *Host) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
+func (m *Model) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
 	// store a temp ref to signature and remove it from message msg
 	// sign is a string to allow easy reset to zero-value (empty string)
 	signature := msg.GetHeader().Signature
@@ -125,7 +125,7 @@ func (h *Host) authenticateMessage(msg p2p.HeaderMessage) (bool, error) {
 // Read drains the given stream and parses the content. It unmarshalls
 // it into the protobuf object. It also verifies the authenticity of the message.
 // Read closes the stream for reading but leaves it open for writing.
-func (h *Host) Read(s network.Stream, buf p2p.HeaderMessage) error {
+func (m *Model) Read(s network.Stream, buf p2p.HeaderMessage) error {
 	data, err := io.ReadBytes(s)
 	if err != nil {
 		if err2 := s.Reset(); err2 != nil {
@@ -136,7 +136,7 @@ func (h *Host) Read(s network.Stream, buf p2p.HeaderMessage) error {
 
 	log.Debugf("Reading message from %s\n", s.Conn().RemotePeer().String())
 	// Decrypt the data with the PAKE session key if it is found
-	sKey, found := h.GetSessionKey(s.Conn().RemotePeer())
+	sKey, found := m.GetSessionKey(s.Conn().RemotePeer())
 	if found {
 		data, err = crypt.Decrypt(sKey, data)
 		if err != nil {
@@ -149,7 +149,7 @@ func (h *Host) Read(s network.Stream, buf p2p.HeaderMessage) error {
 	}
 	log.Debugf("type %T with request ID %s\n", buf, buf.GetHeader().RequestId)
 
-	valid, err := h.authenticateMessage(buf)
+	valid, err := m.authenticateMessage(buf)
 	if err != nil {
 		return fmt.Errorf("authenticate msg: %w", err)
 	} else if !valid {

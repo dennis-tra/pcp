@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -26,7 +25,7 @@ var log = logrus.WithField("comp", "send")
 
 type Model struct {
 	ctx               context.Context
-	host              *pcphost.Host
+	host              *pcphost.Model
 	program           *tea.Program
 	filepath          string
 	relayFinderActive bool
@@ -55,7 +54,6 @@ func NewState(ctx context.Context, program *tea.Program, filepath string) (*Mode
 
 	log.Infoln("Random words:", strings.Join(wrds, "-"))
 
-	// Start the libp2p node
 	model := &Model{
 		ctx:      ctx,
 		filepath: filepath,
@@ -67,7 +65,6 @@ func NewState(ctx context.Context, program *tea.Program, filepath string) (*Mode
 		autorelay.WithMetricsTracer(model),
 		autorelay.WithBootDelay(0),
 		autorelay.WithMinCandidates(1),
-		autorelay.WithNumRelays(1),
 	)
 
 	model.host, err = pcphost.New(ctx, program, wrds, opt)
@@ -80,6 +77,9 @@ func NewState(ctx context.Context, program *tea.Program, filepath string) (*Mode
 
 func (m *Model) Init() tea.Cmd {
 	log.Traceln("tea init")
+
+	m.host.RegisterKeyExchangeHandler(pcphost.PakeRoleSender)
+
 	return m.host.Init()
 }
 
@@ -97,14 +97,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case relayFinderStatus:
 		m.relayFinderActive = msg.isActive
-	case dht.PeerMsg:
-	case mdns.PeerMsg:
-	case syscall.Signal:
-		cmds = append(cmds, m.handleSignal(msg))
-	case tea.KeyMsg:
-		cmds = append(cmds, m.handleKeyMsg(msg))
 	case pcphost.ShutdownMsg:
-		return m, tea.Quit
+		// cleanup
+		cmds = append(cmds, tea.Quit)
 	}
 
 	switch m.host.MDNS.State {
@@ -121,19 +116,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.host.DHT, cmd = m.host.DHT.Bootstrap()
 			cmds = append(cmds, cmd)
 		}
-	case dht.StateBootstrapping:
 	case dht.StateBootstrapped:
 		possible, err := m.host.IsDirectConnectivityPossible()
 		if err != nil {
 			m.host.DHT, cmd = m.host.DHT.StopWithReason(err)
-			cmds = append(cmds, cmd)
 		} else if possible {
 			m.host.DHT, cmd = m.host.DHT.Advertise(0)
-			cmds = append(cmds, cmd)
 		}
+		cmds = append(cmds, cmd)
 	}
-
-	//	// TODO: if dht + mdns are in error -> stop
 
 	return m, tea.Batch(cmds...)
 }
@@ -168,17 +159,6 @@ func (m *Model) View() string {
 	out += m.host.ViewPeerStates()
 
 	return out
-}
-
-func (m *Model) handleSignal(sig syscall.Signal) tea.Cmd {
-	log.WithField("sig", sig.String()).Infoln("received signal")
-	return tea.Quit
-}
-
-func (m *Model) handleKeyMsg(keyMsg tea.KeyMsg) tea.Cmd {
-	switch keyMsg.Type {
-	}
-	return nil
 }
 
 func validateFile(filepath string) error {
@@ -239,3 +219,33 @@ func (m *Model) autoRelayPeerSource(ctx context.Context, num int) <-chan peer.Ad
 
 	return out
 }
+
+type relayFinderStatus struct {
+	isActive bool
+}
+
+func (m *Model) RelayFinderStatus(isActive bool) {
+	m.program.Send(relayFinderStatus{isActive: isActive})
+}
+
+func (m *Model) ReservationEnded(cnt int) {}
+
+func (m *Model) ReservationOpened(cnt int) {}
+
+func (m *Model) ReservationRequestFinished(isRefresh bool, err error) {}
+
+func (m *Model) RelayAddressCount(i int) {}
+
+func (m *Model) RelayAddressUpdated() {}
+
+func (m *Model) CandidateChecked(supportsCircuitV2 bool) {}
+
+func (m *Model) CandidateAdded(cnt int) {}
+
+func (m *Model) CandidateRemoved(cnt int) {}
+
+func (m *Model) CandidateLoopState(state autorelay.CandidateLoopState) {}
+
+func (m *Model) ScheduledWorkUpdated(scheduledWork *autorelay.ScheduledWorkTimes) {}
+
+func (m *Model) DesiredReservations(i int) {}

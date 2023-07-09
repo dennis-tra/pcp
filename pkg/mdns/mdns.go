@@ -8,7 +8,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
@@ -17,6 +16,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/dennis-tra/pcp/pkg/discovery"
+	"github.com/dennis-tra/pcp/pkg/tui"
 )
 
 var log = logrus.WithField("comp", "mdns")
@@ -50,7 +50,7 @@ func (s State) String() string {
 type MDNS struct {
 	host.Host
 	ctx      context.Context
-	program  *tea.Program
+	sender   tea.Sender
 	chanID   int
 	services map[time.Duration]mdns.Service
 	spinner  spinner.Model
@@ -64,15 +64,14 @@ type (
 	updateMsg struct{ offset time.Duration }
 )
 
-func New(ctx context.Context, h host.Host, program *tea.Program, chanID int) *MDNS {
+func New(ctx context.Context, h host.Host, sender tea.Sender, chanID int) *MDNS {
 	m := &MDNS{
 		Host:    h,
 		ctx:     ctx,
 		chanID:  chanID,
-		program: program,
+		sender:  sender,
 		spinner: spinner.New(spinner.WithSpinner(spinner.Dot)),
 	}
-
 	m.reset()
 
 	return m
@@ -201,25 +200,19 @@ func (m *MDNS) Update(msg tea.Msg) (*MDNS, tea.Cmd) {
 func (m *MDNS) View() string {
 	switch m.State {
 	case StateIdle:
-		style := lipgloss.NewStyle().Faint(true)
-		return style.Render("not started")
+		return tui.Faint.Render("not started")
 	case StateStarted:
-		style := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-		return style.Render("ready")
+		return tui.Green.Render("ready")
 	case StateStopped:
 		if errors.Is(m.Err, context.Canceled) {
-			style := lipgloss.NewStyle().Faint(true)
-			return style.Render("cancelled")
+			return tui.Faint.Render("cancelled")
 		} else {
-			style := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-			return style.Render("stopped")
+			return tui.Green.Render("stopped")
 		}
 	case StateError:
-		style := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-		return style.Render("failed")
+		return tui.Red.Render("failed")
 	default:
-		style := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-		return style.Render("unknown state")
+		return tui.Red.Render("unknown state")
 	}
 }
 
@@ -231,7 +224,6 @@ func (m *MDNS) reset() {
 		}
 	}
 
-	m.chanID = -1
 	m.services = map[time.Duration]mdns.Service{}
 	m.State = StateIdle
 	m.Err = nil
@@ -271,7 +263,7 @@ func (m *MDNS) HandlePeerFound(pi peer.AddrInfo) {
 	}
 
 	logEntry.Infoln("Found peer via mDNS!")
-	m.program.Send(PeerMsg(pi))
+	m.sender.Send(PeerMsg(pi))
 }
 
 // Filter out addresses that are public - only allow private ones.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -16,15 +17,19 @@ import (
 
 	"github.com/dennis-tra/pcp/pkg/crypt"
 	"github.com/dennis-tra/pcp/pkg/io"
+	"github.com/dennis-tra/pcp/pkg/tui"
 )
 
 // pattern: /protocol-name/request-or-response-message/version
 const ProtocolPake = "/pcp/pake/0.3.0"
 
+var ErrAuthenticationFailed = fmt.Errorf("authentication failed")
+
 type PakeProtocol struct {
-	ctx     context.Context
-	host    host.Host
-	program *tea.Program
+	ctx    context.Context
+	host   host.Host
+	sender tea.Sender
+	role   PakeRole
 
 	// pwKey holds the weak password of the PAKE protocol.
 	// In our case it's the four words with dashes in between.
@@ -38,14 +43,18 @@ type PakeProtocol struct {
 // NewPakeProtocol initializes a new PakeProtocol struct by deriving the weak session key
 // from the given words. This is the basis for the strong session key that's derived from
 // the PAKE protocol.
-func NewPakeProtocol(ctx context.Context, host host.Host, program *tea.Program, words []string) *PakeProtocol {
+func NewPakeProtocol(ctx context.Context, host host.Host, sender tea.Sender, words []string) *PakeProtocol {
 	return &PakeProtocol{
-		ctx:     ctx,
-		host:    host,
-		program: program,
-		pwKey:   []byte(strings.Join(words, "-")),
-		states:  map[peer.ID]*PakeState{},
+		ctx:    ctx,
+		host:   host,
+		sender: sender,
+		pwKey:  []byte(strings.Join(words, "-")),
+		states: map[peer.ID]*PakeState{},
 	}
+}
+
+func (p *PakeProtocol) Init() tea.Cmd {
+	return nil
 }
 
 func (p *PakeProtocol) Update(msg tea.Msg) (*PakeProtocol, tea.Cmd) {
@@ -55,52 +64,17 @@ func (p *PakeProtocol) Update(msg tea.Msg) (*PakeProtocol, tea.Cmd) {
 	}).Tracef("handle message: %T\n", msg)
 
 	switch msg := msg.(type) {
-	case pakeMsg[error]:
-		log.Debugf("Pake %s: %s: %s\n", msg.peerID.String()[:16], PakeStepError, msg.payload)
-		p.states[msg.peerID] = &PakeState{
-			Step: PakeStepError,
-			Err:  msg.payload,
-		}
-	case pakeMsg[[]byte]:
-		p.states[msg.peerID] = &PakeState{
-			Step: PakeStepPeerAuthenticated,
-			Key:  msg.payload,
-		}
-	case pakeMsg[PakeStep]:
-		evt := msg
-		if state, ok := p.states[evt.peerID]; ok {
-			if state.Step != PakeStepPeerAuthenticated {
-				p.states[evt.peerID].Step = evt.payload
-			} else if evt.payload > PakeStepPeerAuthenticated {
-				p.states[evt.peerID].Step = evt.payload
-			}
-		} else {
-			p.states[evt.peerID] = &PakeState{Step: evt.payload}
-		}
 	case pakeOnKeyExchange:
-		remotePeer := msg.Conn().RemotePeer()
-
-		// Authenticating peer...
-
-		// In case the same remote peer "calls" onKeyExchange multiple times.
-		// We only allow one concurrent key exchange per remote peer.
-		prevState, found := p.states[remotePeer]
-		if found {
-			switch prevState.Step {
-			case PakeStepUnknown:
-			case PakeStepError:
-			default:
-				log.Debugln("Rejecting key exchange request. Current step:", prevState.Step.String())
-				return p, nil
-			}
-		}
-
-		p.states[remotePeer] = &PakeState{Step: PakeStepStart}
-		return p, p.exchangeKeys(msg)
-
+		return p.handleOnKeyExchange(msg)
+	case pakeMsg[PakeStep]:
+		return p.handlePakeStepMsg(msg)
+	case pakeMsg[error]:
+		return p.handleError(msg)
+	case pakeMsg[[]byte]:
+		return p.handlePakeKey(msg)
+	default:
+		return p, nil
 	}
-
-	return p, nil
 }
 
 func (p *PakeProtocol) PakeStateStr(peerID peer.ID) string {
@@ -128,11 +102,11 @@ func (p *PakeProtocol) PakeStateStr(peerID peer.ID) string {
 	case PakeStepWaitingForFinalConfirmation:
 		return "waiting for final confirmation"
 	case PakeStepPeerAuthenticated:
-		return "peer authenticated"
+		return tui.Green.Render("Authenticated!")
 	case PakeStepError:
-		return "auth failed: " + s.Err.Error()
+		return tui.Red.Render("Authentication failed: " + s.Err.Error())
 	default:
-		return "unknown key exchange state"
+		return tui.Red.Render("unknown key exchange state")
 	}
 }
 
@@ -154,10 +128,18 @@ func (p *PakeProtocol) GetSessionKey(peerID peer.ID) ([]byte, bool) {
 	return state.Key, true
 }
 
-func (p *PakeProtocol) RegisterKeyExchangeHandler() {
-	log.Infoln("Registering key exchange handler")
+type PakeRole string
+
+const (
+	PakeRoleSender   PakeRole = "SENDER"
+	PakeRoleReceiver PakeRole = "RECEIVER"
+)
+
+func (p *PakeProtocol) RegisterKeyExchangeHandler(role PakeRole) {
+	log.WithField("role", role).Infoln("Registering key exchange handler")
+	p.role = role
 	p.host.SetStreamHandler(ProtocolPake, func(s network.Stream) {
-		p.program.Send(pakeOnKeyExchange(s))
+		p.sender.Send(pakeOnKeyExchange{stream: s})
 	})
 }
 
@@ -169,126 +151,24 @@ func (p *PakeProtocol) UnregisterKeyExchangeHandler() {
 type pakeMsg[T any] struct {
 	peerID  peer.ID
 	payload T
+	stream  network.Stream
 }
 
-type pakeOnKeyExchange network.Stream
-
-func (p *PakeProtocol) exchangeKeys(s network.Stream) tea.Cmd {
-	return func() tea.Msg {
-		defer s.Close()
-		defer io.ResetOnShutdown(p.ctx, s)()
-
-		remotePeer := s.Conn().RemotePeer()
-
-		// initialize recipient Q ("1" indicates recipient)
-		Q, err := pake.InitCurve(p.pwKey, 1, "siec")
-		if err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
-		}
-
-		// Waiting for key information...
-		p.sendPakeMsg(remotePeer, PakeStepWaitingForKeyInformation)
-
-		// Read init data from P
-		dat, err := io.ReadBytes(s)
-		if err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
-		}
-
-		// Calculating on key information...
-		p.sendPakeMsg(remotePeer, PakeStepCalculatingKeyInformation)
-
-		// Use init data from P
-		if err = Q.Update(dat); err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
-		}
-
-		// Sending key information...
-		p.sendPakeMsg(remotePeer, PakeStepSendingKeyInformation)
-
-		// Send P calculated Data
-		if _, err = io.WriteBytes(s, Q.Bytes()); err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
-		}
-
-		// Waiting for final key information...
-		p.sendPakeMsg(remotePeer, PakeStepWaitingForFinalKeyInformation)
-
-		// Read calculated data from P
-		dat, err = io.ReadBytes(s)
-		if err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
-		}
-
-		// Calculating on key information...
-		p.sendPakeMsg(remotePeer, PakeStepCalculatingKeyInformation)
-
-		// Use calculated data from P
-		if err = Q.Update(dat); err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
-		}
-
-		// Access session key
-		skey, err := Q.SessionKey()
-		if err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
-		}
-
-		p.sendPakeMsg(remotePeer, PakeStepExchangingSalt)
-
-		// Generating session key salt
-		salt := make([]byte, 8)
-		if _, err = rand.Read(salt); err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: fmt.Errorf("read randomness: %w", err)}
-		}
-
-		// Sending salt
-		if _, err = io.WriteBytes(s, salt); err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
-		}
-
-		// Proving authenticity to peer...
-		p.sendPakeMsg(remotePeer, PakeStepProvingAuthenticityToPeer)
-
-		key, err := crypt.DeriveKey(skey, salt)
-		if err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
-		}
-
-		// Send P encryption proof
-		if err = p.SendProof(s, key); err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: fmt.Errorf("send proof: %w", err)}
-		}
-
-		// Verifying proof from peer...
-		p.sendPakeMsg(remotePeer, PakeStepVerifyingProofFromPeer)
-
-		// Read and verify encryption proof from P
-		if err = p.ReceiveVerifyProof(s, key); err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: fmt.Errorf("receive verify proof: %w", err)}
-		}
-
-		// Tell P the proof was verified and is okay
-		if _, err = io.WriteBytes(s, []byte("ok")); err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
-		}
-
-		// Wait for P to close the stream, so we know confirmation was received.
-		if err = io.WaitForEOF(p.ctx, s); err != nil {
-			log.Debugln("error waiting for EOF", err)
-		}
-
-		return pakeMsg[[]byte]{peerID: remotePeer, payload: key}
-	}
+type pakeOnKeyExchange struct {
+	stream network.Stream
 }
 
 func (p *PakeProtocol) StartKeyExchange(ctx context.Context, remotePeer peer.ID) tea.Cmd {
+	if exisiting, found := p.states[remotePeer]; found && exisiting.Step != PakeStepError {
+		return nil
+	}
 	p.states[remotePeer] = &PakeState{Step: PakeStepStart}
 
 	return func() tea.Msg {
 		s, err := p.host.NewStream(ctx, remotePeer, ProtocolPake)
+		pakeErrMsg := basePakeErrMsg(s, remotePeer)
 		if err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
+			return pakeErrMsg(err)
 		}
 
 		defer s.Close()
@@ -298,89 +178,89 @@ func (p *PakeProtocol) StartKeyExchange(ctx context.Context, remotePeer peer.ID)
 		// initialize sender p ("0" indicates sender)
 		P, err := pake.InitCurve(p.pwKey, 0, "siec")
 		if err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
+			return pakeErrMsg(err)
 		}
 
 		// Sending key information...
-		p.sendPakeMsg(remotePeer, PakeStepSendingKeyInformation)
+		p.sendPakeMsg(s, PakeStepSendingKeyInformation)
 
 		// Send Q init data
 		if _, err = io.WriteBytes(s, P.Bytes()); err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
+			return pakeErrMsg(err)
 		}
 
 		// Waiting for key information...
-		p.sendPakeMsg(remotePeer, PakeStepWaitingForKeyInformation)
+		p.sendPakeMsg(s, PakeStepWaitingForKeyInformation)
 
 		// Read calculated data from Q
 		dat, err := io.ReadBytes(s)
 		if err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
+			return pakeErrMsg(err)
 		}
 
 		// Calculating on key information...
-		p.sendPakeMsg(remotePeer, PakeStepCalculatingKeyInformation)
+		p.sendPakeMsg(s, PakeStepCalculatingKeyInformation)
 
 		// Use calculated data from Q
 		if err = P.Update(dat); err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
+			return pakeErrMsg(err)
 		}
 
 		// Sending key information...
-		p.sendPakeMsg(remotePeer, PakeStepSendingKeyInformation)
+		p.sendPakeMsg(s, PakeStepSendingKeyInformation)
 
 		// Send Q calculated data
 		if _, err = io.WriteBytes(s, P.Bytes()); err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
+			return pakeErrMsg(err)
 		}
 
 		// Extract calculated key
 		skey, err := P.SessionKey()
 		if err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
+			return pakeErrMsg(err)
 		}
 
-		p.sendPakeMsg(remotePeer, PakeStepExchangingSalt)
+		p.sendPakeMsg(s, PakeStepExchangingSalt)
 
 		// Reading salt
 		salt, err := io.ReadBytes(s)
 		if err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
+			return pakeErrMsg(err)
 		}
 
 		// derive key from PAKE session key + salt
 		key, err := crypt.DeriveKey(skey, salt)
 		if err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: fmt.Errorf("derive key from session key and salt: %w", err)}
+			return pakeErrMsg(fmt.Errorf("derive key from session key and salt: %w", err))
 		}
 
 		// Verifying proof from peer...
-		p.sendPakeMsg(remotePeer, PakeStepVerifyingProofFromPeer)
+		p.sendPakeMsg(s, PakeStepVerifyingProofFromPeer)
 
 		// Read and verify encryption proof from Q
-		if err = p.ReceiveVerifyProof(s, key); err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
+		if err = p.receiveVerifyProof(s, key); err != nil {
+			return pakeErrMsg(err)
 		}
 
 		// Proving authenticity to peer...
-		p.sendPakeMsg(remotePeer, PakeStepProvingAuthenticityToPeer)
+		p.sendPakeMsg(s, PakeStepProvingAuthenticityToPeer)
 
 		// Send Q encryption proof
-		if err = p.SendProof(s, key); err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
+		if err = p.sendProof(s, key); err != nil {
+			return pakeErrMsg(err)
 		}
 
 		// Waiting for confirmation from peer...
-		p.sendPakeMsg(remotePeer, PakeStepWaitingForFinalConfirmation)
+		p.sendPakeMsg(s, PakeStepWaitingForFinalConfirmation)
 
 		// Read confirmation from P
 		confirm, err := io.ReadBytes(s)
 		if err != nil {
-			return pakeMsg[error]{peerID: remotePeer, payload: err}
+			return pakeErrMsg(err)
 		}
 
 		if string(confirm) != "ok" {
-			return pakeMsg[error]{peerID: remotePeer, payload: fmt.Errorf("peer did not respond with ok")}
+			return pakeErrMsg(fmt.Errorf("peer did not respond with ok"))
 		}
 
 		// Peer connected and authenticated!
@@ -388,18 +268,139 @@ func (p *PakeProtocol) StartKeyExchange(ctx context.Context, remotePeer peer.ID)
 	}
 }
 
-func (p *PakeProtocol) sendPakeMsg(peerID peer.ID, s PakeStep) {
-	msg := pakeMsg[PakeStep]{
-		peerID:  peerID,
-		payload: s,
+func (p *PakeProtocol) exchangeKeys(s network.Stream) tea.Cmd {
+	return func() tea.Msg {
+		defer s.Close()
+		defer io.ResetOnShutdown(p.ctx, s)()
+
+		remotePeer := s.Conn().RemotePeer()
+
+		pakeErrMsg := basePakeErrMsg(s, remotePeer)
+
+		// keep track of stream
+		p.sendPakeMsg(s, PakeStepStart)
+
+		// initialize recipient Q ("1" indicates recipient)
+		Q, err := pake.InitCurve(p.pwKey, 1, "siec")
+		if err != nil {
+			return pakeErrMsg(err)
+		}
+
+		// Waiting for key information...
+		p.sendPakeMsg(s, PakeStepWaitingForKeyInformation)
+
+		// Read init data from P
+		dat, err := io.ReadBytes(s)
+		if err != nil {
+			return pakeErrMsg(err)
+		}
+
+		// Calculating on key information...
+		p.sendPakeMsg(s, PakeStepCalculatingKeyInformation)
+
+		// Use init data from P
+		if err = Q.Update(dat); err != nil {
+			return pakeErrMsg(err)
+		}
+
+		// Sending key information...
+		p.sendPakeMsg(s, PakeStepSendingKeyInformation)
+
+		// Send P calculated Data
+		if _, err = io.WriteBytes(s, Q.Bytes()); err != nil {
+			return pakeErrMsg(err)
+		}
+
+		// Waiting for final key information...
+		p.sendPakeMsg(s, PakeStepWaitingForFinalKeyInformation)
+
+		// Read calculated data from P
+		dat, err = io.ReadBytes(s)
+		if err != nil {
+			return pakeErrMsg(err)
+		}
+
+		// Calculating on key information...
+		p.sendPakeMsg(s, PakeStepCalculatingKeyInformation)
+
+		// Use calculated data from P
+		if err = Q.Update(dat); err != nil {
+			return pakeErrMsg(err)
+		}
+
+		// Access session key
+		skey, err := Q.SessionKey()
+		if err != nil {
+			return pakeErrMsg(err)
+		}
+
+		p.sendPakeMsg(s, PakeStepExchangingSalt)
+
+		// Generating session key salt
+		salt := make([]byte, 8)
+		if _, err = rand.Read(salt); err != nil {
+			return pakeErrMsg(fmt.Errorf("read randomness: %w", err))
+		}
+
+		// Sending salt
+		if _, err = io.WriteBytes(s, salt); err != nil {
+			return pakeErrMsg(err)
+		}
+
+		// Proving authenticity to peer...
+		p.sendPakeMsg(s, PakeStepProvingAuthenticityToPeer)
+
+		key, err := crypt.DeriveKey(skey, salt)
+		if err != nil {
+			return pakeErrMsg(err)
+		}
+
+		// Send P encryption proof
+		if err = p.sendProof(s, key); err != nil {
+			return pakeErrMsg(fmt.Errorf("send proof: %w", err))
+		}
+
+		// Verifying proof from peer...
+		p.sendPakeMsg(s, PakeStepVerifyingProofFromPeer)
+
+		// Read and verify encryption proof from P
+		if err = p.receiveVerifyProof(s, key); err != nil {
+			return pakeErrMsg(fmt.Errorf("receive verify proof: %w", err))
+		}
+
+		// Tell P the proof was verified and is okay
+		if _, err = io.WriteBytes(s, []byte("ok")); err != nil {
+			return pakeErrMsg(err)
+		}
+
+		// Wait for P to close the stream, so we know confirmation was received.
+		if err = io.WaitForEOF(p.ctx, s); err != nil {
+			log.Debugln("error waiting for EOF", err)
+		}
+
+		return pakeMsg[[]byte]{stream: s, peerID: remotePeer, payload: key}
 	}
-	p.program.Send(msg)
 }
 
-// SendProof takes the public key of our host and encrypts it with
+func (p *PakeProtocol) sendPakeMsg(stream network.Stream, s PakeStep) {
+	msg := pakeMsg[PakeStep]{
+		peerID:  stream.Conn().RemotePeer(),
+		payload: s,
+		stream:  stream,
+	}
+	p.sender.Send(msg)
+}
+
+func basePakeErrMsg(stream network.Stream, peerID peer.ID) func(err error) tea.Msg {
+	return func(err error) tea.Msg {
+		return pakeMsg[error]{stream: stream, peerID: peerID, payload: err}
+	}
+}
+
+// sendProof takes the public key of our host and encrypts it with
 // the PAKE-derived session key. The recipient can decrypt the key
 // and verify that it matches.
-func (p *PakeProtocol) SendProof(s network.Stream, key []byte) error {
+func (p *PakeProtocol) sendProof(s network.Stream, key []byte) error {
 	pubKey, err := p.host.Peerstore().PubKey(p.host.ID()).Raw()
 	if err != nil {
 		return fmt.Errorf("get node pub key: %w", err)
@@ -417,10 +418,10 @@ func (p *PakeProtocol) SendProof(s network.Stream, key []byte) error {
 	return nil
 }
 
-// ReceiveVerifyProof reads proof data from the stream, decrypts it with the
+// receiveVerifyProof reads proof data from the stream, decrypts it with the
 // given key, that was derived via PAKE, and checks if it matches the remote
 // public key.
-func (p *PakeProtocol) ReceiveVerifyProof(s network.Stream, key []byte) error {
+func (p *PakeProtocol) receiveVerifyProof(s network.Stream, key []byte) error {
 	response, err := io.ReadBytes(s)
 	if err != nil {
 		return fmt.Errorf("read bytes: %w", err)
@@ -437,8 +438,100 @@ func (p *PakeProtocol) ReceiveVerifyProof(s network.Stream, key []byte) error {
 	}
 
 	if !bytes.Equal(dec, peerPubKey) {
-		return fmt.Errorf("proof verification failed")
+		return ErrAuthenticationFailed
 	}
 
 	return nil
+}
+
+func (p *PakeProtocol) handleOnKeyExchange(msg pakeOnKeyExchange) (*PakeProtocol, tea.Cmd) {
+	remotePeer := msg.stream.Conn().RemotePeer()
+	logEntry := log.WithField("remotePeer", remotePeer.ShortString())
+
+	prevState, found := p.states[remotePeer]
+	if found && prevState.Step == PakeStepError && errors.Is(prevState.Err, ErrAuthenticationFailed) {
+		if err := msg.stream.Reset(); err != nil {
+			logEntry.WithError(err).Warnln("Failed closing incoming pake stream")
+		}
+	} else {
+		switch p.role {
+		case PakeRoleSender:
+			if found && prevState.stream != nil {
+				if err := prevState.stream.Reset(); err != nil {
+					logEntry.WithError(err).Warnln("Failed resetting outgoing pake stream")
+				}
+			}
+
+			p.states[remotePeer] = &PakeState{
+				Step:   PakeStepStart,
+				stream: msg.stream,
+			}
+		case PakeRoleReceiver:
+			if found {
+				if err := msg.stream.Reset(); err != nil {
+					logEntry.WithError(err).Warnln("Failed closing incoming pake stream")
+				}
+			} else {
+				p.states[remotePeer] = &PakeState{
+					Step:   PakeStepStart,
+					stream: msg.stream,
+				}
+			}
+		default:
+			log.Fatalln("unexpected pake role:", p.role)
+		}
+	}
+
+	return p, p.exchangeKeys(msg.stream)
+}
+
+func (p *PakeProtocol) handlePakeStepMsg(msg pakeMsg[PakeStep]) (*PakeProtocol, tea.Cmd) {
+	state, ok := p.states[msg.peerID]
+	if !ok {
+		p.states[msg.peerID] = &PakeState{
+			Step:   msg.payload,
+			stream: msg.stream,
+		}
+		return p, nil
+	}
+
+	// either the existing state has no stream or the stream from the
+	// message (if it exists) matches the existing stream id
+	if state.stream == nil || (msg.stream != nil && msg.stream.ID() == state.stream.ID()) {
+		switch state.Step {
+		case PakeStepPeerAuthenticated:
+		case PakeStepError:
+		default:
+			p.states[msg.peerID].Step = msg.payload
+			p.states[msg.peerID].stream = msg.stream
+		}
+	} else {
+		msg.stream.Reset()
+	}
+	return p, nil
+}
+
+func (p *PakeProtocol) handleError(msg pakeMsg[error]) (*PakeProtocol, tea.Cmd) {
+	log.WithError(msg.payload).WithField("remotePeer", msg.peerID.ShortString()).Debugf("Pake Error")
+
+	prevState, found := p.states[msg.peerID]
+	if found && prevState.stream != nil && prevState.stream.ID() != msg.stream.ID() {
+		return p, nil
+	}
+
+	p.states[msg.peerID] = &PakeState{
+		Step: PakeStepError,
+		Err:  msg.payload,
+	}
+
+	return p, nil
+}
+
+func (p *PakeProtocol) handlePakeKey(msg pakeMsg[[]byte]) (*PakeProtocol, tea.Cmd) {
+	p.states[msg.peerID] = &PakeState{
+		Step:   PakeStepPeerAuthenticated,
+		Key:    msg.payload,
+		stream: msg.stream,
+	}
+	return p, nil
 }

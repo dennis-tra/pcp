@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"sync"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"github.com/dennis-tra/pcp/internal/log"
 	p2p "github.com/dennis-tra/pcp/pkg/pb"
 )
 
@@ -85,8 +86,6 @@ func (p *PushProtocol) onPushRequest(s network.Stream) {
 	lock, found := p.locker.Load(s.Conn().RemotePeer())
 	if found {
 		select {
-		case <-p.node.ServiceContext().Done():
-			return
 		case <-lock.(chan struct{}):
 		}
 	}
@@ -111,18 +110,15 @@ func (p *PushProtocol) onPushRequest(s network.Stream) {
 
 	if err = p.node.Send(s, p2p.NewPushResponse(accept)); err != nil {
 		log.Warningln(fmt.Errorf("send push response: %w", err))
-		p.node.Shutdown()
 		return
 	}
 
 	if err = p.node.WaitForEOF(s); err != nil {
 		log.Warningln(fmt.Errorf("wait EOF: %w", err))
-		p.node.Shutdown()
 		return
 	}
 
 	if !accept {
-		p.node.Shutdown()
 	}
 }
 

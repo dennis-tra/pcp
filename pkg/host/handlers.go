@@ -9,19 +9,19 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func (h *Host) handleKeyMsg(msg tea.KeyMsg) (*Host, tea.Cmd) {
-	h.logEntry().WithField("key", msg.String()).Infoln("Key msg", msg.String())
+func (m *Model) handleKeyMsg(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	m.logEntry().WithField("key", msg.String()).Infoln("Key msg", msg.String())
 	switch msg.String() {
 	case "v":
-		h.Verbose = !h.Verbose
+		m.Verbose = !m.Verbose
 	case "ctrl+c":
-		return h, Shutdown
+		return m, Shutdown
 	}
-	return h, nil
+	return m, nil
 }
 
-func (h *Host) handleLocalAddressesUpdated(evt event.EvtLocalAddressesUpdated) (*Host, tea.Cmd) {
-	h.logEntry().WithFields(logrus.Fields{
+func (m *Model) handleLocalAddressesUpdated(evt event.EvtLocalAddressesUpdated) (*Model, tea.Cmd) {
+	m.logEntry().WithFields(logrus.Fields{
 		"diff":  evt.Diffs,
 		"count": len(evt.Current),
 	}).Infoln("Local addresses updated")
@@ -31,41 +31,39 @@ func (h *Host) handleLocalAddressesUpdated(evt event.EvtLocalAddressesUpdated) (
 		maddrs[i] = update.Address
 	}
 
-	h.populateAddrs(maddrs)
-
-	return h, h.watchEvents
+	return m.populateAddrs(maddrs), m.watchEvents
 }
 
-func (h *Host) handleNATDeviceTypeChanged(evt event.EvtNATDeviceTypeChanged) (*Host, tea.Cmd) {
-	h.logEntry().WithFields(logrus.Fields{
+func (m *Model) handleNATDeviceTypeChanged(evt event.EvtNATDeviceTypeChanged) (*Model, tea.Cmd) {
+	m.logEntry().WithFields(logrus.Fields{
 		"type":     evt.NatDeviceType.String(),
 		"protocol": evt.TransportProtocol.String(),
 	}).Infoln("NAT Device Type Changed")
 
 	switch evt.TransportProtocol {
 	case network.NATTransportUDP:
-		h.NATTypeUDP = evt.NatDeviceType
+		m.NATTypeUDP = evt.NatDeviceType
 	case network.NATTransportTCP:
-		h.NATTypeTCP = evt.NatDeviceType
+		m.NATTypeTCP = evt.NatDeviceType
 	}
 
-	return h, h.watchEvents
+	return m, m.watchEvents
 }
 
-func (h *Host) handleLocalReachabilityChanged(evt event.EvtLocalReachabilityChanged) (*Host, tea.Cmd) {
-	h.logEntry().WithFields(logrus.Fields{
+func (m *Model) handleLocalReachabilityChanged(evt event.EvtLocalReachabilityChanged) (*Model, tea.Cmd) {
+	m.logEntry().WithFields(logrus.Fields{
 		"reachability": evt.Reachability.String(),
 	}).Infoln("Local Reachability changed")
 
-	h.Reachability = evt.Reachability
+	m.Reachability = evt.Reachability
 
-	return h, h.watchEvents
+	return m, m.watchEvents
 }
 
-func (h *Host) handleHolePunchEvent(evt *holepunch.Event) (*Host, tea.Cmd) {
-	h.logEntry().WithFields(logrus.Fields{
+func (m *Model) handleHolePunchEvent(evt *holepunch.Event) (*Model, tea.Cmd) {
+	m.logEntry().WithFields(logrus.Fields{
 		"peerID": evt.Peer.String()[:16],
 	}).Infoln("Hole Punch Event")
 
-	return h, nil
+	return m, nil
 }

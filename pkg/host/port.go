@@ -16,10 +16,10 @@ func (pm portMapping) String() string {
 	return fmt.Sprintf("%s -> %s (%s)", pm.internal, pm.external, pm.network)
 }
 
-func (h *Host) portMappings() map[string]portMapping {
+func (m *Model) portMappings() map[string]portMapping {
 	mappings := map[string]portMapping{}
-	for _, maddr := range h.PrivateAddrs {
-		mapping := h.NATManager.GetMapping(maddr)
+	for _, maddr := range m.PrivateAddrs {
+		mapping := m.NATManager.GetMapping(maddr)
 		if mapping == nil {
 			continue
 		}

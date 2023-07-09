@@ -1,7 +1,4 @@
-//go:generate mockgen -package mock -source internal/wrap/ioutil.go -destination internal/mock/ioutil.go
-//go:generate mockgen -package mock -source internal/wrap/xdg.go -destination internal/mock/xdg.go
-//go:generate mockgen -package mock -source internal/wrap/time.go -destination internal/mock/time.go
-//go:generate mockgen -package mock -source internal/wrap/dht.go -destination internal/mock/dht.go
-//go:generate mockgen -package mock -source internal/wrap/manet.go -destination internal/mock/manet.go
-//go:generate mockgen -package mock -source internal/wrap/discovery.go -destination internal/mock/discovery.go
+//go:generate mockgen -package mock -source internal/wrap/stream.go -destination internal/mock/stream.go
+//go:generate mockgen -package mock -source internal/wrap/conn.go -destination internal/mock/conn.go
+//go:generate mockgen -package mock -source internal/wrap/host.go -destination internal/mock/host.go
 package pcp

@@ -20,11 +20,11 @@ const (
 	PeerStateFailedAuthentication PeerState = "FailedAuthentication"
 )
 
-func (h *Host) ViewPeerStates() string {
+func (m *Model) ViewPeerStates() string {
 	out := ""
 
 	var peerIDs []string
-	for peerID := range h.PeerStates {
+	for peerID := range m.PeerStates {
 		peerIDs = append(peerIDs, peerID.String())
 	}
 	sort.Strings(peerIDs)
@@ -37,12 +37,14 @@ func (h *Host) ViewPeerStates() string {
 			panic(err)
 		}
 
-		state := h.PeerStates[pID]
+		state := m.PeerStates[pID]
 		switch state {
 		case PeerStateConnected:
 			fallthrough
+		case PeerStateAuthenticating:
+			fallthrough
 		case PeerStateAuthenticated:
-			out += fmt.Sprintf("  -> %s: %s\n", style.Render(peerID)[:16], h.PakeProtocol.PakeStateStr(pID))
+			out += fmt.Sprintf("  -> %s: %s\n", style.Render(peerID)[:16], m.PakeProtocol.PakeStateStr(pID))
 		}
 	}
 

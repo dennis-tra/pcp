@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/dennis-tra/pcp/internal/log"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 

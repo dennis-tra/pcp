@@ -10,7 +10,7 @@ import (
 )
 
 type (
-	bootstrapResult struct {
+	bootstrapResultMsg struct {
 		err error
 	}
 	advertiseResult struct {

@@ -205,6 +205,8 @@ func beforeFunc(cCtx *cli.Context) error {
 		}
 	}
 
+	config.Global.Version = cCtx.App.Version
+
 	return nil
 }
 

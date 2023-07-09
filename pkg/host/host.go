@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/dennis-tra/pcp/pkg/config"
 	"github.com/libp2p/go-libp2p"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/event"
@@ -30,9 +31,9 @@ import (
 
 var log = logrus.WithField("comp", "host")
 
-// Host encapsulates the logic that's common for the receiving
+// Model encapsulates the logic that's common for the receiving
 // and sending side of the file transfer.
-type Host struct {
+type Model struct {
 	host.Host
 
 	// give host protocol capabilities
@@ -41,7 +42,7 @@ type Host struct {
 	//*TransferProtocol
 
 	ctx     context.Context
-	program *tea.Program
+	sender  tea.Sender
 	Verbose bool
 
 	// keeps track of hole punching states of particular peers.
@@ -79,7 +80,7 @@ type Host struct {
 }
 
 // New creates a new, fully initialized host with the given options.
-func New(ctx context.Context, program *tea.Program, wrds []string, opts ...libp2p.Option) (*Host, error) {
+func New(ctx context.Context, sender tea.Sender, wrds []string, opts ...libp2p.Option) (*Model, error) {
 	ints, err := words.ToInts(wrds)
 	if err != nil {
 		return nil, fmt.Errorf("words to ints: %w", err)
@@ -97,9 +98,9 @@ func New(ctx context.Context, program *tea.Program, wrds []string, opts ...libp2
 		nat     basichost.NATManager
 	)
 	opts = append(opts,
-		// libp2p.UserAgent("pcp/"+c.App.Version),
+		libp2p.UserAgent("pcp/"+config.Global.Version),
 		libp2p.ResourceManager(rm),
-		libp2p.EnableHolePunching(holepunch.WithTracer(&holePunchTracer{program: program})),
+		libp2p.EnableHolePunching(holepunch.WithTracer(&holePunchTracer{sender: sender})),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
 			ipfsDHT, err = kaddht.New(ctx, h, kaddht.EnableOptimisticProvide())
 			return ipfsDHT, err
@@ -127,39 +128,37 @@ func New(ctx context.Context, program *tea.Program, wrds []string, opts ...libp2
 	log.WithField("peerID", h.ID().String()).Infoln("Initialized libp2p host")
 
 	chanID := ints[0]
-	pcpHost := &Host{
+	model := &Model{
 		ctx:          ctx,
 		Host:         h,
 		IpfsDHT:      ipfsDHT,
-		program:      program,
+		sender:       sender,
 		Words:        wrds,
-		MDNS:         mdns.New(ctx, h, program, chanID),
+		MDNS:         mdns.New(ctx, h, sender, chanID),
 		DHT:          dht.New(ctx, h, ipfsDHT, chanID),
 		evtSub:       evtSub,
 		NATManager:   nat,
 		PeerStates:   map[peer.ID]PeerState{},
-		PakeProtocol: NewPakeProtocol(ctx, h, program, wrds),
+		PakeProtocol: NewPakeProtocol(ctx, h, sender, wrds),
 		// PushProtocol: NewPushProtocol(host)
 		// TransferProtocol: NewTransferProtocol(host)
 	}
-
-	pcpHost.Network().Notify(pcpHost)
+	model.Network().Notify(model)
 
 	// Extract addresses from host AFTER we have subscribed to the address
 	// change events. Otherwise, there could have been a race condition.
-	pcpHost.populateAddrs(pcpHost.Addrs())
+	model = model.populateAddrs(model.Addrs())
 
-	return pcpHost, nil
+	return model, nil
 }
 
-func (h *Host) Init() tea.Cmd {
-	h.RegisterKeyExchangeHandler()
-
+func (m *Model) Init() tea.Cmd {
 	return tea.Batch(
-		h.watchSignals,
-		h.watchEvents,
-		h.MDNS.Init(),
-		h.DHT.Init(),
+		m.watchSignals,
+		m.watchEvents,
+		m.MDNS.Init(),
+		m.DHT.Init(),
+		m.PakeProtocol.Init(),
 	)
 }
 
@@ -169,14 +168,14 @@ func Shutdown() tea.Msg {
 	return ShutdownMsg{}
 }
 
-func (h *Host) logEntry() *logrus.Entry {
+func (m *Model) logEntry() *logrus.Entry {
 	return log.WithFields(logrus.Fields{
 		"comp": "host",
 	})
 }
 
-func (h *Host) Update(msg tea.Msg) (*Host, tea.Cmd) {
-	h.logEntry().WithField("type", fmt.Sprintf("%T", msg)).Tracef("handle message: %T\n", msg)
+func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
+	m.logEntry().WithField("type", fmt.Sprintf("%T", msg)).Tracef("handle message: %T\n", msg)
 
 	var (
 		cmd  tea.Cmd
@@ -185,59 +184,67 @@ func (h *Host) Update(msg tea.Msg) (*Host, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case connectedMsg:
-		h.connections += 1
+		m.connections += 1
 	case disconnectedMsg:
-		h.connections -= 1
+		m.connections -= 1
+	case dht.PeerMsg:
+		m, cmd = m.HandlePeerFound(msg.Peer)
+		cmds = append(cmds, cmd)
+	case mdns.PeerMsg:
+		m, cmd = m.HandlePeerFound(peer.AddrInfo(msg))
+		cmds = append(cmds, cmd)
 	case pakeOnKeyExchange:
-		h.PeerStates[msg.Conn().RemotePeer()] = PeerStateAuthenticating
+		m.PeerStates[msg.stream.Conn().RemotePeer()] = PeerStateAuthenticating
 	case tea.KeyMsg:
-		h, cmd = h.handleKeyMsg(msg)
+		m, cmd = m.handleKeyMsg(msg)
 		cmds = append(cmds, cmd)
 	case *holepunch.Event:
-		h, cmd = h.handleHolePunchEvent(msg)
+		m, cmd = m.handleHolePunchEvent(msg)
 		cmds = append(cmds, cmd)
 	case event.EvtLocalAddressesUpdated:
-		h, cmd = h.handleLocalAddressesUpdated(msg)
+		m, cmd = m.handleLocalAddressesUpdated(msg)
 		cmds = append(cmds, cmd)
 	case event.EvtNATDeviceTypeChanged:
-		h, cmd = h.handleNATDeviceTypeChanged(msg)
+		m, cmd = m.handleNATDeviceTypeChanged(msg)
 		cmds = append(cmds, cmd)
 	case event.EvtLocalReachabilityChanged:
-		h, cmd = h.handleLocalReachabilityChanged(msg)
+		m, cmd = m.handleLocalReachabilityChanged(msg)
 		cmds = append(cmds, cmd)
+	case syscall.Signal:
+		cmds = append(cmds, m.handleSignal(msg))
 	}
 
-	h.MDNS, cmd = h.MDNS.Update(msg)
+	m.MDNS, cmd = m.MDNS.Update(msg)
 	cmds = append(cmds, cmd)
 
-	h.DHT, cmd = h.DHT.Update(msg)
+	m.DHT, cmd = m.DHT.Update(msg)
 	cmds = append(cmds, cmd)
 
-	h.PakeProtocol, cmd = h.PakeProtocol.Update(msg)
+	m.PakeProtocol, cmd = m.PakeProtocol.Update(msg)
 	cmds = append(cmds, cmd)
 
-	return h, tea.Batch(cmds...)
+	return m, tea.Batch(cmds...)
 }
 
-func (h *Host) View() string {
-	if !h.Verbose {
+func (m *Model) View() string {
+	if !m.Verbose {
 		return ""
 	}
 
 	out := ""
-	out += fmt.Sprintf("PeerID:        %s\n", h.ID())
-	out += fmt.Sprintf("DHT:           %s\n", h.DHT.State.String())
-	out += fmt.Sprintf("mDNS:          %s\n", h.MDNS.State.String())
-	out += fmt.Sprintf("Reachability:  %s\n", h.Reachability.String())
-	out += fmt.Sprintf("Connections:   %d\n", h.connections)
-	out += fmt.Sprintf("NAT (udp/tcp): %s / %s\n", h.NATTypeUDP.String(), h.NATTypeTCP.String())
+	out += fmt.Sprintf("PeerID:        %s\n", m.ID())
+	out += fmt.Sprintf("DHT:           %s\n", m.DHT.State.String())
+	out += fmt.Sprintf("mDNS:          %s\n", m.MDNS.State.String())
+	out += fmt.Sprintf("Reachability:  %s\n", m.Reachability.String())
+	out += fmt.Sprintf("Connections:   %d\n", m.connections)
+	out += fmt.Sprintf("NAT (udp/tcp): %s / %s\n", m.NATTypeUDP.String(), m.NATTypeTCP.String())
 	out += fmt.Sprintf("Addresses:\n")
-	out += fmt.Sprintf("  Private:     %d\n", len(h.PrivateAddrs))
-	out += fmt.Sprintf("  Public:      %d\n", len(h.PublicAddrs))
-	out += fmt.Sprintf("  Relay:       %d\n", len(h.RelayAddrs))
+	out += fmt.Sprintf("  Private:     %d\n", len(m.PrivateAddrs))
+	out += fmt.Sprintf("  Public:      %d\n", len(m.PublicAddrs))
+	out += fmt.Sprintf("  Relay:       %d\n", len(m.RelayAddrs))
 
 	var mappings []string
-	for _, pm := range h.portMappings() {
+	for _, pm := range m.portMappings() {
 		mappings = append(mappings, pm.String())
 	}
 	sort.Strings(mappings)
@@ -251,12 +258,65 @@ func (h *Host) View() string {
 	return out
 }
 
-func (h *Host) StartKeyExchange(ctx context.Context, remotePeer peer.ID) tea.Cmd {
-	h.PeerStates[remotePeer] = PeerStateAuthenticating
-	return h.PakeProtocol.StartKeyExchange(ctx, remotePeer)
+func (m *Model) StartKeyExchange(ctx context.Context, remotePeer peer.ID) tea.Cmd {
+	if state, found := m.PeerStates[remotePeer]; found {
+		switch state {
+		case PeerStateConnected:
+		case PeerStateFailedConnecting:
+		default:
+			return nil
+		}
+	}
+
+	m.PeerStates[remotePeer] = PeerStateAuthenticating
+	return m.PakeProtocol.StartKeyExchange(ctx, remotePeer)
 }
 
-func (h *Host) watchSignals() tea.Msg {
+type PeerConnectMsg struct {
+	ID  peer.ID
+	Err error
+}
+
+func (m *Model) connect(pi peer.AddrInfo) tea.Cmd {
+	return func() tea.Msg {
+		log.Debugln("Connecting to peer:", pi.ID)
+		return PeerConnectMsg{
+			ID:  pi.ID,
+			Err: m.Connect(m.ctx, pi),
+		}
+	}
+}
+
+func (m *Model) HandlePeerFound(pi peer.AddrInfo) (*Model, tea.Cmd) {
+	peerState, found := m.PeerStates[pi.ID]
+	if found {
+		switch peerState {
+		case PeerStateNotConnected:
+			m.PeerStates[pi.ID] = PeerStateConnecting
+			return m, m.connect(pi)
+		case PeerStateConnecting:
+			log.Debugln("Ignoring discovered peer as we're already trying to connect", pi.ID)
+		case PeerStateConnected:
+			log.Debugln("Ignoring discovered peer because as we're already connected", pi.ID)
+		case PeerStateAuthenticating:
+			log.Debugln("Ignoring discovered peer because as we're in midst of authenticating each other", pi.ID)
+		case PeerStateAuthenticated:
+			log.Debugln("Ignoring discovered peer as it's already authenticated", pi.ID)
+		case PeerStateFailedConnecting:
+			log.Debugln("We tried to connect previously but couldn't establish a connection, try again", pi.ID)
+			m.PeerStates[pi.ID] = PeerStateConnecting
+			return m, m.connect(pi)
+		case PeerStateFailedAuthentication:
+			log.Debugln("We tried to connect previously but the node didn't pass authentication -> skipping", pi.ID)
+		}
+	} else {
+		m.PeerStates[pi.ID] = PeerStateConnecting
+		return m, m.connect(pi)
+	}
+	return m, nil
+}
+
+func (m *Model) watchSignals() tea.Msg {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
 	defer func() {
@@ -269,51 +329,59 @@ func (h *Host) watchSignals() tea.Msg {
 	case sig := <-sigs:
 		log.WithField("sig", sig.String()).Debugln("saw signal")
 		return sig
-	case <-h.ctx.Done():
+	case <-m.ctx.Done():
 		return nil
 	}
 }
 
-func (h *Host) watchEvents() tea.Msg {
+func (m *Model) handleSignal(sig syscall.Signal) tea.Cmd {
+	log.WithField("sig", sig.String()).Infoln("received signal")
+	return func() tea.Msg {
+		return ShutdownMsg{}
+	}
+}
+
+func (m *Model) watchEvents() tea.Msg {
 	select {
-	case evt := <-h.evtSub.Out():
+	case evt := <-m.evtSub.Out():
 		return evt
-	case <-h.ctx.Done():
+	case <-m.ctx.Done():
 		return nil
 	}
 }
 
-func (h *Host) IsDirectConnectivityPossible() (bool, error) {
-	if h.Reachability == network.ReachabilityPrivate && h.NATTypeUDP == network.NATDeviceTypeSymmetric && h.NATTypeTCP == network.NATDeviceTypeSymmetric {
+func (m *Model) IsDirectConnectivityPossible() (bool, error) {
+	if m.Reachability == network.ReachabilityPrivate && m.NATTypeUDP == network.NATDeviceTypeSymmetric && m.NATTypeTCP == network.NATDeviceTypeSymmetric {
 		return false, fmt.Errorf("private network with symmetric NAT")
 	}
 
 	// we have public reachability, we're good to go with the DHT
-	if h.Reachability == network.ReachabilityPublic && len(h.PublicAddrs) > 0 {
+	if m.Reachability == network.ReachabilityPublic && len(m.PublicAddrs) > 0 {
 		return true, nil
 	}
 
 	// we are in a private network, but have at least one cone NAT and at least one relay address
-	if h.Reachability == network.ReachabilityPrivate && (h.NATTypeUDP == network.NATDeviceTypeCone || h.NATTypeTCP == network.NATDeviceTypeCone) && len(h.RelayAddrs) > 0 {
+	if m.Reachability == network.ReachabilityPrivate && (m.NATTypeUDP == network.NATDeviceTypeCone || m.NATTypeTCP == network.NATDeviceTypeCone) && len(m.RelayAddrs) > 0 {
 		return true, nil
 	}
 
 	return false, nil
 }
 
-func (h *Host) populateAddrs(addrs []ma.Multiaddr) {
-	h.PublicAddrs = []ma.Multiaddr{}
-	h.PrivateAddrs = []ma.Multiaddr{}
-	h.RelayAddrs = []ma.Multiaddr{}
+func (m *Model) populateAddrs(addrs []ma.Multiaddr) *Model {
+	m.PublicAddrs = []ma.Multiaddr{}
+	m.PrivateAddrs = []ma.Multiaddr{}
+	m.RelayAddrs = []ma.Multiaddr{}
 	for _, addr := range addrs {
 		if isRelayedMaddr(addr) { // needs to come before IsPublic, because relay addrs are also public addrs
-			h.RelayAddrs = append(h.RelayAddrs, addr)
+			m.RelayAddrs = append(m.RelayAddrs, addr)
 		} else if manet.IsPublicAddr(addr) {
-			h.PublicAddrs = append(h.PublicAddrs, addr)
+			m.PublicAddrs = append(m.PublicAddrs, addr)
 		} else if manet.IsPrivateAddr(addr) {
-			h.PrivateAddrs = append(h.PrivateAddrs, addr)
+			m.PrivateAddrs = append(m.PrivateAddrs, addr)
 		}
 	}
+	return m
 }
 
 func isRelayedMaddr(maddr ma.Multiaddr) bool {
@@ -322,11 +390,11 @@ func isRelayedMaddr(maddr ma.Multiaddr) bool {
 }
 
 type holePunchTracer struct {
-	program *tea.Program
+	sender tea.Sender
 }
 
 func (h *holePunchTracer) Trace(evt *holepunch.Event) {
-	h.program.Send(evt)
+	h.sender.Send(evt)
 }
 
 type (
@@ -334,20 +402,21 @@ type (
 		net  network.Network
 		conn network.Conn
 	}
+
 	disconnectedMsg struct {
 		net  network.Network
 		conn network.Conn
 	}
 )
 
-func (h *Host) Listen(n network.Network, multiaddr ma.Multiaddr) {}
-
-func (h *Host) ListenClose(n network.Network, multiaddr ma.Multiaddr) {}
-
-func (h *Host) Connected(n network.Network, conn network.Conn) {
-	h.program.Send(connectedMsg{net: n, conn: conn})
+func (m *Model) Connected(n network.Network, conn network.Conn) {
+	m.sender.Send(connectedMsg{net: n, conn: conn})
 }
 
-func (h *Host) Disconnected(n network.Network, conn network.Conn) {
-	h.program.Send(disconnectedMsg{net: n, conn: conn})
+func (m *Model) Disconnected(n network.Network, conn network.Conn) {
+	m.sender.Send(disconnectedMsg{net: n, conn: conn})
 }
+
+func (m *Model) Listen(n network.Network, multiaddr ma.Multiaddr) {}
+
+func (m *Model) ListenClose(n network.Network, multiaddr ma.Multiaddr) {}

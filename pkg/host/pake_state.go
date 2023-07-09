@@ -1,5 +1,7 @@
 package host
 
+import "github.com/libp2p/go-libp2p/core/network"
+
 // PakeState holds information for a given peer that we are performing
 // a password authenticated key exchange with. The struct stores the
 // final derived strong session key as well as a potential error that has
@@ -9,6 +11,8 @@ type PakeState struct {
 	Step PakeStep
 	Key  []byte
 	Err  error
+
+	stream network.Stream
 }
 
 // PakeStep is an enum type that represents different steps in the

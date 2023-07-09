@@ -26,6 +26,7 @@ var (
 )
 
 type GlobalConfig struct {
+	Version        string `json:"-"`
 	LogFile        string
 	LogLevel       int
 	LogAppend      bool
