@@ -20,7 +20,6 @@ import (
 	"github.com/dennis-tra/pcp/pkg/tui"
 )
 
-// pattern: /protocol-name/request-or-response-message/version
 const ProtocolPake = "/pcp/pake/0.3.0"
 
 var ErrAuthenticationFailed = fmt.Errorf("authentication failed")
@@ -119,13 +118,13 @@ func (p *PakeProtocol) IsAuthenticated(peerID peer.ID) bool {
 
 // GetSessionKey returns the session key that was obtained via
 // the password authenticated key exchange (PAKE) protocol.
-func (p *PakeProtocol) GetSessionKey(peerID peer.ID) ([]byte, bool) {
+func (p *PakeProtocol) GetSessionKey(peerID peer.ID) []byte {
 	state, ok := p.states[peerID]
 	if !ok {
-		return nil, false
+		return nil
 	}
 
-	return state.Key, true
+	return state.Key
 }
 
 type PakeRole string
@@ -501,9 +500,15 @@ func (p *PakeProtocol) handlePakeStepMsg(msg pakeMsg[PakeStep]) (*PakeProtocol, 
 		switch state.Step {
 		case PakeStepPeerAuthenticated:
 		case PakeStepError:
+			if errors.Is(state.Err, ErrAuthenticationFailed) {
+				break
+			}
+			fallthrough
 		default:
-			p.states[msg.peerID].Step = msg.payload
-			p.states[msg.peerID].stream = msg.stream
+			p.states[msg.peerID] = &PakeState{
+				Step:   msg.payload,
+				stream: msg.stream,
+			}
 		}
 	} else {
 		msg.stream.Reset()
@@ -532,6 +537,7 @@ func (p *PakeProtocol) handlePakeKey(msg pakeMsg[[]byte]) (*PakeProtocol, tea.Cm
 		Step:   PakeStepPeerAuthenticated,
 		Key:    msg.payload,
 		stream: msg.stream,
+		Err:    nil,
 	}
 	return p, nil
 }

@@ -61,8 +61,8 @@ func (m *Model) Send(s network.Stream, msg p2p.HeaderMessage) error {
 	}
 
 	// Encrypt the data with the PAKE session key if it is found
-	sKey, found := m.GetSessionKey(s.Conn().RemotePeer())
-	if found {
+	sKey := m.GetSessionKey(s.Conn().RemotePeer())
+	if len(sKey) == 0 {
 		data, err = crypt.Encrypt(sKey, data)
 		if err != nil {
 			return fmt.Errorf("encrypt message %T: %w", msg, err)
@@ -136,8 +136,8 @@ func (m *Model) Read(s network.Stream, buf p2p.HeaderMessage) error {
 
 	log.Debugf("Reading message from %s\n", s.Conn().RemotePeer().String())
 	// Decrypt the data with the PAKE session key if it is found
-	sKey, found := m.GetSessionKey(s.Conn().RemotePeer())
-	if found {
+	sKey := m.GetSessionKey(s.Conn().RemotePeer())
+	if len(sKey) == 0 {
 		data, err = crypt.Decrypt(sKey, data)
 		if err != nil {
 			return err
