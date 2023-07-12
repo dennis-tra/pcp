@@ -34,7 +34,7 @@ func (m *Model) ViewPeerStates() string {
 	for _, peerID := range peerIDs {
 		pID, err := peer.Decode(peerID)
 		if err != nil {
-			panic(err)
+			panic(fmt.Sprintf("%s: %s", peerID, err))
 		}
 
 		state := m.PeerStates[pID]

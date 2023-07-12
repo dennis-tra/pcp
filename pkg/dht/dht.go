@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dennis-tra/pcp/pkg/config"
-
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/sirupsen/logrus"
+
+	"github.com/dennis-tra/pcp/pkg/config"
 )
 
 const (
@@ -73,7 +73,10 @@ func (d *DHT) Update(msg tea.Msg) (*DHT, tea.Cmd) {
 	)
 
 	switch msg := msg.(type) {
-	case advertiseResult:
+	case advertiseResultMsg:
+		if d.State == StateStopped || d.State == StateError {
+			return d, nil
+		}
 		cancel, found := d.services[msg.offset]
 		if !found {
 			log.Fatal("DHT service not found")
@@ -109,6 +112,10 @@ func (d *DHT) Update(msg tea.Msg) (*DHT, tea.Cmd) {
 		}
 
 	case PeerMsg:
+		if d.State == StateStopped || d.State == StateError {
+			return d, nil
+		}
+
 		cancel, found := d.services[msg.offset]
 		if !found {
 			log.Fatal("DHT service not found")
@@ -116,15 +123,15 @@ func (d *DHT) Update(msg tea.Msg) (*DHT, tea.Cmd) {
 		}
 		cancel()
 
-		if msg.err == nil {
+		if msg.Err == nil {
 			d.State = StateLookup
-		} else if msg.err != nil && msg.fatal {
+		} else if msg.Err != nil && msg.fatal {
 			d.State = StateError
-			d.Err = msg.err
+			d.Err = msg.Err
 			return d, nil
-		} else if errors.Is(msg.err, context.Canceled) && d.State != StateStopped {
+		} else if errors.Is(msg.Err, context.Canceled) && d.State != StateStopped {
 			d.State = StateStopped
-			d.Err = msg.err
+			d.Err = msg.Err
 			return d, nil
 		} else {
 			d.State = StateRetrying
@@ -158,11 +165,11 @@ func (d *DHT) View() string {
 	case StateBootstrapping:
 		return d.spinner.View() + "(bootstrapping)"
 	case StateBootstrapped:
-		// style := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-		// return style.Render("bootstrapped")
 		return d.spinner.View() + "(analyzing network)"
 	case StateProviding:
 		return d.spinner.View() + "(writing to DHT)"
+	case StateLookup:
+		return d.spinner.View() + "(searching peer)"
 	case StateRetrying:
 		return d.spinner.View() + "(retrying)"
 	case StateProvided:
@@ -179,7 +186,7 @@ func (d *DHT) View() string {
 		return style.Render("failed")
 	default:
 		style := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-		return style.Render("unknown state")
+		return style.Render("unknown state", d.State.String())
 	}
 }
 

@@ -2,6 +2,7 @@ package dht
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -13,7 +14,7 @@ type (
 	bootstrapResultMsg struct {
 		err error
 	}
-	advertiseResult struct {
+	advertiseResultMsg struct {
 		offset time.Duration
 		err    error
 		fatal  bool
@@ -21,7 +22,7 @@ type (
 	PeerMsg struct { // discoverResult
 		Peer   peer.AddrInfo
 		offset time.Duration
-		err    error
+		Err    error
 		fatal  bool
 	}
 	stopMsg struct{ reason error }
@@ -88,11 +89,14 @@ func (d *DHT) Discover(offsets ...time.Duration) (*DHT, tea.Cmd) {
 
 func (d *DHT) StopWithReason(reason error) (*DHT, tea.Cmd) {
 	d.reset()
-	if reason != nil {
+	if reason != nil && !errors.Is(reason, context.Canceled) {
 		d.State = StateError
 		d.Err = reason
 	} else {
 		d.State = StateStopped
+	}
+	if err := d.dht.Close(); err != nil {
+		log.WithError(err).Warnln("Failed closing DHT")
 	}
 	return d, nil
 }

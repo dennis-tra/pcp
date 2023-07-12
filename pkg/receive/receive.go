@@ -69,6 +69,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case pcphost.PeerConnectMsg:
+
+		if msg.ID.String() == "" {
+			panic("jjjjjjjjjjjjjj")
+		}
 		if msg.Err != nil {
 			log.WithError(msg.Err).Debugln("Error connecting to peer:", msg.ID)
 			m.host.PeerStates[msg.ID] = pcphost.PeerStateFailedConnecting
@@ -79,6 +83,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case pcphost.ShutdownMsg:
 		// cleanup
+		cmds = append(cmds, tea.Quit)
 	}
 
 	switch m.host.MDNS.State {

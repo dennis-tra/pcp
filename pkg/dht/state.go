@@ -10,7 +10,6 @@ const (
 	StateLookup
 	StateRetrying
 	StateProvided
-	StateStopping
 	StateStopped
 	StateError
 )

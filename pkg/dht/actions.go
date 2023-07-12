@@ -108,14 +108,14 @@ func (d *DHT) provide(ctx context.Context, offset time.Duration) tea.Cmd {
 
 		cID, err := did.ContentID(did.DiscoveryID(d.chanID))
 		if err != nil {
-			return advertiseResult{
+			return advertiseResultMsg{
 				offset: offset,
 				err:    err,
 				fatal:  true,
 			}
 		}
 
-		return advertiseResult{
+		return advertiseResultMsg{
 			offset: offset,
 			err:    d.dht.Provide(ctx, cID, true),
 			fatal:  false,
@@ -135,7 +135,7 @@ func (d *DHT) lookup(ctx context.Context, offset time.Duration) tea.Cmd {
 		if err != nil {
 			return PeerMsg{
 				offset: offset,
-				err:    err,
+				Err:    err,
 				fatal:  true,
 			}
 		}
@@ -144,7 +144,12 @@ func (d *DHT) lookup(ctx context.Context, offset time.Duration) tea.Cmd {
 		ctx, cancel := context.WithTimeout(ctx, lookupTimeout)
 		defer cancel()
 		for pi := range d.dht.FindProvidersAsync(ctx, cID, 0) {
+			pi := pi
 			logEntry.Debugln("DHT - Found peer ", pi.ID)
+
+			if pi.ID.String() == "" {
+				panic(fmt.Sprintf("kookokokok: %s", pi))
+			}
 			if len(pi.Addrs) > 0 {
 				return PeerMsg{
 					Peer:   pi,
@@ -154,7 +159,7 @@ func (d *DHT) lookup(ctx context.Context, offset time.Duration) tea.Cmd {
 		}
 
 		return PeerMsg{
-			err: fmt.Errorf("not found"),
+			Err: fmt.Errorf("not found"),
 		}
 	}
 }

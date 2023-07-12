@@ -25,7 +25,7 @@ type State string
 
 const (
 	StateIdle    State = "idle"
-	StateStarted State = "roaming"
+	StateStarted State = "started"
 	StateError   State = "error"
 	StateStopped State = "stopped"
 )
@@ -186,9 +186,8 @@ func (m *MDNS) Update(msg tea.Msg) (*MDNS, tea.Cmd) {
 		}
 		m.logEntry().WithError(msg.reason).Infoln("Stopping mDNS service")
 
-		m.reset()
-		m.State = StateStopped
-		m.Err = msg.reason
+		m, cmd = m.StopWithReason(msg.reason)
+		cmds = append(cmds, cmd)
 	}
 
 	m.spinner, cmd = m.spinner.Update(msg)
@@ -278,4 +277,15 @@ func onlyPrivate(addrs []ma.Multiaddr) []ma.Multiaddr {
 		}
 	}
 	return routable
+}
+
+func (m *MDNS) StopWithReason(reason error) (*MDNS, tea.Cmd) {
+	m.reset()
+	if reason != nil && !errors.Is(reason, context.Canceled) {
+		m.State = StateError
+		m.Err = reason
+	} else {
+		m.State = StateStopped
+	}
+	return m, nil
 }

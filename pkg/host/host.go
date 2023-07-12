@@ -188,13 +188,23 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	case disconnectedMsg:
 		m.connections -= 1
 	case dht.PeerMsg:
-		m, cmd = m.HandlePeerFound(msg.Peer)
-		cmds = append(cmds, cmd)
+		if msg.Err == nil {
+			m, cmd = m.HandlePeerFound(msg.Peer)
+			cmds = append(cmds, cmd)
+		}
 	case mdns.PeerMsg:
 		m, cmd = m.HandlePeerFound(peer.AddrInfo(msg))
 		cmds = append(cmds, cmd)
 	case pakeOnKeyExchange:
 		m.PeerStates[msg.stream.Conn().RemotePeer()] = PeerStateAuthenticating
+	case pakeMsg[[]byte]:
+		m.PeerStates[msg.peerID] = PeerStateAuthenticated
+		if m.DHT.State != dht.StateIdle && m.DHT.State != dht.StateError {
+			m.DHT, cmd = m.DHT.StopWithReason(nil)
+		}
+		if m.MDNS.State != mdns.StateIdle && m.MDNS.State != mdns.StateError {
+			m.MDNS, cmd = m.MDNS.StopWithReason(nil)
+		}
 	case tea.KeyMsg:
 		m, cmd = m.handleKeyMsg(msg)
 		cmds = append(cmds, cmd)
@@ -233,7 +243,11 @@ func (m *Model) View() string {
 
 	out := ""
 	out += fmt.Sprintf("PeerID:        %s\n", m.ID())
-	out += fmt.Sprintf("DHT:           %s\n", m.DHT.State.String())
+	if m.DHT.State != dht.StateError {
+		out += fmt.Sprintf("DHT:           %s\n", m.DHT.State.String())
+	} else {
+		out += fmt.Sprintf("DHT:           %s (%s)\n", m.DHT.State.String(), m.DHT.Err)
+	}
 	out += fmt.Sprintf("mDNS:          %s\n", m.MDNS.State.String())
 	out += fmt.Sprintf("Reachability:  %s\n", m.Reachability.String())
 	out += fmt.Sprintf("Connections:   %d\n", m.connections)
@@ -268,6 +282,9 @@ func (m *Model) StartKeyExchange(ctx context.Context, remotePeer peer.ID) tea.Cm
 		}
 	}
 
+	if remotePeer.String() == "" {
+		panic("hfdhhfggh")
+	}
 	m.PeerStates[remotePeer] = PeerStateAuthenticating
 	return m.PakeProtocol.StartKeyExchange(ctx, remotePeer)
 }
