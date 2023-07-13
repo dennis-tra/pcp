@@ -243,10 +243,13 @@ func (m *Model) View() string {
 
 	out := ""
 	out += fmt.Sprintf("PeerID:        %s\n", m.ID())
-	if m.DHT.State != dht.StateError {
-		out += fmt.Sprintf("DHT:           %s\n", m.DHT.State.String())
-	} else {
+	switch m.DHT.State {
+	case dht.StateBootstrapping:
+		out += fmt.Sprintf("DHT:           %s (pending %d, success %d, errors %d)\n", m.DHT.State.String(), m.DHT.BootstrapsPending, m.DHT.BootstrapsSuccesses, len(m.DHT.BootstrapsErrs))
+	case dht.StateError:
 		out += fmt.Sprintf("DHT:           %s (%s)\n", m.DHT.State.String(), m.DHT.Err)
+	default:
+		out += fmt.Sprintf("DHT:           %s\n", m.DHT.State.String())
 	}
 	out += fmt.Sprintf("mDNS:          %s\n", m.MDNS.State.String())
 	out += fmt.Sprintf("Reachability:  %s\n", m.Reachability.String())

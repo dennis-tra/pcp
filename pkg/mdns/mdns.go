@@ -49,13 +49,16 @@ func (s State) String() string {
 // via multicast DNS in the local network.
 type MDNS struct {
 	host.Host
-	ctx      context.Context
-	sender   tea.Sender
-	chanID   int
+	ctx    context.Context
+	chanID int
+
 	services map[time.Duration]mdns.Service
-	spinner  spinner.Model
-	State    State
-	Err      error
+
+	sender  tea.Sender
+	spinner spinner.Model
+
+	State State
+	Err   error
 }
 
 type (
@@ -134,12 +137,6 @@ func (m *MDNS) Start(offsets ...time.Duration) (*MDNS, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
-}
-
-func (m *MDNS) Stop() tea.Cmd {
-	return func() tea.Msg {
-		return stopMsg{}
-	}
 }
 
 func (m *MDNS) Update(msg tea.Msg) (*MDNS, tea.Cmd) {

@@ -539,5 +539,22 @@ func (p *PakeProtocol) handlePakeKey(msg pakeMsg[[]byte]) (*PakeProtocol, tea.Cm
 		stream: msg.stream,
 		Err:    nil,
 	}
-	return p, nil
+
+	var openStreams []network.Stream
+
+	for pid, state := range p.states {
+		if pid == msg.peerID || state.stream == nil {
+			continue
+		}
+		openStreams = append(openStreams, state.stream)
+	}
+
+	return p, func() tea.Msg {
+		for _, s := range openStreams {
+			if err := s.Reset(); err != nil {
+				log.WithError(err).WithField("peerID", s.Conn().RemotePeer().ShortString()).Warnln("Failed resetting stream")
+			}
+		}
+		return nil
+	}
 }

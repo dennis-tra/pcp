@@ -40,8 +40,9 @@ type DHT struct {
 	services map[time.Duration]context.CancelFunc
 	spinner  spinner.Model
 
-	// flags
-	IsBootstrapped bool
+	BootstrapsPending   int
+	BootstrapsSuccesses int
+	BootstrapsErrs      []error
 
 	State State
 	Err   error
@@ -102,13 +103,21 @@ func (d *DHT) Update(msg tea.Msg) (*DHT, tea.Cmd) {
 		d.services[msg.offset] = cancel
 		cmds = append(cmds, d.provide(provideCtx, msg.offset))
 	case bootstrapResultMsg:
+		d.BootstrapsPending -= 1
 		if msg.err != nil {
-			d.reset()
-			d.State = StateError
-			d.Err = msg.err
-		} else if d.State == StateBootstrapping {
-			d.IsBootstrapped = true
-			d.State = StateBootstrapped
+			d.BootstrapsErrs = append(d.BootstrapsErrs, msg.err)
+		} else {
+			d.BootstrapsSuccesses += 1
+		}
+
+		if d.State == StateBootstrapping {
+			if d.BootstrapsSuccesses >= ConnThreshold {
+				d.State = StateBootstrapped
+			} else if d.BootstrapsPending == 0 && d.BootstrapsSuccesses < ConnThreshold {
+				d.reset()
+				d.State = StateError
+				d.Err = ErrConnThresholdNotReached{BootstrapErrs: d.BootstrapsErrs}
+			}
 		}
 
 	case PeerMsg:

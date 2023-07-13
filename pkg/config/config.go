@@ -7,6 +7,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/libp2p/go-libp2p/core/peer"
+	ma "github.com/multiformats/go-multiaddr"
+	log "github.com/sirupsen/logrus"
+
 	"github.com/urfave/cli/v2"
 
 	"github.com/dennis-tra/pcp/internal/wrap"
@@ -44,6 +48,28 @@ func (c GlobalConfig) String() string {
 		"LogFile=%s LogLevel=%d LogAppend=%v DHT=%v MDNS=%v Homebrew=%v TelemetryHost=%s TelemetryPort=%d ConfigFile=%s",
 		c.LogFile, c.LogLevel, c.LogAppend, c.DHT, c.MDNS, c.Homebrew, c.TelemetryHost, c.TelemetryPort, c.ConfigFile,
 	)
+}
+
+func (c GlobalConfig) BoostrapAddrInfos() []peer.AddrInfo {
+	var peers []peer.AddrInfo
+	for _, maddrStr := range c.BootstrapPeers.Value() {
+
+		maddr, err := ma.NewMultiaddr(maddrStr)
+		if err != nil {
+			log.WithError(err).WithField("maddr", maddrStr).Warnln("Couldn't parse multiaddress")
+			continue
+		}
+
+		pi, err := peer.AddrInfoFromP2pAddr(maddr)
+		if err != nil {
+			log.WithError(err).WithField("maddr", maddr).Warningln("Couldn't craft peer addr info")
+			continue
+		}
+
+		peers = append(peers, *pi)
+	}
+
+	return peers
 }
 
 var Global = GlobalConfig{}

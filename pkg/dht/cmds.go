@@ -3,11 +3,12 @@ package dht
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/peer"
-
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/dennis-tra/pcp/pkg/config"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type (
@@ -29,12 +30,27 @@ type (
 )
 
 func (d *DHT) Bootstrap() (*DHT, tea.Cmd) {
-	if !(d.IsBootstrapped || d.State == StateBootstrapping) {
-		d.State = StateBootstrapping
-		return d, d.connectToBootstrapper
-	} else {
+	if d.State >= StateBootstrapping && d.State != StateError {
 		return d, nil
 	}
+
+	bootstrapPeers := config.Global.BoostrapAddrInfos()
+	if len(bootstrapPeers) < ConnThreshold {
+		d.reset()
+		d.State = StateError
+		d.Err = fmt.Errorf("too few Bootstrap peers configured (min %d)", ConnThreshold)
+		return d, nil
+	}
+
+	var cmds []tea.Cmd
+	for _, bp := range bootstrapPeers {
+		d.BootstrapsPending += 1
+		cmds = append(cmds, d.connectToBootstrapper(bp))
+	}
+
+	d.State = StateBootstrapping
+
+	return d, tea.Batch(cmds...)
 }
 
 func (d *DHT) Advertise(offsets ...time.Duration) (*DHT, tea.Cmd) {
@@ -95,8 +111,11 @@ func (d *DHT) StopWithReason(reason error) (*DHT, tea.Cmd) {
 	} else {
 		d.State = StateStopped
 	}
-	if err := d.dht.Close(); err != nil {
-		log.WithError(err).Warnln("Failed closing DHT")
+
+	return d, func() tea.Msg {
+		if err := d.dht.Close(); err != nil {
+			log.WithError(err).Warnln("Failed closing DHT")
+		}
+		return nil
 	}
-	return d, nil
 }
