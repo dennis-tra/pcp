@@ -47,7 +47,7 @@ func NewState(ctx context.Context, program *tea.Program, filepath string) (*Mode
 		return nil, err
 	}
 
-	// If homebrew flag is set, overwrite generated words with well known list
+	// If homebrew flag is set, overwrite generated words with well-known list
 	if config.Global.Homebrew {
 		wrds = words.HomebrewList()
 	}

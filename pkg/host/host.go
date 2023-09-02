@@ -62,7 +62,7 @@ type Model struct {
 	IpfsDHT    *kaddht.IpfsDHT
 	NATManager basichost.NATManager
 
-	MDNS *mdns.MDNS
+	MDNS *mdns.Model
 	DHT  *dht.DHT
 
 	NATTypeUDP   network.NATDeviceType
@@ -134,7 +134,7 @@ func New(ctx context.Context, sender tea.Sender, wrds []string, opts ...libp2p.O
 		IpfsDHT:      ipfsDHT,
 		sender:       sender,
 		Words:        wrds,
-		MDNS:         mdns.New(ctx, h, sender, chanID),
+		MDNS:         mdns.New(h, sender, chanID),
 		DHT:          dht.New(ctx, h, ipfsDHT, chanID),
 		evtSub:       evtSub,
 		NATManager:   nat,

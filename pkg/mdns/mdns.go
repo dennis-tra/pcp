@@ -21,35 +21,10 @@ import (
 
 var log = logrus.WithField("comp", "mdns")
 
-type State string
-
-const (
-	StateIdle    State = "idle"
-	StateStarted State = "started"
-	StateError   State = "error"
-	StateStopped State = "stopped"
-)
-
-func (s State) String() string {
-	switch s {
-	case StateIdle:
-		return "StateIdle"
-	case StateStarted:
-		return "StateStarted"
-	case StateError:
-		return "StateError"
-	case StateStopped:
-		return "StateStopped"
-	default:
-		return "StateUnknown"
-	}
-}
-
-// MDNS encapsulates the logic for roaming
+// Model encapsulates the logic for roaming
 // via multicast DNS in the local network.
-type MDNS struct {
-	host.Host
-	ctx    context.Context
+type Model struct {
+	host   host.Host
 	chanID int
 
 	services map[time.Duration]mdns.Service
@@ -59,87 +34,33 @@ type MDNS struct {
 
 	State State
 	Err   error
+
+	// for testing
+	newMdnsService func(host.Host, string, mdns.Notifee) mdns.Service
 }
 
-type (
-	PeerMsg   peer.AddrInfo
-	stopMsg   struct{ reason error }
-	updateMsg struct{ offset time.Duration }
-)
-
-func New(ctx context.Context, h host.Host, sender tea.Sender, chanID int) *MDNS {
-	m := &MDNS{
-		Host:    h,
-		ctx:     ctx,
+func New(h host.Host, sender tea.Sender, chanID int) *Model {
+	m := &Model{
+		host:    h,
 		chanID:  chanID,
 		sender:  sender,
 		spinner: spinner.New(spinner.WithSpinner(spinner.Dot)),
+		newMdnsService: func(host host.Host, serviceName string, notifee mdns.Notifee) mdns.Service {
+			return mdns.NewMdnsService(host, serviceName, notifee)
+		},
 	}
+
 	m.reset()
 
 	return m
 }
 
-func (m *MDNS) logEntry() *logrus.Entry {
-	return log.WithFields(logrus.Fields{
-		"chanID": m.chanID,
-		"state":  m.State.String(),
-	})
-}
-
-func (m *MDNS) wait(offset time.Duration) tea.Cmd {
-	return func() tea.Msg {
-		// restart mDNS service when the new time window arrives.
-		deadline := time.Until(discovery.NewID(offset).TimeSlotStart().Add(discovery.TruncateDuration))
-		select {
-		case <-m.ctx.Done():
-			return func() tea.Msg {
-				return stopMsg{reason: m.ctx.Err()}
-			}
-		case <-time.After(deadline):
-			return func() tea.Msg {
-				return updateMsg{offset: offset}
-			}
-		}
-	}
-}
-
-func (m *MDNS) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	log.Traceln("tea init")
 	return m.spinner.Tick
 }
 
-func (m *MDNS) Start(offsets ...time.Duration) (*MDNS, tea.Cmd) {
-	if m.State == StateStarted {
-		log.Fatal("mDNS service already running")
-		return m, nil
-	}
-
-	var cmds []tea.Cmd
-
-	m.Err = nil
-
-	for _, offset := range offsets {
-		svc, err := m.newService(offset)
-		if err != nil {
-			m.reset()
-			m.State = StateError
-			m.Err = fmt.Errorf("start mdns service offset: %w", err)
-			return m, nil
-		}
-		m.services[offset] = svc
-	}
-
-	m.State = StateStarted
-
-	for offset := range m.services {
-		cmds = append(cmds, m.wait(offset))
-	}
-
-	return m, tea.Batch(cmds...)
-}
-
-func (m *MDNS) Update(msg tea.Msg) (*MDNS, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	m.logEntry().WithField("type", fmt.Sprintf("%T", msg)).Tracef("handle message: %T\n", msg)
 
 	var (
@@ -193,7 +114,7 @@ func (m *MDNS) Update(msg tea.Msg) (*MDNS, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *MDNS) View() string {
+func (m *Model) View() string {
 	switch m.State {
 	case StateIdle:
 		return tui.Faint.Render("not started")
@@ -212,7 +133,14 @@ func (m *MDNS) View() string {
 	}
 }
 
-func (m *MDNS) reset() {
+func (m *Model) logEntry() *logrus.Entry {
+	return log.WithFields(logrus.Fields{
+		"chanID": m.chanID,
+		"state":  m.State.String(),
+	})
+}
+
+func (m *Model) reset() {
 	// close already started services
 	for _, s := range m.services {
 		if err := s.Close(); err != nil {
@@ -225,14 +153,14 @@ func (m *MDNS) reset() {
 	m.Err = nil
 }
 
-func (m *MDNS) newService(offset time.Duration) (mdns.Service, error) {
+func (m *Model) newService(offset time.Duration) (mdns.Service, error) {
 	did := discovery.NewID(offset).DiscoveryID(m.chanID)
 	logEntry := m.logEntry().
 		WithField("did", did).
 		WithField("offset", offset.String())
 	logEntry.Infoln("Starting mDNS service")
 
-	svc := mdns.NewMdnsService(m, did, m)
+	svc := m.newMdnsService(m.host, did, m)
 	if err := svc.Start(); err != nil {
 		logEntry.WithError(err).Warnln("Failed starting mDNS service")
 		return nil, fmt.Errorf("start mdns service offset: %w", err)
@@ -241,13 +169,13 @@ func (m *MDNS) newService(offset time.Duration) (mdns.Service, error) {
 	return svc, nil
 }
 
-func (m *MDNS) HandlePeerFound(pi peer.AddrInfo) {
+func (m *Model) HandlePeerFound(pi peer.AddrInfo) {
 	logEntry := log.WithFields(logrus.Fields{
 		"comp":   "mdns",
 		"peerID": pi.ID.String()[:16],
 	})
 
-	if pi.ID == m.ID() {
+	if pi.ID == m.host.ID() {
 		logEntry.Traceln("Found ourself")
 		return
 	}
@@ -274,15 +202,4 @@ func onlyPrivate(addrs []ma.Multiaddr) []ma.Multiaddr {
 		}
 	}
 	return routable
-}
-
-func (m *MDNS) StopWithReason(reason error) (*MDNS, tea.Cmd) {
-	m.reset()
-	if reason != nil && !errors.Is(reason, context.Canceled) {
-		m.State = StateError
-		m.Err = reason
-	} else {
-		m.State = StateStopped
-	}
-	return m, nil
 }
