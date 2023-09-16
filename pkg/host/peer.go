@@ -29,22 +29,19 @@ func (m *Model) ViewPeerStates() string {
 	}
 	sort.Strings(peerIDs)
 
-	style := lipgloss.NewStyle().Bold(true)
+	bold := lipgloss.NewStyle().Bold(true)
 
 	for _, peerID := range peerIDs {
 		pID, err := peer.Decode(peerID)
 		if err != nil {
-			panic(fmt.Sprintf("%s: %s", peerID, err))
+			log.WithError(err).WithField("peerID", peerID).Warnln("failed parsing peerID")
+			continue
 		}
 
 		state := m.PeerStates[pID]
 		switch state {
-		case PeerStateConnected:
-			fallthrough
-		case PeerStateAuthenticating:
-			fallthrough
-		case PeerStateAuthenticated:
-			out += fmt.Sprintf("  -> %s: %s\n", style.Render(peerID)[:16], m.PakeProtocol.PakeStateStr(pID))
+		case PeerStateConnected, PeerStateAuthenticating, PeerStateAuthenticated, PeerStateFailedAuthentication:
+			out += fmt.Sprintf("  -> %s: %s\n", bold.Render(peerID)[:16], m.AuthProtocol.PakeStateStr(pID))
 		}
 	}
 

@@ -36,7 +36,7 @@ func NewPushProtocol(ctx context.Context, host *Model, program *tea.Program) Pus
 func (p *PushProtocol) RegisterPushRequestHandler() {
 	log.Debugln("Registering push request handler")
 	p.host.SetStreamHandler(ProtocolPushRequest, func(s network.Stream) {
-		// p.sender.Send(pakeOnKeyExchange(s))
+		// p.sender.Send(authOnKeyExchange(s))
 	})
 }
 

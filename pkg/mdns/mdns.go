@@ -15,11 +15,36 @@ import (
 	manet "github.com/multiformats/go-multiaddr/net"
 	"github.com/sirupsen/logrus"
 
+	"github.com/dennis-tra/pcp/pkg/config"
 	"github.com/dennis-tra/pcp/pkg/discovery"
 	"github.com/dennis-tra/pcp/pkg/tui"
 )
 
 var log = logrus.WithField("comp", "mdns")
+
+type State string
+
+const (
+	StateIdle    State = "idle"
+	StateStarted State = "started"
+	StateError   State = "error"
+	StateStopped State = "stopped"
+)
+
+func (s State) String() string {
+	switch s {
+	case StateIdle:
+		return "StateIdle"
+	case StateStarted:
+		return "StateStarted"
+	case StateError:
+		return "StateError"
+	case StateStopped:
+		return "StateStopped"
+	default:
+		return "StateUnknown"
+	}
+}
 
 // Model encapsulates the logic for roaming
 // via multicast DNS in the local network.
@@ -27,7 +52,10 @@ type Model struct {
 	host   host.Host
 	chanID int
 
-	services map[time.Duration]mdns.Service
+	role discovery.Role
+
+	serviceID int
+	services  map[int]*serviceRef
 
 	sender  tea.Sender
 	spinner spinner.Model
@@ -39,12 +67,14 @@ type Model struct {
 	newMdnsService func(host.Host, string, mdns.Notifee) mdns.Service
 }
 
-func New(h host.Host, sender tea.Sender, chanID int) *Model {
+func New(h host.Host, sender tea.Sender, role discovery.Role, chanID int) *Model {
 	m := &Model{
-		host:    h,
-		chanID:  chanID,
-		sender:  sender,
-		spinner: spinner.New(spinner.WithSpinner(spinner.Dot)),
+		host:     h,
+		role:     role,
+		chanID:   chanID,
+		sender:   sender,
+		services: map[int]*serviceRef{},
+		spinner:  spinner.New(spinner.WithSpinner(spinner.Dot)),
 		newMdnsService: func(host host.Host, serviceName string, notifee mdns.Notifee) mdns.Service {
 			return mdns.NewMdnsService(host, serviceName, notifee)
 		},
@@ -70,33 +100,39 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case updateMsg:
+		ref, found := m.services[msg.serviceID]
+		if !found {
+			return m, nil
+		}
+
 		if m.State != StateStarted {
 			log.Fatal("mDNS service not running")
 			return m, nil
 		}
 
-		svc, found := m.services[msg.offset]
-		if !found {
-			return m, nil
-		}
-
-		logEntry := m.logEntry().WithField("offset", msg.offset)
+		logEntry := m.logEntry().WithField("offset", ref.offset)
 		logEntry.Traceln("Updating mDNS service")
 
-		if err := svc.Close(); err != nil {
+		if err := ref.svc.Close(); err != nil {
 			log.WithError(err).Warningln("Couldn't close mDNS service")
 		}
 
-		svc, err := m.newService(msg.offset)
+		svc, err := m.newService(ref.offset)
 		if err != nil {
 			m.reset()
 			m.State = StateError
 			m.Err = fmt.Errorf("start mdns service offset: %w", err)
 			return m, nil
 		}
-		m.services[msg.offset] = svc
 
-		cmds = append(cmds, m.wait(msg.offset))
+		m.serviceID += 1
+		m.services[msg.serviceID] = &serviceRef{
+			id:     m.serviceID,
+			offset: ref.offset,
+			svc:    svc,
+		}
+
+		cmds = append(cmds, m.wait(ref))
 
 	case stopMsg:
 		if m.State != StateStarted {
@@ -115,6 +151,10 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 }
 
 func (m *Model) View() string {
+	if !config.Global.MDNS {
+		return "-"
+	}
+
 	switch m.State {
 	case StateIdle:
 		return tui.Faint.Render("not started")
@@ -124,7 +164,7 @@ func (m *Model) View() string {
 		if errors.Is(m.Err, context.Canceled) {
 			return tui.Faint.Render("cancelled")
 		} else {
-			return tui.Green.Render("stopped")
+			return tui.Faint.Render("stopped")
 		}
 	case StateError:
 		return tui.Red.Render("failed")
@@ -142,19 +182,19 @@ func (m *Model) logEntry() *logrus.Entry {
 
 func (m *Model) reset() {
 	// close already started services
-	for _, s := range m.services {
-		if err := s.Close(); err != nil {
+	for _, ref := range m.services {
+		if err := ref.svc.Close(); err != nil {
 			log.WithError(err).Warnln("Failed closing mDNS service")
 		}
 	}
 
-	m.services = map[time.Duration]mdns.Service{}
+	m.services = map[int]serviceRef{}
 	m.State = StateIdle
 	m.Err = nil
 }
 
 func (m *Model) newService(offset time.Duration) (mdns.Service, error) {
-	did := discovery.NewID(offset).DiscoveryID(m.chanID)
+	did := discovery.NewID(m.chanID).SetOffset(offset).DiscoveryID()
 	logEntry := m.logEntry().
 		WithField("did", did).
 		WithField("offset", offset.String())
@@ -202,4 +242,10 @@ func onlyPrivate(addrs []ma.Multiaddr) []ma.Multiaddr {
 		}
 	}
 	return routable
+}
+
+type serviceRef struct {
+	id     int
+	offset time.Duration
+	svc    mdns.Service
 }

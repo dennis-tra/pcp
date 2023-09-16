@@ -6,28 +6,28 @@ import (
 	"fmt"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/dennis-tra/pcp/pkg/discovery"
 )
 
 type (
 	PeerMsg   peer.AddrInfo
 	stopMsg   struct{ reason error }
-	updateMsg struct{ offset time.Duration }
+	updateMsg struct{ serviceID int }
 )
 
+// Start starts as many MDNS services as offsets are given.
 func (m *Model) Start(offsets ...time.Duration) (*Model, tea.Cmd) {
 	if m.State == StateStarted || len(offsets) == 0 {
 		log.Fatal("mDNS service already running")
 		return m, nil
 	}
 
+	m.reset()
+
 	var cmds []tea.Cmd
-
-	m.Err = nil
-
 	for _, offset := range offsets {
 		svc, err := m.newService(offset)
 		if err != nil {
@@ -36,26 +36,37 @@ func (m *Model) Start(offsets ...time.Duration) (*Model, tea.Cmd) {
 			m.Err = fmt.Errorf("start mdns service offset: %w", err)
 			return m, nil
 		}
-		m.services[offset] = svc
+
+		m.serviceID += 1
+		m.services[m.serviceID] = &serviceRef{
+			id:     m.serviceID,
+			offset: offset,
+			svc:    svc,
+		}
+
 	}
 
 	m.State = StateStarted
 
-	for offset := range m.services {
-		cmds = append(cmds, m.wait(offset))
+	for _, ref := range m.services {
+		cmds = append(cmds, m.wait(ref))
 	}
 
 	return m, tea.Batch(cmds...)
 }
 
-func (m *Model) wait(offset time.Duration) tea.Cmd {
+func (m *Model) wait(ref *serviceRef) tea.Cmd {
 	return func() tea.Msg {
 		// restart mDNS service when the new time window arrives.
-		deadline := time.Until(discovery.NewID(offset).TimeSlotStart().Add(discovery.TruncateDuration))
+		deadline := discovery.NewID(m.chanID).
+			SetOffset(ref.offset).
+			TimeSlotStart().
+			Add(discovery.TruncateDuration)
+
 		select {
-		case <-time.After(deadline):
+		case <-time.After(time.Until(deadline)):
 			return func() tea.Msg {
-				return updateMsg{offset: offset}
+				return updateMsg{serviceID: ref.id}
 			}
 		}
 	}

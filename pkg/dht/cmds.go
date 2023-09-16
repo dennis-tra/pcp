@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	kaddht "github.com/libp2p/go-libp2p-kad-dht"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/dennis-tra/pcp/pkg/config"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -16,15 +18,15 @@ type (
 		err error
 	}
 	advertiseResultMsg struct {
-		offset time.Duration
-		err    error
-		fatal  bool
+		id    int
+		err   error
+		fatal bool
 	}
 	PeerMsg struct { // discoverResult
-		Peer   peer.AddrInfo
-		offset time.Duration
-		Err    error
-		fatal  bool
+		Peer  peer.AddrInfo
+		id    int
+		Err   error
+		fatal bool
 	}
 	stopMsg struct{ reason error }
 )
@@ -63,6 +65,7 @@ func (d *DHT) Advertise(offsets ...time.Duration) (*DHT, tea.Cmd) {
 
 	d.Err = nil
 
+	kaddht.GetDefaultBootstrapPeerAddrInfos()
 	for _, offset := range offsets {
 		if _, found := d.services[offset]; found {
 			continue

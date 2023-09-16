@@ -1,7 +1,10 @@
 package host
 
 import (
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/dennis-tra/pcp/pkg/mdns"
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
@@ -11,13 +14,23 @@ import (
 
 func (m *Model) handleKeyMsg(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	m.logEntry().WithField("key", msg.String()).Infoln("Key msg", msg.String())
+
+	var cmd tea.Cmd
 	switch msg.String() {
 	case "v":
 		m.Verbose = !m.Verbose
+	case "m":
+		switch m.MDNS.State {
+		case mdns.StateIdle, mdns.StateError, mdns.StateStopped:
+			m.MDNS, cmd = m.MDNS.Start(0, 10*time.Second)
+		case mdns.StateStarted:
+			m.MDNS, cmd = m.MDNS.StopWithReason(nil)
+		}
 	case "ctrl+c":
 		return m, Shutdown
 	}
-	return m, nil
+
+	return m, cmd
 }
 
 func (m *Model) handleLocalAddressesUpdated(evt event.EvtLocalAddressesUpdated) (*Model, tea.Cmd) {

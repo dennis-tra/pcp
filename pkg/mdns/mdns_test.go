@@ -6,18 +6,14 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-
-	"github.com/dennis-tra/pcp/pkg/discovery"
-
-	"github.com/stretchr/testify/require"
-
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
-
-	"github.com/dennis-tra/pcp/internal/mock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/dennis-tra/pcp/internal/mock"
+	"github.com/dennis-tra/pcp/pkg/discovery"
 	pcptest "github.com/dennis-tra/pcp/test"
 )
 

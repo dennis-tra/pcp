@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/dennis-tra/pcp/pkg/discovery"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -36,25 +38,32 @@ type DHT struct {
 	ctx context.Context
 	dht *kaddht.IpfsDHT
 
-	chanID   int
-	services map[time.Duration]context.CancelFunc
-	spinner  spinner.Model
+	role   discovery.Role
+	chanID int
+
+	serviceID int
+	services  map[int]*serviceRef
+
+	spinner spinner.Model
 
 	BootstrapsPending   int
 	BootstrapsSuccesses int
 	BootstrapsErrs      []error
 
+	RetryCount int
+
 	State State
 	Err   error
 }
 
-func New(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, chanID int) *DHT {
+func New(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, role discovery.Role, chanID int) *DHT {
 	return &DHT{
 		ctx:      ctx,
 		Host:     h,
 		dht:      dht,
+		role:     role,
 		chanID:   chanID,
-		services: map[time.Duration]context.CancelFunc{},
+		services: map[int]*serviceRef{},
 		spinner:  spinner.New(spinner.WithSpinner(spinner.Dot)),
 		State:    StateIdle,
 	}
@@ -97,11 +106,13 @@ func (d *DHT) Update(msg tea.Msg) (*DHT, tea.Cmd) {
 			return d, nil
 		} else {
 			d.State = StateRetrying
+			d.RetryCount += 1
 		}
 
 		provideCtx, cancel := context.WithTimeout(d.ctx, provideTimeout)
 		d.services[msg.offset] = cancel
 		cmds = append(cmds, d.provide(provideCtx, msg.offset))
+
 	case bootstrapResultMsg:
 		d.BootstrapsPending -= 1
 		if msg.err != nil {
@@ -144,6 +155,7 @@ func (d *DHT) Update(msg tea.Msg) (*DHT, tea.Cmd) {
 			return d, nil
 		} else {
 			d.State = StateRetrying
+			d.RetryCount += 1
 		}
 
 		lookupCtx, cancel := context.WithCancel(d.ctx)
@@ -180,7 +192,7 @@ func (d *DHT) View() string {
 	case StateLookup:
 		return d.spinner.View() + "(searching peer)"
 	case StateRetrying:
-		return d.spinner.View() + "(retrying)"
+		return d.spinner.View() + fmt.Sprintf("(retrying %d)", d.RetryCount)
 	case StateProvided:
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("ready")
 	case StateStopped:
@@ -212,7 +224,14 @@ func (d *DHT) reset() {
 		cancel()
 	}
 
-	d.services = map[time.Duration]context.CancelFunc{}
+	d.RetryCount = 0
+	d.services = map[int]*serviceRef{}
 	d.State = StateIdle
 	d.Err = nil
+}
+
+type serviceRef struct {
+	id     int
+	offset time.Duration
+	cancel context.CancelFunc
 }

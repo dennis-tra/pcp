@@ -6,8 +6,9 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/dennis-tra/pcp/pkg/discovery"
 	"github.com/libp2p/go-libp2p/core/peer"
+
+	"github.com/dennis-tra/pcp/pkg/discovery"
 )
 
 // connectToBootstrapper connects to a set of bootstrap nodes to connect to the DHT.
@@ -28,13 +29,13 @@ func (d *DHT) connectToBootstrapper(pi peer.AddrInfo) tea.Cmd {
 
 func (d *DHT) provide(ctx context.Context, offset time.Duration) tea.Cmd {
 	return func() tea.Msg {
-		did := discovery.NewID(offset)
+		did := discovery.NewID(d.chanID).SetRole(d.role).SetOffset(offset)
 
-		logEntry := log.WithField("did", did.DiscoveryID(d.chanID))
+		logEntry := log.WithField("did", did.DiscoveryID())
 		logEntry.Debugln("Start providing")
 		defer logEntry.Debugln("Done providing")
 
-		cID, err := did.ContentID(did.DiscoveryID(d.chanID))
+		cID, err := did.ContentID()
 		if err != nil {
 			return advertiseResultMsg{
 				offset: offset,
@@ -53,13 +54,13 @@ func (d *DHT) provide(ctx context.Context, offset time.Duration) tea.Cmd {
 
 func (d *DHT) lookup(ctx context.Context, offset time.Duration) tea.Cmd {
 	return func() tea.Msg {
-		did := discovery.NewID(offset)
+		did := discovery.NewID(d.chanID).SetRole(d.role.Opposite()).SetOffset(offset)
 
-		logEntry := log.WithField("did", did.DiscoveryID(d.chanID))
+		logEntry := log.WithField("did", did.DiscoveryID())
 		logEntry.Debugln("Start lookup")
 		defer logEntry.Debugln("Done lookup")
 
-		cID, err := did.ContentID(did.DiscoveryID(d.chanID))
+		cID, err := did.ContentID()
 		if err != nil {
 			return PeerMsg{
 				offset: offset,
@@ -71,13 +72,11 @@ func (d *DHT) lookup(ctx context.Context, offset time.Duration) tea.Cmd {
 		// Find new provider with a timeout, so the discovery ID is renewed if necessary.
 		ctx, cancel := context.WithTimeout(ctx, lookupTimeout)
 		defer cancel()
+
 		for pi := range d.dht.FindProvidersAsync(ctx, cID, 0) {
 			pi := pi
-			logEntry.Debugln("DHT - Found peer ", pi.ID)
 
-			if pi.ID.String() == "" {
-				panic(fmt.Sprintf("kookokokok: %s", pi))
-			}
+			logEntry.Debugln("Found peer ", pi.ID)
 			if len(pi.Addrs) > 0 {
 				return PeerMsg{
 					Peer:   pi,

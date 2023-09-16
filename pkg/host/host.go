@@ -8,8 +8,10 @@ import (
 	"sort"
 	"syscall"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/dennis-tra/pcp/pkg/config"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/event"
@@ -17,6 +19,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
+	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
@@ -24,7 +27,9 @@ import (
 	manet "github.com/multiformats/go-multiaddr/net"
 	"github.com/sirupsen/logrus"
 
+	"github.com/dennis-tra/pcp/pkg/config"
 	"github.com/dennis-tra/pcp/pkg/dht"
+	"github.com/dennis-tra/pcp/pkg/discovery"
 	"github.com/dennis-tra/pcp/pkg/mdns"
 	"github.com/dennis-tra/pcp/pkg/words"
 )
@@ -37,13 +42,15 @@ type Model struct {
 	host.Host
 
 	// give host protocol capabilities
-	*PakeProtocol
+	*AuthProtocol
 	//*PushProtocol
 	//*TransferProtocol
 
 	ctx     context.Context
 	sender  tea.Sender
 	Verbose bool
+
+	relayFinderActive bool
 
 	// keeps track of hole punching states of particular peers.
 	// The hpAllowList is populated by the receiving side of
@@ -77,10 +84,12 @@ type Model struct {
 
 	Words  []string
 	evtSub event.Subscription
+
+	spinner spinner.Model
 }
 
 // New creates a new, fully initialized host with the given options.
-func New(ctx context.Context, sender tea.Sender, wrds []string, opts ...libp2p.Option) (*Model, error) {
+func New(ctx context.Context, sender tea.Sender, role discovery.Role, wrds []string, opts ...libp2p.Option) (*Model, error) {
 	ints, err := words.ToInts(wrds)
 	if err != nil {
 		return nil, fmt.Errorf("words to ints: %w", err)
@@ -97,12 +106,20 @@ func New(ctx context.Context, sender tea.Sender, wrds []string, opts ...libp2p.O
 		ipfsDHT *kaddht.IpfsDHT
 		nat     basichost.NATManager
 	)
+
+	rf := &relayFinder{sender: sender}
 	opts = append(opts,
 		libp2p.UserAgent("pcp/"+config.Global.Version),
 		libp2p.ResourceManager(rm),
+		libp2p.EnableAutoRelayWithPeerSource(
+			rf.autoRelayPeerSource,
+			autorelay.WithMetricsTracer(rf),
+			autorelay.WithBootDelay(0),
+			autorelay.WithMinCandidates(1),
+		),
 		libp2p.EnableHolePunching(holepunch.WithTracer(&holePunchTracer{sender: sender})),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
-			ipfsDHT, err = kaddht.New(ctx, h, kaddht.EnableOptimisticProvide())
+			ipfsDHT, err = kaddht.New(ctx, h, kaddht.EnableOptimisticProvide(), kaddht.Datastore(datastore.NewNullDatastore()))
 			return ipfsDHT, err
 		}),
 		libp2p.NATManager(func(network network.Network) basichost.NATManager {
@@ -134,15 +151,21 @@ func New(ctx context.Context, sender tea.Sender, wrds []string, opts ...libp2p.O
 		IpfsDHT:      ipfsDHT,
 		sender:       sender,
 		Words:        wrds,
-		MDNS:         mdns.New(h, sender, chanID),
-		DHT:          dht.New(ctx, h, ipfsDHT, chanID),
+		MDNS:         mdns.New(h, sender, role, chanID),
+		DHT:          dht.New(ctx, h, ipfsDHT, role, chanID),
 		evtSub:       evtSub,
 		NATManager:   nat,
 		PeerStates:   map[peer.ID]PeerState{},
-		PakeProtocol: NewPakeProtocol(ctx, h, sender, wrds),
+		AuthProtocol: NewAuthProtocol(ctx, h, sender, role, wrds),
 		// PushProtocol: NewPushProtocol(host)
 		// TransferProtocol: NewTransferProtocol(host)
+		spinner: spinner.New(spinner.WithSpinner(spinner.Dot)),
 	}
+
+	// properly init relayFinder
+	rf.dht = ipfsDHT
+	rf.host = h
+
 	model.Network().Notify(model)
 
 	// Extract addresses from host AFTER we have subscribed to the address
@@ -158,7 +181,8 @@ func (m *Model) Init() tea.Cmd {
 		m.watchEvents,
 		m.MDNS.Init(),
 		m.DHT.Init(),
-		m.PakeProtocol.Init(),
+		m.AuthProtocol.Init(),
+		m.spinner.Tick,
 	)
 }
 
@@ -195,9 +219,9 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	case mdns.PeerMsg:
 		m, cmd = m.HandlePeerFound(peer.AddrInfo(msg))
 		cmds = append(cmds, cmd)
-	case pakeOnKeyExchange:
+	case authOnKeyExchange:
 		m.PeerStates[msg.stream.Conn().RemotePeer()] = PeerStateAuthenticating
-	case pakeMsg[[]byte]:
+	case authMsg[[]byte]:
 		m.PeerStates[msg.peerID] = PeerStateAuthenticated
 		if m.DHT.State != dht.StateIdle && m.DHT.State != dht.StateError {
 			m.DHT, cmd = m.DHT.StopWithReason(nil)
@@ -205,6 +229,10 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		if m.MDNS.State != mdns.StateIdle && m.MDNS.State != mdns.StateError {
 			m.MDNS, cmd = m.MDNS.StopWithReason(nil)
 		}
+	case authMsg[error]:
+		m.PeerStates[msg.peerID] = PeerStateFailedAuthentication
+	case relayFinderStatus:
+		m.relayFinderActive = msg.isActive
 	case tea.KeyMsg:
 		m, cmd = m.handleKeyMsg(msg)
 		cmds = append(cmds, cmd)
@@ -230,47 +258,67 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	m.DHT, cmd = m.DHT.Update(msg)
 	cmds = append(cmds, cmd)
 
-	m.PakeProtocol, cmd = m.PakeProtocol.Update(msg)
+	m.AuthProtocol, cmd = m.AuthProtocol.Update(msg)
+	cmds = append(cmds, cmd)
+
+	m.spinner, cmd = m.spinner.Update(msg)
 	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
 }
 
 func (m *Model) View() string {
-	if !m.Verbose {
-		return ""
-	}
-
 	out := ""
-	out += fmt.Sprintf("PeerID:        %s\n", m.ID())
-	switch m.DHT.State {
-	case dht.StateBootstrapping:
-		out += fmt.Sprintf("DHT:           %s (pending %d, success %d, errors %d)\n", m.DHT.State.String(), m.DHT.BootstrapsPending, m.DHT.BootstrapsSuccesses, len(m.DHT.BootstrapsErrs))
-	case dht.StateError:
-		out += fmt.Sprintf("DHT:           %s (%s)\n", m.DHT.State.String(), m.DHT.Err)
-	default:
-		out += fmt.Sprintf("DHT:           %s\n", m.DHT.State.String())
-	}
-	out += fmt.Sprintf("mDNS:          %s\n", m.MDNS.State.String())
-	out += fmt.Sprintf("Reachability:  %s\n", m.Reachability.String())
-	out += fmt.Sprintf("Connections:   %d\n", m.connections)
-	out += fmt.Sprintf("NAT (udp/tcp): %s / %s\n", m.NATTypeUDP.String(), m.NATTypeTCP.String())
-	out += fmt.Sprintf("Addresses:\n")
-	out += fmt.Sprintf("  Private:     %d\n", len(m.PrivateAddrs))
-	out += fmt.Sprintf("  Public:      %d\n", len(m.PublicAddrs))
-	out += fmt.Sprintf("  Relay:       %d\n", len(m.RelayAddrs))
+	if m.Verbose {
 
-	var mappings []string
-	for _, pm := range m.portMappings() {
-		mappings = append(mappings, pm.String())
-	}
-	sort.Strings(mappings)
-	if len(mappings) > 0 {
-		out += fmt.Sprintf("Port Mappings:\n")
-		for _, mapping := range mappings {
-			out += fmt.Sprintf("  %s\n", mapping)
+		out += fmt.Sprintf("PeerID:        %s\n", m.ID())
+		switch m.DHT.State {
+		case dht.StateBootstrapping:
+			out += fmt.Sprintf("DHT:           %s (pending %d, success %d, errors %d)\n", m.DHT.State.String(), m.DHT.BootstrapsPending, m.DHT.BootstrapsSuccesses, len(m.DHT.BootstrapsErrs))
+		case dht.StateError:
+			out += fmt.Sprintf("DHT:           %s (%s)\n", m.DHT.State.String(), m.DHT.Err)
+		default:
+			out += fmt.Sprintf("DHT:           %s\n", m.DHT.State.String())
 		}
+		out += fmt.Sprintf("mDNS:          %s\n", m.MDNS.State.String())
+		out += fmt.Sprintf("Reachability:  %s\n", m.Reachability.String())
+		out += fmt.Sprintf("Connections:   %d\n", m.connections)
+		out += fmt.Sprintf("NAT (udp/tcp): %s / %s\n", m.NATTypeUDP.String(), m.NATTypeTCP.String())
+		out += fmt.Sprintf("Addresses:\n")
+		out += fmt.Sprintf("  Private:     %d\n", len(m.PrivateAddrs))
+		out += fmt.Sprintf("  Public:      %d\n", len(m.PublicAddrs))
+		out += fmt.Sprintf("  Relay:       %d\n", len(m.RelayAddrs))
+
+		var mappings []string
+		for _, pm := range m.portMappings() {
+			mappings = append(mappings, pm.String())
+		}
+		sort.Strings(mappings)
+		if len(mappings) > 0 {
+			out += fmt.Sprintf("Port Mappings:\n")
+			for _, mapping := range mappings {
+				out += fmt.Sprintf("  %s\n", mapping)
+			}
+		}
+
+		relayFinderState := "inactive"
+		if m.relayFinderActive {
+			relayFinderState = "active"
+		}
+		out += fmt.Sprintf("Relay finder:  %s\n", relayFinderState)
 	}
+
+	style := lipgloss.NewStyle().Bold(true)
+
+	local := m.MDNS.View()
+	internet := m.DHT.View()
+	if m.Reachability == network.ReachabilityPrivate && m.relayFinderActive && m.DHT.State == dht.StateBootstrapped {
+		internet = m.spinner.View() + "(finding signaling peers)"
+	}
+
+	out += fmt.Sprintf("%s %s\t %s %s\n", style.Render("Local Network:"), local, style.Render("Internet:"), internet)
+
+	out += m.ViewPeerStates()
 
 	return out
 }
@@ -289,7 +337,7 @@ func (m *Model) StartKeyExchange(ctx context.Context, remotePeer peer.ID) tea.Cm
 		panic("hfdhhfggh")
 	}
 	m.PeerStates[remotePeer] = PeerStateAuthenticating
-	return m.PakeProtocol.StartKeyExchange(ctx, remotePeer)
+	return m.AuthProtocol.StartKeyExchange(ctx, remotePeer)
 }
 
 type PeerConnectMsg struct {
@@ -440,3 +488,86 @@ func (m *Model) Disconnected(n network.Network, conn network.Conn) {
 func (m *Model) Listen(n network.Network, multiaddr ma.Multiaddr) {}
 
 func (m *Model) ListenClose(n network.Network, multiaddr ma.Multiaddr) {}
+
+type relayFinder struct {
+	host   host.Host
+	dht    *kaddht.IpfsDHT
+	sender tea.Sender
+}
+
+// autoRelayPeerSource is a function that queries the DHT for a random peer ID with CPL 0.
+// The found peers are used as candidates for circuit relay v2 peers.
+func (r *relayFinder) autoRelayPeerSource(ctx context.Context, num int) <-chan peer.AddrInfo {
+	log.Debugln("Looking for auto relay peers...")
+
+	out := make(chan peer.AddrInfo)
+
+	go func() {
+		defer log.Debugln("Looking for auto relay peers... Done!")
+		defer close(out)
+
+		peerID, err := r.dht.RoutingTable().GenRandPeerID(0)
+		if err != nil {
+			log.Debugln("error generating random peer ID:", err.Error())
+			return
+		}
+
+		closestPeers, err := r.dht.GetClosestPeers(ctx, peerID.String())
+		if err != nil {
+			return
+		}
+
+		maxLen := len(closestPeers)
+		if maxLen > num {
+			maxLen = num
+		}
+
+		for i := 0; i < maxLen; i++ {
+			p := closestPeers[i]
+
+			addrs := r.host.Peerstore().Addrs(p)
+			if len(addrs) == 0 {
+				continue
+			}
+
+			log.Debugln("Found auto relay peer:", p.String()[:16])
+			select {
+			case out <- peer.AddrInfo{ID: p, Addrs: addrs}:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return out
+}
+
+type relayFinderStatus struct {
+	isActive bool
+}
+
+func (r *relayFinder) RelayFinderStatus(isActive bool) {
+	r.sender.Send(relayFinderStatus{isActive: isActive})
+}
+
+func (r *relayFinder) ReservationEnded(cnt int) {}
+
+func (r *relayFinder) ReservationOpened(cnt int) {}
+
+func (r *relayFinder) ReservationRequestFinished(isRefresh bool, err error) {}
+
+func (r *relayFinder) RelayAddressCount(i int) {}
+
+func (r *relayFinder) RelayAddressUpdated() {}
+
+func (r *relayFinder) CandidateChecked(supportsCircuitV2 bool) {}
+
+func (r *relayFinder) CandidateAdded(cnt int) {}
+
+func (r *relayFinder) CandidateRemoved(cnt int) {}
+
+func (r *relayFinder) CandidateLoopState(state autorelay.CandidateLoopState) {}
+
+func (r *relayFinder) ScheduledWorkUpdated(scheduledWork *autorelay.ScheduledWorkTimes) {}
+
+func (r *relayFinder) DesiredReservations(i int) {}

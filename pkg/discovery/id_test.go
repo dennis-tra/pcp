@@ -20,9 +20,9 @@ func TestID_DiscoveryIdentifier_returnsCorrect(t *testing.T) {
 	m.EXPECT().Now().Return(now)
 	wraptime = m
 
-	did := ID{}
-	id := did.DiscoveryID(333)
+	did := ID{chanID: 333, role: RoleSender}
+	id := did.DiscoveryID()
 
 	unixNow := now.Truncate(TruncateDuration).UnixNano()
-	assert.Equal(t, "/pcp/"+strconv.Itoa(int(unixNow))+"/333", id)
+	assert.Equal(t, "/pcp/"+string(RoleSender)+"/"+strconv.Itoa(int(unixNow))+"/333", id)
 }
