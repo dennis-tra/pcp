@@ -1,7 +1,6 @@
 package config
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,7 +9,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	log "github.com/sirupsen/logrus"
-
 	"github.com/urfave/cli/v2"
 
 	"github.com/dennis-tra/pcp/internal/wrap"
@@ -40,17 +38,18 @@ type GlobalConfig struct {
 	TelemetryHost  string
 	TelemetryPort  int
 	ConfigFile     string
+	ConnThreshold  int
 	BootstrapPeers cli.StringSlice
 }
 
-func (c GlobalConfig) String() string {
+func (c *GlobalConfig) String() string {
 	return fmt.Sprintf(
 		"LogFile=%s LogLevel=%d LogAppend=%v DHT=%v MDNS=%v Homebrew=%v TelemetryHost=%s TelemetryPort=%d ConfigFile=%s",
 		c.LogFile, c.LogLevel, c.LogAppend, c.DHT, c.MDNS, c.Homebrew, c.TelemetryHost, c.TelemetryPort, c.ConfigFile,
 	)
 }
 
-func (c GlobalConfig) BoostrapAddrInfos() []peer.AddrInfo {
+func (c *GlobalConfig) BoostrapAddrInfos() []peer.AddrInfo {
 	var peers []peer.AddrInfo
 	for _, maddrStr := range c.BootstrapPeers.Value() {
 
@@ -72,7 +71,21 @@ func (c GlobalConfig) BoostrapAddrInfos() []peer.AddrInfo {
 	return peers
 }
 
-var Global = GlobalConfig{}
+func (c *GlobalConfig) Validate() error {
+	if !c.DHT && !c.MDNS {
+		return fmt.Errorf("either the DHT or mDNS discovery mechanism need to be active")
+	}
+
+	if len(c.BoostrapAddrInfos()) < c.ConnThreshold {
+		return fmt.Errorf("too few bootstrap peers configured (min %d)", c.ConnThreshold)
+	}
+
+	return nil
+}
+
+var Global = GlobalConfig{
+	ConnThreshold: 3,
+}
 
 func DefaultPath() (string, error) {
 	return appXdg.ConfigFile(relFilePath)
@@ -127,15 +140,6 @@ func LoadConfig() (*Config, error) {
 		Settings: settings,
 	}
 
-	return c, nil
-}
-
-func FillContext(c *cli.Context) (*cli.Context, error) {
-	conf, err := LoadConfig()
-	if err != nil {
-		return c, err
-	}
-	c.Context = context.WithValue(c.Context, "ContextKey", conf)
 	return c, nil
 }
 

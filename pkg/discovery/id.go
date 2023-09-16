@@ -77,10 +77,10 @@ func (id *ID) SetRole(role Role) *ID {
 }
 
 // ContentID hashes the given discoveryID and returns the corresponding CID.
-func (id *ID) ContentID() (cid.Cid, error) {
+func (id *ID) ContentID() cid.Cid {
 	h, err := mh.Sum([]byte(id.DiscoveryID()), mh.SHA2_256, -1)
 	if err != nil {
-		return cid.Undef, err
+		panic(err)
 	}
-	return cid.NewCidV1(cid.Raw, h), nil
+	return cid.NewCidV1(cid.Raw, h)
 }

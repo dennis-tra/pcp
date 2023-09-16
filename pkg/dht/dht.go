@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dennis-tra/pcp/pkg/discovery"
+	"github.com/dennis-tra/pcp/pkg/tui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -16,33 +16,37 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/dennis-tra/pcp/pkg/config"
+	"github.com/dennis-tra/pcp/pkg/discovery"
 )
 
 const (
+	//
+	bootstrapTimeout = 10 * time.Second
+
 	// Timeout for looking up our data in the DHT
 	lookupTimeout = 10 * time.Second
+
+	// Timeout for pushing our data to the DHT.
+	provideTimeout = 30 * time.Second
 )
 
 var (
 	log = logrus.WithField("comp", "dht")
 
-	// Timeout for pushing our data to the DHT.
-	provideTimeout = 30 * time.Second
-
 	// The interval between two discover/advertise operations
 	tickInterval = 5 * time.Second
 )
 
-type DHT struct {
-	host.Host
-	ctx context.Context
-	dht *kaddht.IpfsDHT
+type Model struct {
+	host   host.Host
+	dht    *kaddht.IpfsDHT
+	sender tea.Sender
 
 	role   discovery.Role
 	chanID int
 
-	serviceID int
-	services  map[int]*serviceRef
+	opCnt int
+	ops   map[int]*opRef
 
 	spinner spinner.Model
 
@@ -50,31 +54,38 @@ type DHT struct {
 	BootstrapsSuccesses int
 	BootstrapsErrs      []error
 
-	RetryCount int
+	PendingLookups   int
+	CompletedLookups int
+
+	PendingProvides    int
+	SuccessfulProvides int
+	FailedProvides     int
+	LatestProvideErr   error
 
 	State State
 	Err   error
 }
 
-func New(ctx context.Context, h host.Host, dht *kaddht.IpfsDHT, role discovery.Role, chanID int) *DHT {
-	return &DHT{
-		ctx:      ctx,
-		Host:     h,
-		dht:      dht,
-		role:     role,
-		chanID:   chanID,
-		services: map[int]*serviceRef{},
-		spinner:  spinner.New(spinner.WithSpinner(spinner.Dot)),
-		State:    StateIdle,
+func New(h host.Host, dht *kaddht.IpfsDHT, sender tea.Sender, role discovery.Role, chanID int) *Model {
+	return &Model{
+		host:           h,
+		dht:            dht,
+		sender:         sender,
+		role:           role,
+		chanID:         chanID,
+		ops:            map[int]*opRef{},
+		spinner:        spinner.New(spinner.WithSpinner(spinner.Dot)),
+		BootstrapsErrs: []error{},
+		State:          StateIdle,
 	}
 }
 
-func (d *DHT) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	log.Traceln("tea init")
-	return d.spinner.Tick
+	return m.spinner.Tick
 }
 
-func (d *DHT) Update(msg tea.Msg) (*DHT, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	log.WithField("type", fmt.Sprintf("%T", msg)).Tracef("handle message: %T\n", msg)
 
 	var (
@@ -83,154 +94,132 @@ func (d *DHT) Update(msg tea.Msg) (*DHT, tea.Cmd) {
 	)
 
 	switch msg := msg.(type) {
-	case advertiseResultMsg:
-		if d.State == StateStopped || d.State == StateError {
-			return d, nil
-		}
-		cancel, found := d.services[msg.offset]
-		if !found {
-			log.Fatal("DHT service not found")
-			return d, nil
-		}
-		cancel()
-
-		if msg.err == nil {
-			d.State = StateProvided
-		} else if msg.err != nil && msg.fatal {
-			d.State = StateError
-			d.Err = msg.err
-			return d, nil
-		} else if errors.Is(msg.err, context.Canceled) && d.State != StateStopped {
-			d.State = StateStopped
-			d.Err = msg.err
-			return d, nil
-		} else {
-			d.State = StateRetrying
-			d.RetryCount += 1
-		}
-
-		provideCtx, cancel := context.WithTimeout(d.ctx, provideTimeout)
-		d.services[msg.offset] = cancel
-		cmds = append(cmds, d.provide(provideCtx, msg.offset))
-
 	case bootstrapResultMsg:
-		d.BootstrapsPending -= 1
+		m.BootstrapsPending -= 1
 		if msg.err != nil {
-			d.BootstrapsErrs = append(d.BootstrapsErrs, msg.err)
+			m.BootstrapsErrs = append(m.BootstrapsErrs, msg.err)
 		} else {
-			d.BootstrapsSuccesses += 1
+			m.BootstrapsSuccesses += 1
 		}
 
-		if d.State == StateBootstrapping {
-			if d.BootstrapsSuccesses >= ConnThreshold {
-				d.State = StateBootstrapped
-			} else if d.BootstrapsPending == 0 && d.BootstrapsSuccesses < ConnThreshold {
-				d.reset()
-				d.State = StateError
-				d.Err = ErrConnThresholdNotReached{BootstrapErrs: d.BootstrapsErrs}
+		ref := m.ops[msg.oid]
+		delete(m.ops, msg.oid)
+		ref.cancel()
+
+		switch m.State {
+		case StateStopping:
+		case StateBootstrapping:
+			if m.BootstrapsSuccesses >= config.Global.ConnThreshold {
+				m.State = StateBootstrapped
+			} else if m.BootstrapsPending == 0 && m.BootstrapsSuccesses < config.Global.ConnThreshold {
+				m.State = StateError
+				m.Err = ErrConnThresholdNotReached{BootstrapErrs: m.BootstrapsErrs}
 			}
 		}
 
-	case PeerMsg:
-		if d.State == StateStopped || d.State == StateError {
-			return d, nil
+	case advertiseResultMsg:
+		ref := m.ops[msg.oid]
+		delete(m.ops, msg.oid)
+		ref.cancel()
+
+		m.PendingProvides -= 1
+		m.SuccessfulProvides += 1
+		m.LatestProvideErr = msg.err
+
+		if msg.err != nil {
+			m.FailedProvides += 1
 		}
 
-		cancel, found := d.services[msg.offset]
-		if !found {
-			log.Fatal("DHT service not found")
-			return d, nil
-		}
-		cancel()
-
-		if msg.Err == nil {
-			d.State = StateLookup
-		} else if msg.Err != nil && msg.fatal {
-			d.State = StateError
-			d.Err = msg.Err
-			return d, nil
-		} else if errors.Is(msg.Err, context.Canceled) && d.State != StateStopped {
-			d.State = StateStopped
-			d.Err = msg.Err
-			return d, nil
-		} else {
-			d.State = StateRetrying
-			d.RetryCount += 1
+		if m.State == StateActive {
+			cmds = append(cmds, m.provide(ref.offset))
 		}
 
-		lookupCtx, cancel := context.WithCancel(d.ctx)
-		d.services[msg.offset] = cancel
-		cmds = append(cmds, d.lookup(lookupCtx, msg.offset))
+	case lookupDone:
+		ref := m.ops[msg.oid]
+		delete(m.ops, msg.oid)
+		ref.cancel()
 
-	case stopMsg:
-		d, cmd = d.StopWithReason(msg.reason)
-		cmds = append(cmds, cmd)
+		m.PendingLookups -= 1
+		m.CompletedLookups += 1
 
+		if m.State == StateActive {
+			cmds = append(cmds, m.lookup(ref.offset))
+		}
 	}
 
-	d.spinner, cmd = d.spinner.Update(msg)
+	if m.State == StateStopping && len(m.ops) == 0 {
+		m.State = StateStopped
+	}
+
+	m.spinner, cmd = m.spinner.Update(msg)
 	cmds = append(cmds, cmd)
 
-	return d, tea.Batch(cmds...)
+	return m, tea.Batch(cmds...)
 }
 
-func (d *DHT) View() string {
+func (m *Model) View() string {
 	if !config.Global.DHT {
 		return "-"
 	}
 
-	switch d.State {
+	switch m.State {
 	case StateIdle:
 		style := lipgloss.NewStyle().Faint(true)
 		return style.Render("not started")
 	case StateBootstrapping:
-		return d.spinner.View() + "(bootstrapping)"
+		return m.spinner.View() + "(bootstrapping)"
 	case StateBootstrapped:
-		return d.spinner.View() + "(analyzing network)"
-	case StateProviding:
-		return d.spinner.View() + "(writing to DHT)"
-	case StateLookup:
-		return d.spinner.View() + "(searching peer)"
-	case StateRetrying:
-		return d.spinner.View() + fmt.Sprintf("(retrying %d)", d.RetryCount)
-	case StateProvided:
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("ready")
+		return m.spinner.View() + "(analyzing network)"
+	case StateActive:
+		switch m.role {
+		case discovery.RoleReceiver:
+			return m.spinner.View() + "(searching peer)"
+		case discovery.RoleSender:
+			if m.SuccessfulProvides > 0 {
+				return tui.Green.Render("ready")
+			}
+			if m.PendingProvides > 0 {
+				return m.spinner.View() + "(writing to DHT)"
+			}
+			return m.spinner.View() + tui.Yellow.Render(fmt.Sprintf("(searching peer %d)", m.PendingLookups+m.CompletedLookups))
+		default:
+			return m.spinner.View() + "(active)"
+		}
+	case StateStopping:
+		return m.spinner.View() + "(stopping)"
 	case StateStopped:
-		style := lipgloss.NewStyle().Faint(true)
-		if errors.Is(d.Err, context.Canceled) {
-			return style.Render("cancelled")
+		if errors.Is(m.Err, context.Canceled) {
+			return tui.Faint.Render("cancelled")
 		} else {
-			return style.Render("stopped")
+			return tui.Faint.Render("stopped")
 		}
 	case StateError:
-		style := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-		return style.Render("failed")
+		return tui.Red.Render("failed")
 	default:
-		style := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-		return style.Render("unknown state", d.State.String())
+		return tui.Red.Render("unknown state", m.State.String())
 	}
 }
 
-func (d *DHT) logEntry() *logrus.Entry {
+func (m *Model) logEntry() *logrus.Entry {
 	return log.WithFields(logrus.Fields{
-		"chanID": d.chanID,
-		"state":  d.State.String(),
+		"chanID": m.chanID,
+		"state":  m.State.String(),
 	})
 }
 
-func (d *DHT) reset() {
-	// close already started services
-	for _, cancel := range d.services {
-		cancel()
+func (m *Model) newOperation(offset time.Duration, timeout time.Duration) (context.Context, int) {
+	m.opCnt += 1
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	m.ops[m.opCnt] = &opRef{
+		id:     m.opCnt,
+		offset: offset,
+		cancel: cancel,
 	}
 
-	d.RetryCount = 0
-	d.services = map[int]*serviceRef{}
-	d.State = StateIdle
-	d.Err = nil
+	return timeoutCtx, m.opCnt
 }
 
-type serviceRef struct {
+type opRef struct {
 	id     int
 	offset time.Duration
 	cancel context.CancelFunc

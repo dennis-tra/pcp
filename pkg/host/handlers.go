@@ -1,8 +1,6 @@
 package host
 
 import (
-	"time"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/dennis-tra/pcp/pkg/mdns"
 	"github.com/libp2p/go-libp2p/core/event"
@@ -22,9 +20,9 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	case "m":
 		switch m.MDNS.State {
 		case mdns.StateIdle, mdns.StateError, mdns.StateStopped:
-			m.MDNS, cmd = m.MDNS.Start(0, 10*time.Second)
+			m.MDNS, cmd = m.MDNS.Start()
 		case mdns.StateStarted:
-			m.MDNS, cmd = m.MDNS.StopWithReason(nil)
+			m.MDNS, cmd = m.MDNS.Stop()
 		}
 	case "ctrl+c":
 		return m, Shutdown

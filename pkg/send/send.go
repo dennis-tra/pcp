@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/sirupsen/logrus"
@@ -28,8 +27,8 @@ type Model struct {
 }
 
 func NewState(ctx context.Context, program *tea.Program, filepath string) (*Model, error) {
-	if !config.Global.DHT && !config.Global.MDNS {
-		return nil, fmt.Errorf("either the DHT or mDNS discovery mechanism need to be active")
+	if err := config.Global.Validate(); err != nil {
+		return nil, fmt.Errorf("validate config: %w", err)
 	}
 
 	// Try to open the file to check if we have access and fail early.
@@ -92,7 +91,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.host.MDNS.State {
 	case mdns.StateIdle:
 		if config.Global.MDNS && len(m.host.PrivateAddrs) > 0 {
-			m.host.MDNS, cmd = m.host.MDNS.Start(0, 10*time.Second)
+			m.host.MDNS, cmd = m.host.MDNS.Start()
 			cmds = append(cmds, cmd)
 		}
 	}
@@ -106,9 +105,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dht.StateBootstrapped:
 		possible, err := m.host.IsDirectConnectivityPossible()
 		if err != nil {
-			m.host.DHT, cmd = m.host.DHT.StopWithReason(err)
+			m.host.DHT, cmd = m.host.DHT.StartNoProvides()
 		} else if possible {
-			m.host.DHT, cmd = m.host.DHT.Advertise(0)
+			m.host.DHT, cmd = m.host.DHT.Start()
 		}
 		cmds = append(cmds, cmd)
 	}

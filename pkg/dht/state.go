@@ -6,10 +6,8 @@ const (
 	StateIdle = iota + 1
 	StateBootstrapping
 	StateBootstrapped
-	StateProviding
-	StateLookup
-	StateRetrying
-	StateProvided
+	StateActive
+	StateStopping
 	StateStopped
 	StateError
 )
@@ -22,14 +20,10 @@ func (s State) String() string {
 		return "StateBootstrapping"
 	case StateBootstrapped:
 		return "StateBootstrapped"
-	case StateProviding:
-		return "StateProviding"
-	case StateLookup:
-		return "StateLookup"
-	case StateRetrying:
-		return "StateRetrying"
-	case StateProvided:
-		return "StateProvided"
+	case StateActive:
+		return "StateActive"
+	case StateStopping:
+		return "StateStopping"
 	case StateStopped:
 		return "StateStopped"
 	case StateError:

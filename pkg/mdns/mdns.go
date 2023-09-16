@@ -54,7 +54,7 @@ type Model struct {
 
 	role discovery.Role
 
-	serviceID int
+	svcIdCntr int
 	services  map[int]*serviceRef
 
 	sender  tea.Sender
@@ -125,23 +125,14 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			return m, nil
 		}
 
-		m.serviceID += 1
+		m.svcIdCntr += 1
 		m.services[msg.serviceID] = &serviceRef{
-			id:     m.serviceID,
+			id:     m.svcIdCntr,
 			offset: ref.offset,
 			svc:    svc,
 		}
 
 		cmds = append(cmds, m.wait(ref))
-
-	case stopMsg:
-		if m.State != StateStarted {
-			return m, nil
-		}
-		m.logEntry().WithError(msg.reason).Infoln("Stopping mDNS service")
-
-		m, cmd = m.StopWithReason(msg.reason)
-		cmds = append(cmds, cmd)
 	}
 
 	m.spinner, cmd = m.spinner.Update(msg)
@@ -188,7 +179,7 @@ func (m *Model) reset() {
 		}
 	}
 
-	m.services = map[int]serviceRef{}
+	m.services = map[int]*serviceRef{}
 	m.State = StateIdle
 	m.Err = nil
 }

@@ -2,10 +2,8 @@ package dht
 
 import (
 	"context"
+	"errors"
 )
-
-// ConnThreshold represents the minimum number of bootstrap peers we need a connection to.
-var ConnThreshold = 3
 
 type ErrConnThresholdNotReached struct {
 	BootstrapErrs []error
@@ -19,7 +17,7 @@ func (e ErrConnThresholdNotReached) Log() {
 	// If only one error is context.Canceled the user stopped the
 	// program, and we don't want to print errors.
 	for _, err := range e.BootstrapErrs {
-		if err == context.Canceled {
+		if errors.Is(err, context.Canceled) {
 			return
 		}
 	}

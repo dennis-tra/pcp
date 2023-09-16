@@ -2,91 +2,136 @@ package dht
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/libp2p/go-libp2p/core/peer"
 
+	"github.com/dennis-tra/pcp/pkg/config"
 	"github.com/dennis-tra/pcp/pkg/discovery"
 )
 
+type (
+	bootstrapResultMsg struct {
+		oid int
+		err error
+	}
+	advertiseResultMsg struct {
+		oid int
+		err error
+	}
+	PeerMsg struct { // discoverResult
+		oid  int
+		Peer peer.AddrInfo
+	}
+	lookupDone struct {
+		oid int
+	}
+)
+
+func (m *Model) Bootstrap() (*Model, tea.Cmd) {
+	var cmds []tea.Cmd
+	for _, bp := range config.Global.BoostrapAddrInfos() {
+		m.BootstrapsPending += 1
+		ctx, oid := m.newOperation(0, bootstrapTimeout)
+		cmds = append(cmds, m.connectToBootstrapper(ctx, bp, oid))
+	}
+
+	m.State = StateBootstrapping
+
+	return m, tea.Batch(cmds...)
+}
+
+func (m *Model) Start() (*Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
+	cmds = append(cmds, m.provide(0))
+	cmds = append(cmds, m.lookup(0))
+	cmds = append(cmds, m.lookup(-discovery.TruncateDuration))
+
+	m.State = StateActive
+
+	return m, tea.Batch(cmds...)
+}
+
+func (m *Model) StartNoProvides() (*Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
+	cmds = append(cmds, m.lookup(0))
+	cmds = append(cmds, m.lookup(-discovery.TruncateDuration))
+
+	m.State = StateActive
+
+	return m, tea.Batch(cmds...)
+}
+
+func (m *Model) Stop() (*Model, tea.Cmd) {
+	m.State = StateStopping
+
+	for _, ref := range m.ops {
+		ref.cancel()
+	}
+
+	return m, nil
+}
+
 // connectToBootstrapper connects to a set of bootstrap nodes to connect to the DHT.
-func (d *DHT) connectToBootstrapper(pi peer.AddrInfo) tea.Cmd {
+func (m *Model) connectToBootstrapper(ctx context.Context, pi peer.AddrInfo, oid int) tea.Cmd {
 	return func() tea.Msg {
 		logEntry := log.WithField("peerID", pi.ID.String()[:16])
 		logEntry.Debugln("Connecting bootstrap peer")
-		err := d.Connect(d.ctx, pi)
-		if err != nil {
+
+		if err := m.host.Connect(ctx, pi); err != nil {
 			logEntry.WithError(err).Warnln("Failed connecting to bootstrap peer")
-			return bootstrapResultMsg{err: err}
-		} else {
-			logEntry.Infoln("Connected to bootstrap peer!")
-			return bootstrapResultMsg{err: nil}
+			return bootstrapResultMsg{oid: oid, err: err}
 		}
+
+		logEntry.Infoln("Connected to bootstrap peer!")
+		return bootstrapResultMsg{oid: oid, err: nil}
 	}
 }
 
-func (d *DHT) provide(ctx context.Context, offset time.Duration) tea.Cmd {
+func (m *Model) provide(offset time.Duration) tea.Cmd {
+	m.PendingProvides += 1
+	ctx, oid := m.newOperation(offset, lookupTimeout)
 	return func() tea.Msg {
-		did := discovery.NewID(d.chanID).SetRole(d.role).SetOffset(offset)
+		did := discovery.NewID(m.chanID).SetRole(m.role).SetOffset(offset)
 
 		logEntry := log.WithField("did", did.DiscoveryID())
 		logEntry.Debugln("Start providing")
 		defer logEntry.Debugln("Done providing")
 
-		cID, err := did.ContentID()
-		if err != nil {
-			return advertiseResultMsg{
-				offset: offset,
-				err:    err,
-				fatal:  true,
-			}
-		}
-
 		return advertiseResultMsg{
-			offset: offset,
-			err:    d.dht.Provide(ctx, cID, true),
-			fatal:  false,
+			oid: oid,
+			err: m.dht.Provide(ctx, did.ContentID(), true),
 		}
 	}
 }
 
-func (d *DHT) lookup(ctx context.Context, offset time.Duration) tea.Cmd {
+func (m *Model) lookup(offset time.Duration) tea.Cmd {
+	m.PendingLookups += 1
+	ctx, oid := m.newOperation(offset, lookupTimeout)
 	return func() tea.Msg {
-		did := discovery.NewID(d.chanID).SetRole(d.role.Opposite()).SetOffset(offset)
+		did := discovery.NewID(m.chanID).SetRole(m.role.Opposite()).SetOffset(offset)
 
 		logEntry := log.WithField("did", did.DiscoveryID())
 		logEntry.Debugln("Start lookup")
 		defer logEntry.Debugln("Done lookup")
 
-		cID, err := did.ContentID()
-		if err != nil {
-			return PeerMsg{
-				offset: offset,
-				Err:    err,
-				fatal:  true,
-			}
-		}
-
-		// Find new provider with a timeout, so the discovery ID is renewed if necessary.
-		ctx, cancel := context.WithTimeout(ctx, lookupTimeout)
-		defer cancel()
-
-		for pi := range d.dht.FindProvidersAsync(ctx, cID, 0) {
+		for pi := range m.dht.FindProvidersAsync(ctx, did.ContentID(), 0) {
 			pi := pi
 
 			logEntry.Debugln("Found peer ", pi.ID)
 			if len(pi.Addrs) > 0 {
-				return PeerMsg{
-					Peer:   pi,
-					offset: offset,
-				}
+				m.sender.Send(PeerMsg{
+					oid:  oid,
+					Peer: pi,
+				})
 			}
 		}
 
-		return PeerMsg{
-			Err: fmt.Errorf("not found"),
+		return lookupDone{
+			oid: oid,
 		}
 	}
 }

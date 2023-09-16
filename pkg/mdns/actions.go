@@ -1,8 +1,6 @@
 package mdns
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -14,21 +12,15 @@ import (
 
 type (
 	PeerMsg   peer.AddrInfo
-	stopMsg   struct{ reason error }
 	updateMsg struct{ serviceID int }
 )
 
 // Start starts as many MDNS services as offsets are given.
-func (m *Model) Start(offsets ...time.Duration) (*Model, tea.Cmd) {
-	if m.State == StateStarted || len(offsets) == 0 {
-		log.Fatal("mDNS service already running")
-		return m, nil
-	}
-
+func (m *Model) Start() (*Model, tea.Cmd) {
 	m.reset()
 
 	var cmds []tea.Cmd
-	for _, offset := range offsets {
+	for _, offset := range []time.Duration{0, -discovery.TruncateDuration} {
 		svc, err := m.newService(offset)
 		if err != nil {
 			m.reset()
@@ -37,9 +29,9 @@ func (m *Model) Start(offsets ...time.Duration) (*Model, tea.Cmd) {
 			return m, nil
 		}
 
-		m.serviceID += 1
-		m.services[m.serviceID] = &serviceRef{
-			id:     m.serviceID,
+		m.svcIdCntr += 1
+		m.services[m.svcIdCntr] = &serviceRef{
+			id:     m.svcIdCntr,
 			offset: offset,
 			svc:    svc,
 		}
@@ -72,13 +64,8 @@ func (m *Model) wait(ref *serviceRef) tea.Cmd {
 	}
 }
 
-func (m *Model) StopWithReason(reason error) (*Model, tea.Cmd) {
+func (m *Model) Stop() (*Model, tea.Cmd) {
 	m.reset()
-	if reason != nil && !errors.Is(reason, context.Canceled) {
-		m.State = StateError
-		m.Err = reason
-	} else {
-		m.State = StateStopped
-	}
+	m.State = StateStopped
 	return m, nil
 }

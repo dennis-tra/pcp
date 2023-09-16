@@ -89,7 +89,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case dht.StateBootstrapping:
 	case dht.StateBootstrapped:
-		m.host.DHT, cmd = m.host.DHT.Discover(0)
+		m.host.DHT, cmd = m.host.DHT.Start()
 		cmds = append(cmds, cmd)
 	}
 

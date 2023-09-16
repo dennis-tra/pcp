@@ -2,11 +2,14 @@ package host
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
 	"sort"
 	"syscall"
+
+	"github.com/dennis-tra/pcp/pkg/tui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -70,7 +73,7 @@ type Model struct {
 	NATManager basichost.NATManager
 
 	MDNS *mdns.Model
-	DHT  *dht.DHT
+	DHT  *dht.Model
 
 	NATTypeUDP   network.NATDeviceType
 	NATTypeTCP   network.NATDeviceType
@@ -152,7 +155,7 @@ func New(ctx context.Context, sender tea.Sender, role discovery.Role, wrds []str
 		sender:       sender,
 		Words:        wrds,
 		MDNS:         mdns.New(h, sender, role, chanID),
-		DHT:          dht.New(ctx, h, ipfsDHT, role, chanID),
+		DHT:          dht.New(h, ipfsDHT, sender, role, chanID),
 		evtSub:       evtSub,
 		NATManager:   nat,
 		PeerStates:   map[peer.ID]PeerState{},
@@ -212,10 +215,8 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	case disconnectedMsg:
 		m.connections -= 1
 	case dht.PeerMsg:
-		if msg.Err == nil {
-			m, cmd = m.HandlePeerFound(msg.Peer)
-			cmds = append(cmds, cmd)
-		}
+		m, cmd = m.HandlePeerFound(msg.Peer)
+		cmds = append(cmds, cmd)
 	case mdns.PeerMsg:
 		m, cmd = m.HandlePeerFound(peer.AddrInfo(msg))
 		cmds = append(cmds, cmd)
@@ -224,10 +225,10 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	case authMsg[[]byte]:
 		m.PeerStates[msg.peerID] = PeerStateAuthenticated
 		if m.DHT.State != dht.StateIdle && m.DHT.State != dht.StateError {
-			m.DHT, cmd = m.DHT.StopWithReason(nil)
+			m.DHT, cmd = m.DHT.Stop()
 		}
 		if m.MDNS.State != mdns.StateIdle && m.MDNS.State != mdns.StateError {
-			m.MDNS, cmd = m.MDNS.StopWithReason(nil)
+			m.MDNS, cmd = m.MDNS.Stop()
 		}
 	case authMsg[error]:
 		m.PeerStates[msg.peerID] = PeerStateFailedAuthentication
@@ -318,6 +319,10 @@ func (m *Model) View() string {
 
 	out += fmt.Sprintf("%s %s\t %s %s\n", style.Render("Local Network:"), local, style.Render("Internet:"), internet)
 
+	if possible, err := m.IsDirectConnectivityPossible(); !possible && errors.Is(err, ErrSymmetricNat) {
+		out += tui.Yellow.Render("You are behind a symmetric NAT. A direct connection will only be possible of your peer is publicly reachable.")
+	}
+
 	out += m.ViewPeerStates()
 
 	return out
@@ -333,10 +338,8 @@ func (m *Model) StartKeyExchange(ctx context.Context, remotePeer peer.ID) tea.Cm
 		}
 	}
 
-	if remotePeer.String() == "" {
-		panic("hfdhhfggh")
-	}
 	m.PeerStates[remotePeer] = PeerStateAuthenticating
+
 	return m.AuthProtocol.StartKeyExchange(ctx, remotePeer)
 }
 
@@ -418,9 +421,11 @@ func (m *Model) watchEvents() tea.Msg {
 	}
 }
 
+var ErrSymmetricNat = fmt.Errorf("private network with symmetric NAT")
+
 func (m *Model) IsDirectConnectivityPossible() (bool, error) {
 	if m.Reachability == network.ReachabilityPrivate && m.NATTypeUDP == network.NATDeviceTypeSymmetric && m.NATTypeTCP == network.NATDeviceTypeSymmetric {
-		return false, fmt.Errorf("private network with symmetric NAT")
+		return false, ErrSymmetricNat
 	}
 
 	// we have public reachability, we're good to go with the DHT
