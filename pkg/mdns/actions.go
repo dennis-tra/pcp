@@ -20,7 +20,7 @@ func (m *Model) Start() (*Model, tea.Cmd) {
 	m.reset()
 
 	var cmds []tea.Cmd
-	for _, offset := range []time.Duration{0, -discovery.TruncateDuration} {
+	for _, offset := range []time.Duration{0, discovery.TruncateDuration} {
 		svc, err := m.newService(offset)
 		if err != nil {
 			m.reset()

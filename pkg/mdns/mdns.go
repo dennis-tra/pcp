@@ -52,8 +52,6 @@ type Model struct {
 	host   host.Host
 	chanID int
 
-	role discovery.Role
-
 	svcIdCntr int
 	services  map[int]*serviceRef
 
@@ -67,10 +65,9 @@ type Model struct {
 	newMdnsService func(host.Host, string, mdns.Notifee) mdns.Service
 }
 
-func New(h host.Host, sender tea.Sender, role discovery.Role, chanID int) *Model {
+func New(h host.Host, sender tea.Sender, chanID int) *Model {
 	m := &Model{
 		host:     h,
-		role:     role,
 		chanID:   chanID,
 		sender:   sender,
 		services: map[int]*serviceRef{},

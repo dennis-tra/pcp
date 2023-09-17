@@ -74,7 +74,7 @@ func TestModel_newService(t *testing.T) {
 	mdnsService := mock.NewMockMDNSService(ctrl)
 	model.newMdnsService = func(host host.Host, s string, notifee mdns.Notifee) mdns.Service {
 		assert.Equal(t, h, host)
-		assert.Equal(t, s, discovery.NewID(offset).DiscoveryID(chanID))
+		assert.Equal(t, s, discovery.NewID(chanID).SetOffset(offset).DiscoveryID())
 		assert.Equal(t, model, notifee)
 		return mdnsService
 	}
@@ -109,9 +109,6 @@ func TestModel_Start(t *testing.T) {
 
 	model := New(h, sender, chanID)
 
-	offset1 := 5 * time.Second
-	offset2 := 10 * time.Second
-
 	mdnsService1 := mock.NewMockMDNSService(ctrl)
 	mdnsService2 := mock.NewMockMDNSService(ctrl)
 
@@ -119,17 +116,17 @@ func TestModel_Start(t *testing.T) {
 	model.newMdnsService = func(host host.Host, s string, notifee mdns.Notifee) mdns.Service {
 		callCount += 1
 		if callCount == 1 {
-			assert.Equal(t, s, discovery.NewID(offset1).DiscoveryID(chanID))
+			assert.Equal(t, s, discovery.NewID(chanID).SetOffset(0).DiscoveryID())
 			return mdnsService1
 		} else {
-			assert.Equal(t, s, discovery.NewID(offset2).DiscoveryID(chanID))
+			assert.Equal(t, s, discovery.NewID(chanID).SetOffset(discovery.TruncateDuration).DiscoveryID())
 			return mdnsService2
 		}
 	}
 	mdnsService1.EXPECT().Start().Times(1)
 	mdnsService2.EXPECT().Start().Times(1)
 
-	model, cmd := model.Start(offset1, offset2)
+	model, cmd := model.Start()
 
 	assert.Equal(t, StateStarted, model.State)
 	assert.Len(t, model.services, 2)
@@ -148,9 +145,6 @@ func TestModel_Start_error(t *testing.T) {
 
 	model := New(h, sender, chanID)
 
-	offset1 := 5 * time.Second
-	offset2 := 10 * time.Second
-
 	mdnsService1 := mock.NewMockMDNSService(ctrl)
 	mdnsService2 := mock.NewMockMDNSService(ctrl)
 
@@ -158,10 +152,10 @@ func TestModel_Start_error(t *testing.T) {
 	model.newMdnsService = func(host host.Host, s string, notifee mdns.Notifee) mdns.Service {
 		callCount += 1
 		if callCount == 1 {
-			assert.Equal(t, s, discovery.NewID(offset1).DiscoveryID(chanID))
+			assert.Equal(t, discovery.NewID(chanID).SetOffset(0).DiscoveryID(), s)
 			return mdnsService1
 		} else {
-			assert.Equal(t, s, discovery.NewID(offset2).DiscoveryID(chanID))
+			assert.Equal(t, discovery.NewID(chanID).SetOffset(discovery.TruncateDuration).DiscoveryID(), s)
 			return mdnsService2
 		}
 	}
@@ -170,7 +164,7 @@ func TestModel_Start_error(t *testing.T) {
 
 	mdnsService2.EXPECT().Start().Times(1).Return(fmt.Errorf("some error"))
 
-	model, cmd := model.Start(offset1, offset2)
+	model, cmd := model.Start()
 
 	assert.Equal(t, StateError, model.State)
 	assert.Error(t, model.Err)

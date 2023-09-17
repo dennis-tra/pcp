@@ -154,7 +154,7 @@ func New(ctx context.Context, sender tea.Sender, role discovery.Role, wrds []str
 		IpfsDHT:      ipfsDHT,
 		sender:       sender,
 		Words:        wrds,
-		MDNS:         mdns.New(h, sender, role, chanID),
+		MDNS:         mdns.New(h, sender, chanID),
 		DHT:          dht.New(h, ipfsDHT, sender, role, chanID),
 		evtSub:       evtSub,
 		NATManager:   nat,

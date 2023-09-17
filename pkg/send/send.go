@@ -137,5 +137,6 @@ func validateFile(filepath string) error {
 
 	// checks if file exists and we have read permissions
 	_, err := os.Stat(filepath)
+
 	return err
 }

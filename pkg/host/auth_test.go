@@ -8,8 +8,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/dennis-tra/pcp/pkg/discovery"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -21,6 +19,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/dennis-tra/pcp/internal/mock"
+	"github.com/dennis-tra/pcp/pkg/discovery"
 )
 
 type voidSender struct {
@@ -32,7 +31,7 @@ func (v voidSender) Send(tea.Msg) {
 
 var _ tea.Sender = (*voidSender)(nil)
 
-type PakeProtocolTestSuite struct {
+type AuthProtocolTestSuite struct {
 	suite.Suite
 
 	ctx  context.Context
@@ -51,15 +50,15 @@ type PakeProtocolTestSuite struct {
 	senderPublicKey   crypto.PubKey
 }
 
-func (suite *PakeProtocolTestSuite) SetupSuite() {
+func (suite *AuthProtocolTestSuite) SetupSuite() {
 	logrus.SetLevel(logrus.PanicLevel)
 }
 
-func (suite *PakeProtocolTestSuite) TearDownSuite() {
+func (suite *AuthProtocolTestSuite) TearDownSuite() {
 	logrus.SetLevel(logrus.InfoLevel)
 }
 
-func (suite *PakeProtocolTestSuite) SetupTest() {
+func (suite *AuthProtocolTestSuite) SetupTest() {
 	suite.ctx = context.Background()
 	suite.ctrl = gomock.NewController(suite.T())
 
@@ -70,16 +69,16 @@ func (suite *PakeProtocolTestSuite) SetupTest() {
 
 	senderHost := mock.NewMockHost(suite.ctrl)
 	senderHost.EXPECT().ID().Return(suite.newPeerID()).AnyTimes()
-	senderHost.EXPECT().SetStreamHandler(gomock.Eq(protocol.ID(ProtocolPake)), gomock.Any()).AnyTimes()
+	senderHost.EXPECT().SetStreamHandler(gomock.Eq(ProtocolAuthRoleReceiver), gomock.Any()).AnyTimes()
 	senderHost.EXPECT().Close().AnyTimes()
-	senderHost.EXPECT().RemoveStreamHandler(gomock.Eq(protocol.ID(ProtocolPake))).AnyTimes()
+	senderHost.EXPECT().RemoveStreamHandler(gomock.Eq(ProtocolAuthRoleReceiver)).AnyTimes()
 	senderHost.EXPECT().Peerstore().Return(senderPeerstore).AnyTimes()
 
 	receiverHost := mock.NewMockHost(suite.ctrl)
 	receiverHost.EXPECT().ID().Return(suite.newPeerID()).AnyTimes()
-	receiverHost.EXPECT().SetStreamHandler(gomock.Eq(protocol.ID(ProtocolPake)), gomock.Any()).AnyTimes()
+	receiverHost.EXPECT().SetStreamHandler(gomock.Eq(ProtocolAuthRoleSender), gomock.Any()).AnyTimes()
 	receiverHost.EXPECT().Close().AnyTimes()
-	receiverHost.EXPECT().RemoveStreamHandler(gomock.Eq(protocol.ID(ProtocolPake))).AnyTimes()
+	receiverHost.EXPECT().RemoveStreamHandler(gomock.Eq(ProtocolAuthRoleSender)).AnyTimes()
 	receiverHost.EXPECT().Peerstore().Return(receiverPeerstore).AnyTimes()
 
 	words := []string{"silly", "silly", "silly"}
@@ -97,7 +96,7 @@ func (suite *PakeProtocolTestSuite) SetupTest() {
 	suite.receiver.RegisterKeyExchangeHandler()
 }
 
-func (suite *PakeProtocolTestSuite) newPeerID() peer.ID {
+func (suite *AuthProtocolTestSuite) newPeerID() peer.ID {
 	sk, _, err := crypto.GenerateEd25519Key(rand.Reader)
 	suite.Require().NoError(err)
 
@@ -107,7 +106,7 @@ func (suite *PakeProtocolTestSuite) newPeerID() peer.ID {
 	return id
 }
 
-func (suite *PakeProtocolTestSuite) TearDownTest() {
+func (suite *AuthProtocolTestSuite) TearDownTest() {
 	suite.sender.UnregisterKeyExchangeHandler()
 	suite.receiver.UnregisterKeyExchangeHandler()
 
@@ -118,7 +117,7 @@ func (suite *PakeProtocolTestSuite) TearDownTest() {
 	suite.NoError(err)
 }
 
-func (suite *PakeProtocolTestSuite) TestPakeMsg_StartKeyExchange_updatePakeStep() {
+func (suite *AuthProtocolTestSuite) TestAuthMsg_StartKeyExchange_updateAuthStep() {
 	// The receiving peer starts the key exchange
 	// -> discard command which would actually open the stream
 	//    and do the key exchange
@@ -132,7 +131,7 @@ func (suite *PakeProtocolTestSuite) TestPakeMsg_StartKeyExchange_updatePakeStep(
 	suite.Nil(state.Key)
 }
 
-func (suite *PakeProtocolTestSuite) TestPakeMsg_StartKeyExchange_SenderStarts() {
+func (suite *AuthProtocolTestSuite) TestAuthMsg_StartKeyExchange_SenderStarts() {
 	_ = suite.sender.StartKeyExchange(suite.ctx, suite.receiver.host.ID())
 
 	recToSenConn := mock.NewMockConn(suite.ctrl)
@@ -152,7 +151,7 @@ func (suite *PakeProtocolTestSuite) TestPakeMsg_StartKeyExchange_SenderStarts() 
 	suite.Len(receiverState.Key, 0)
 }
 
-func (suite *PakeProtocolTestSuite) TestPakeMsg_StartKeyExchange_Simultaneous() {
+func (suite *AuthProtocolTestSuite) TestAuthMsg_StartKeyExchange_Simultaneous() {
 	_ = suite.sender.StartKeyExchange(suite.ctx, suite.receiver.host.ID())
 	_ = suite.receiver.StartKeyExchange(suite.ctx, suite.sender.host.ID())
 
@@ -190,7 +189,7 @@ func (suite *PakeProtocolTestSuite) TestPakeMsg_StartKeyExchange_Simultaneous() 
 	suite.Len(receiverState.Key, 0)
 }
 
-func (suite *PakeProtocolTestSuite) TestPakeMsg_StartKeyExchange_NoOpIfInProgress() {
+func (suite *AuthProtocolTestSuite) TestAuthMsg_StartKeyExchange_NoOpIfInProgress() {
 	cmd := suite.sender.StartKeyExchange(suite.ctx, suite.receiver.host.ID())
 	suite.NotNil(cmd)
 
@@ -205,7 +204,7 @@ func (suite *PakeProtocolTestSuite) TestPakeMsg_StartKeyExchange_NoOpIfInProgres
 	suite.NotNil(cmd)
 }
 
-func (suite *PakeProtocolTestSuite) TestPakeMsg_StartKeyExchange_DelayedReceiverStreamOpen() {
+func (suite *AuthProtocolTestSuite) TestAuthMsg_StartKeyExchange_DelayedReceiverStreamOpen() {
 	_ = suite.sender.StartKeyExchange(suite.ctx, suite.receiver.host.ID())
 
 	recToSenConn := mock.NewMockConn(suite.ctrl)
@@ -234,7 +233,7 @@ func (suite *PakeProtocolTestSuite) TestPakeMsg_StartKeyExchange_DelayedReceiver
 	suite.Len(senderState.Key, 0)
 }
 
-func (suite *PakeProtocolTestSuite) TestPakeMsg_StartKeyExchange_FromPeerWhereAuthenticationFailed() {
+func (suite *AuthProtocolTestSuite) TestAuthMsg_StartKeyExchange_FromPeerWhereAuthenticationFailed() {
 	suite.sender.states[suite.receiver.host.ID()] = &AuthState{
 		Step:   AuthStepError,
 		Key:    nil,
@@ -258,7 +257,7 @@ func (suite *PakeProtocolTestSuite) TestPakeMsg_StartKeyExchange_FromPeerWhereAu
 	suite.Len(senderState.Key, 0)
 }
 
-func (suite *PakeProtocolTestSuite) TestPakeMsg_error() {
+func (suite *AuthProtocolTestSuite) TestAuthMsg_error() {
 	err := fmt.Errorf("some error")
 
 	msg := authMsg[error]{
@@ -275,7 +274,7 @@ func (suite *PakeProtocolTestSuite) TestPakeMsg_error() {
 	suite.Nil(senderState.Key)
 }
 
-func (suite *PakeProtocolTestSuite) TestPakeMsg_ErrorForObsoleteStream() {
+func (suite *AuthProtocolTestSuite) TestAuthMsg_ErrorForObsoleteStream() {
 	_ = suite.sender.StartKeyExchange(suite.ctx, suite.receiver.host.ID())
 	_ = suite.receiver.StartKeyExchange(suite.ctx, suite.sender.host.ID())
 
@@ -313,7 +312,7 @@ func (suite *PakeProtocolTestSuite) TestPakeMsg_ErrorForObsoleteStream() {
 	suite.Len(senderState.Key, 0)
 }
 
-func (suite *PakeProtocolTestSuite) TestPakeMsg_bytes() {
+func (suite *AuthProtocolTestSuite) TestAuthMsg_bytes() {
 	bts := []byte("some bytes")
 	peerID := suite.receiver.host.ID()
 
@@ -331,7 +330,7 @@ func (suite *PakeProtocolTestSuite) TestPakeMsg_bytes() {
 	suite.Equal(state.Key, bts)
 }
 
-func (suite *PakeProtocolTestSuite) TestFullKeyExchange() {
+func (suite *AuthProtocolTestSuite) TestFullKeyExchange() {
 	recReader, recWriter := io.Pipe()
 	senReader, senWriter := io.Pipe()
 
@@ -374,7 +373,7 @@ func (suite *PakeProtocolTestSuite) TestFullKeyExchange() {
 	}).AnyTimes()
 
 	suite.receiverHost.EXPECT().
-		NewStream(gomock.Any(), gomock.Eq(suite.sender.host.ID()), gomock.Eq(protocol.ID(ProtocolPake))).
+		NewStream(gomock.Any(), gomock.Eq(suite.sender.host.ID()), gomock.Eq(ProtocolAuthRoleReceiver)).
 		DoAndReturn(func(ctx context.Context, p peer.ID, pids ...protocol.ID) (network.Stream, error) {
 			return recStream, nil
 		})
@@ -417,7 +416,7 @@ func (suite *PakeProtocolTestSuite) TestFullKeyExchange() {
 	suite.Equal(senderState.Key, receiverState.Key)
 }
 
-func (suite *PakeProtocolTestSuite) TestPakeMsg_step() {
+func (suite *AuthProtocolTestSuite) TestAuthMsg_step() {
 	peerID := suite.receiver.host.ID()
 
 	stream1 := mock.NewMockStream(suite.ctrl)
@@ -520,7 +519,7 @@ func (suite *PakeProtocolTestSuite) TestPakeMsg_step() {
 	suite.Nil(state.Key)
 }
 
-func (suite *PakeProtocolTestSuite) TestPakeProtocol_PakeStateStr() {
+func (suite *AuthProtocolTestSuite) TestAuthProtocol_PakeStateStr() {
 	peerID := suite.receiver.host.ID()
 
 	untrackedStr := suite.sender.PakeStateStr(peerID)
@@ -566,7 +565,7 @@ func (suite *PakeProtocolTestSuite) TestPakeProtocol_PakeStateStr() {
 	}
 }
 
-func (suite *PakeProtocolTestSuite) TestPakeProtocol_GetSessionKey() {
+func (suite *AuthProtocolTestSuite) TestAuthProtocol_GetSessionKey() {
 	peerID := suite.receiver.host.ID()
 	key := suite.sender.GetSessionKey(peerID)
 	suite.Nil(key)
@@ -579,6 +578,6 @@ func (suite *PakeProtocolTestSuite) TestPakeProtocol_GetSessionKey() {
 	suite.Equal([]byte("random bytes"), key)
 }
 
-func TestPakeProtocolTestSuite(t *testing.T) {
-	suite.Run(t, new(PakeProtocolTestSuite))
+func TestAuthProtocolTestSuite(t *testing.T) {
+	suite.Run(t, new(AuthProtocolTestSuite))
 }
