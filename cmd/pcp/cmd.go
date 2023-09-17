@@ -6,6 +6,8 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"reflect"
+	"runtime"
 	"runtime/debug"
 	"strconv"
 
@@ -267,6 +269,16 @@ func getBootstrapPeerMaddrStrings() []string {
 }
 
 func filterFn(m tea.Model, msg tea.Msg) tea.Msg {
-	log.Tracef("tea filter: %T\n", msg)
+	batch, ok := msg.(tea.BatchMsg)
+	if ok {
+		names := []string{}
+		for _, cmd := range batch {
+			names = append(names, runtime.FuncForPC(reflect.ValueOf(cmd).Pointer()).Name())
+		}
+		log.WithField("size", len(batch)).WithField("batch", names).Tracef("tea filter: %T\n", msg)
+	} else {
+		log.Tracef("tea filter: %T\n", msg)
+	}
+
 	return msg
 }

@@ -105,7 +105,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dht.StateBootstrapped:
 		possible, err := m.host.IsDirectConnectivityPossible()
 		if err != nil {
-			m.host.DHT, cmd = m.host.DHT.StartNoProvides()
+			m.host.DHT, cmd = m.host.DHT.StartNoProvide()
 		} else if possible {
 			m.host.DHT, cmd = m.host.DHT.Start()
 		}

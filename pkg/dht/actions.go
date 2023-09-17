@@ -1,7 +1,6 @@
 package dht
 
 import (
-	"context"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -33,8 +32,7 @@ func (m *Model) Bootstrap() (*Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	for _, bp := range config.Global.BoostrapAddrInfos() {
 		m.BootstrapsPending += 1
-		ctx, oid := m.newOperation(0, bootstrapTimeout)
-		cmds = append(cmds, m.connectToBootstrapper(ctx, bp, oid))
+		cmds = append(cmds, m.connectToBootstrapper(bp))
 	}
 
 	m.State = StateBootstrapping
@@ -54,7 +52,7 @@ func (m *Model) Start() (*Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *Model) StartNoProvides() (*Model, tea.Cmd) {
+func (m *Model) StartNoProvide() (*Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	cmds = append(cmds, m.lookup(0))
@@ -63,6 +61,10 @@ func (m *Model) StartNoProvides() (*Model, tea.Cmd) {
 	m.State = StateActive
 
 	return m, tea.Batch(cmds...)
+}
+
+func (m *Model) StartProvide() (*Model, tea.Cmd) {
+	return m, m.provide(0)
 }
 
 func (m *Model) Stop() (*Model, tea.Cmd) {
@@ -76,7 +78,8 @@ func (m *Model) Stop() (*Model, tea.Cmd) {
 }
 
 // connectToBootstrapper connects to a set of bootstrap nodes to connect to the DHT.
-func (m *Model) connectToBootstrapper(ctx context.Context, pi peer.AddrInfo, oid int) tea.Cmd {
+func (m *Model) connectToBootstrapper(pi peer.AddrInfo) tea.Cmd {
+	ctx, oid := m.newOperation(0, bootstrapTimeout)
 	return func() tea.Msg {
 		logEntry := log.WithField("peerID", pi.ID.String()[:16])
 		logEntry.Debugln("Connecting bootstrap peer")

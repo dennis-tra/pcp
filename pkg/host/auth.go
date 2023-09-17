@@ -99,7 +99,7 @@ func (a *AuthProtocol) Init() tea.Cmd {
 
 func (a *AuthProtocol) Update(msg tea.Msg) (*AuthProtocol, tea.Cmd) {
 	log.WithFields(logrus.Fields{
-		"comp": "pake",
+		"comp": "auth",
 		"type": fmt.Sprintf("%T", msg),
 	}).Tracef("handle message: %T\n", msg)
 

@@ -89,8 +89,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case dht.StateBootstrapping:
 	case dht.StateBootstrapped:
-		m.host.DHT, cmd = m.host.DHT.Start()
+		m.host.DHT, cmd = m.host.DHT.StartNoProvide()
 		cmds = append(cmds, cmd)
+	case dht.StateActive:
+		possible, _ := m.host.IsDirectConnectivityPossible()
+		if possible && m.host.DHT.PendingProvides == 0 {
+			m.host.DHT, cmd = m.host.DHT.StartProvide()
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	//	// TODO: if dht + mdns are in error -> stop
