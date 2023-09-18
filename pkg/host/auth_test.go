@@ -519,16 +519,16 @@ func (suite *AuthProtocolTestSuite) TestAuthMsg_step() {
 	suite.Nil(state.Key)
 }
 
-func (suite *AuthProtocolTestSuite) TestAuthProtocol_PakeStateStr() {
+func (suite *AuthProtocolTestSuite) TestAuthProtocol_AuthStateStr() {
 	peerID := suite.receiver.host.ID()
 
-	untrackedStr := suite.sender.PakeStateStr(peerID)
+	untrackedStr := suite.sender.AuthStateStr(peerID)
 	suite.NotEmpty(untrackedStr)
 
 	suite.sender.states[peerID] = &AuthState{
 		Step: AuthStep(99), // non-existent step
 	}
-	unknownStr := suite.sender.PakeStateStr(peerID)
+	unknownStr := suite.sender.AuthStateStr(peerID)
 
 	steps := []AuthStep{
 		AuthStepUnknown,
@@ -550,7 +550,7 @@ func (suite *AuthProtocolTestSuite) TestAuthProtocol_PakeStateStr() {
 				Step: step,
 				Err:  fmt.Errorf("some error"),
 			}
-			str := suite.sender.PakeStateStr(peerID)
+			str := suite.sender.AuthStateStr(peerID)
 			suite.NotEmpty(str)
 			suite.NotEqual(untrackedStr, str)
 

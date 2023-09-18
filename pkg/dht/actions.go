@@ -67,14 +67,26 @@ func (m *Model) StartProvide() (*Model, tea.Cmd) {
 	return m, m.provide(0)
 }
 
-func (m *Model) Stop() (*Model, tea.Cmd) {
+func (m *Model) Stop() *Model {
+	switch m.State {
+	case StateIdle, StateStopped, StateError:
+		return m
+	default:
+		// pass
+	}
+
+	if len(m.ops) == 0 {
+		m.State = StateStopped
+		return m
+	}
+
 	m.State = StateStopping
 
 	for _, ref := range m.ops {
 		ref.cancel()
 	}
 
-	return m, nil
+	return m
 }
 
 // connectToBootstrapper connects to a set of bootstrap nodes to connect to the DHT.

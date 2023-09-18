@@ -66,7 +66,7 @@ func NewState(ctx context.Context, program *tea.Program, filepath string) (*Mode
 func (m *Model) Init() tea.Cmd {
 	log.Traceln("tea init")
 
-	m.host.RegisterKeyExchangeHandler()
+	m.host.AuthProt.RegisterKeyExchangeHandler()
 
 	return m.host.Init()
 }

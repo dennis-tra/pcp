@@ -9,8 +9,6 @@ import (
 	"sort"
 	"syscall"
 
-	"github.com/dennis-tra/pcp/pkg/tui"
-
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -34,19 +32,30 @@ import (
 	"github.com/dennis-tra/pcp/pkg/dht"
 	"github.com/dennis-tra/pcp/pkg/discovery"
 	"github.com/dennis-tra/pcp/pkg/mdns"
+	"github.com/dennis-tra/pcp/pkg/tui"
 	"github.com/dennis-tra/pcp/pkg/words"
 )
 
 var log = logrus.WithField("comp", "host")
 
+type HostState string
+
+const (
+	HostStateWaitingForAuthedPeer HostState = "authed_peer"
+	HostStateWaitingForDirectConn HostState = "direct_conn"
+	HostStateWaitingForAcceptance HostState = "acceptance"
+	HostStateLostConnection       HostState = "lost_conn"
+)
+
 // Model encapsulates the logic that's common for the receiving
 // and sending side of the file transfer.
 type Model struct {
 	host.Host
+	state HostState
 
 	// give host protocol capabilities
-	*AuthProtocol
-	//*PushProtocol
+	AuthProt *AuthProtocol
+	PushProt *PushProtocol
 	//*TransferProtocol
 
 	ctx     context.Context
@@ -65,8 +74,8 @@ type Model struct {
 	// punches. I've observed that the sending side does try
 	// to hole punch peers it finds in the DHT (while advertising).
 	// These are hole punches we're not interested in.
-	// hpStates    map[peer.ID]*HolePunchState
-	hpAllowList map[peer.ID]struct{}
+	// hpStatesLk  sync.RWMutex
+	hpStates map[peer.ID]*HolePunchState
 
 	// DHT is an accessor that is needed in the DHT discoverer/advertiser.
 	IpfsDHT    *kaddht.IpfsDHT
@@ -83,12 +92,15 @@ type Model struct {
 	RelayAddrs   []ma.Multiaddr
 	PeerStates   map[peer.ID]PeerState
 
+	authedPeer peer.ID
+
 	connections int
 
 	Words  []string
 	evtSub event.Subscription
 
 	spinner spinner.Model
+	role    discovery.Role
 }
 
 // New creates a new, fully initialized host with the given options.
@@ -149,17 +161,21 @@ func New(ctx context.Context, sender tea.Sender, role discovery.Role, wrds []str
 
 	chanID := ints[0]
 	model := &Model{
-		ctx:          ctx,
-		Host:         h,
-		IpfsDHT:      ipfsDHT,
-		sender:       sender,
-		Words:        wrds,
-		MDNS:         mdns.New(h, sender, chanID),
-		DHT:          dht.New(h, ipfsDHT, sender, role, chanID),
-		evtSub:       evtSub,
-		NATManager:   nat,
-		PeerStates:   map[peer.ID]PeerState{},
-		AuthProtocol: NewAuthProtocol(ctx, h, sender, role, wrds),
+		ctx:        ctx,
+		Host:       h,
+		state:      HostStateWaitingForAuthedPeer,
+		IpfsDHT:    ipfsDHT,
+		sender:     sender,
+		role:       role,
+		Words:      wrds,
+		MDNS:       mdns.New(h, sender, chanID),
+		DHT:        dht.New(h, ipfsDHT, sender, role, chanID),
+		evtSub:     evtSub,
+		NATManager: nat,
+		hpStates:   map[peer.ID]*HolePunchState{},
+		PeerStates: map[peer.ID]PeerState{},
+		AuthProt:   NewAuthProtocol(ctx, h, sender, role, wrds),
+		PushProt:   NewPushProtocol(ctx, h, sender, role),
 		// PushProtocol: NewPushProtocol(host)
 		// TransferProtocol: NewTransferProtocol(host)
 		spinner: spinner.New(spinner.WithSpinner(spinner.Dot)),
@@ -184,7 +200,7 @@ func (m *Model) Init() tea.Cmd {
 		m.watchEvents,
 		m.MDNS.Init(),
 		m.DHT.Init(),
-		m.AuthProtocol.Init(),
+		m.AuthProt.Init(),
 		m.spinner.Tick,
 	)
 }
@@ -212,24 +228,26 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case connectedMsg:
 		m.connections += 1
+		if m.state == HostStateWaitingForDirectConn && msg.conn.RemotePeer() == m.authedPeer && !isRelayAddress(msg.conn.RemoteMultiaddr()) {
+			m.state = HostStateWaitingForAcceptance
+			cmds = append(cmds, m.PushProt.SendPushRequest(m.authedPeer, "", 2, false))
+		}
 	case disconnectedMsg:
 		m.connections -= 1
+		if msg.conn.RemotePeer() == m.authedPeer {
+			cmds = append(cmds, Shutdown)
+		}
 	case dht.PeerMsg:
-		m, cmd = m.HandlePeerFound(msg.Peer)
+		m, cmd = m.handlePeerFound(msg.Peer)
 		cmds = append(cmds, cmd)
 	case mdns.PeerMsg:
-		m, cmd = m.HandlePeerFound(peer.AddrInfo(msg))
+		m, cmd = m.handlePeerFound(peer.AddrInfo(msg))
 		cmds = append(cmds, cmd)
 	case authOnKeyExchange:
 		m.PeerStates[msg.stream.Conn().RemotePeer()] = PeerStateAuthenticating
 	case authMsg[[]byte]:
-		m.PeerStates[msg.peerID] = PeerStateAuthenticated
-		if m.DHT.State != dht.StateIdle && m.DHT.State != dht.StateError {
-			m.DHT, cmd = m.DHT.Stop()
-		}
-		if m.MDNS.State != mdns.StateIdle && m.MDNS.State != mdns.StateError {
-			m.MDNS, cmd = m.MDNS.Stop()
-		}
+		m, cmd = m.handlePeerAuthenticated(msg.peerID)
+		cmds = append(cmds, cmd)
 	case authMsg[error]:
 		m.PeerStates[msg.peerID] = PeerStateFailedAuthentication
 	case relayFinderStatus:
@@ -259,7 +277,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	m.DHT, cmd = m.DHT.Update(msg)
 	cmds = append(cmds, cmd)
 
-	m.AuthProtocol, cmd = m.AuthProtocol.Update(msg)
+	m.AuthProt, cmd = m.AuthProt.Update(msg)
 	cmds = append(cmds, cmd)
 
 	m.spinner, cmd = m.spinner.Update(msg)
@@ -340,7 +358,7 @@ func (m *Model) StartKeyExchange(ctx context.Context, remotePeer peer.ID) tea.Cm
 
 	m.PeerStates[remotePeer] = PeerStateAuthenticating
 
-	return m.AuthProtocol.StartKeyExchange(ctx, remotePeer)
+	return m.AuthProt.StartKeyExchange(ctx, remotePeer)
 }
 
 type PeerConnectMsg struct {
@@ -358,33 +376,96 @@ func (m *Model) connect(pi peer.AddrInfo) tea.Cmd {
 	}
 }
 
-func (m *Model) HandlePeerFound(pi peer.AddrInfo) (*Model, tea.Cmd) {
-	peerState, found := m.PeerStates[pi.ID]
+func (m *Model) handlePeerFound(addrInfo peer.AddrInfo) (*Model, tea.Cmd) {
+	peerState, found := m.PeerStates[addrInfo.ID]
 	if found {
 		switch peerState {
 		case PeerStateNotConnected:
-			m.PeerStates[pi.ID] = PeerStateConnecting
-			return m, m.connect(pi)
+			m.PeerStates[addrInfo.ID] = PeerStateConnecting
+			return m, m.connect(addrInfo)
 		case PeerStateConnecting:
-			log.Debugln("Ignoring discovered peer as we're already trying to connect", pi.ID)
+			log.Debugln("Ignoring discovered peer as we're already trying to connect", addrInfo.ID)
 		case PeerStateConnected:
-			log.Debugln("Ignoring discovered peer because as we're already connected", pi.ID)
+			log.Debugln("Ignoring discovered peer because as we're already connected", addrInfo.ID)
 		case PeerStateAuthenticating:
-			log.Debugln("Ignoring discovered peer because as we're in midst of authenticating each other", pi.ID)
+			log.Debugln("Ignoring discovered peer because as we're in midst of authenticating each other", addrInfo.ID)
 		case PeerStateAuthenticated:
-			log.Debugln("Ignoring discovered peer as it's already authenticated", pi.ID)
+			log.Debugln("Ignoring discovered peer as it's already authenticated", addrInfo.ID)
 		case PeerStateFailedConnecting:
-			log.Debugln("We tried to connect previously but couldn't establish a connection, try again", pi.ID)
-			m.PeerStates[pi.ID] = PeerStateConnecting
-			return m, m.connect(pi)
+			log.Debugln("We tried to connect previously but couldn't establish a connection, try again", addrInfo.ID)
+			m.PeerStates[addrInfo.ID] = PeerStateConnecting
+			return m, m.connect(addrInfo)
 		case PeerStateFailedAuthentication:
-			log.Debugln("We tried to connect previously but the node didn't pass authentication -> skipping", pi.ID)
+			log.Debugln("We tried to connect previously but the node didn't pass authentication -> skipping", addrInfo.ID)
 		}
 	} else {
-		m.PeerStates[pi.ID] = PeerStateConnecting
-		return m, m.connect(pi)
+		m.PeerStates[addrInfo.ID] = PeerStateConnecting
+		return m, m.connect(addrInfo)
 	}
 	return m, nil
+}
+
+func (m *Model) handlePeerAuthenticated(pid peer.ID) (*Model, tea.Cmd) {
+	// check if we already have an authenticated peer
+	if m.authedPeer != "" {
+		log.WithField("authenticated", m.authedPeer.String()).WithField("new", pid.String()).Debugln("already connected and authenticated with another peer")
+		if err := m.Host.Network().ClosePeer(pid); err != nil {
+			log.WithError(err).Debugln("error closing newly authenticated peer")
+		}
+
+		m.PeerStates[pid] = PeerStateFailedAuthentication
+
+		return m, nil
+	}
+
+	m.state = HostStateWaitingForDirectConn
+	m.PeerStates[pid] = PeerStateAuthenticated
+	m.authedPeer = pid
+
+	m.debugLogAuthenticatedPeer(pid)
+	m.AuthProt.UnregisterKeyExchangeHandler()
+
+	if m.role == discovery.RoleReceiver {
+		m.PushProt.RegisterPushRequestHandler(pid)
+	}
+
+	m.DHT = m.DHT.Stop()
+	m.MDNS = m.MDNS.Stop()
+
+	for _, p := range m.Host.Peerstore().Peers() {
+		if p == pid {
+			continue
+		}
+
+		if err := m.Host.Network().ClosePeer(p); err != nil {
+			log.WithError(err).WithField("peer", p.String()).Warnln("Failed closing connection to peer")
+		}
+	}
+
+	direct := 0
+	indirect := 0
+	for _, conn := range m.Network().ConnsToPeer(pid) {
+		if isRelayAddress(conn.RemoteMultiaddr()) {
+			indirect += 1
+		} else {
+			direct += 1
+		}
+	}
+
+	if direct > 0 {
+		m.state = HostStateWaitingForAcceptance
+		return m, m.PushProt.SendPushRequest(pid, "", 2, false)
+	}
+
+	if indirect == 0 {
+		m.state = HostStateLostConnection
+		return m, Shutdown
+	}
+
+	return m, func() tea.Msg {
+		// TODO: configure timeout
+		return "timeout"
+	}
 }
 
 func (m *Model) watchSignals() tea.Msg {

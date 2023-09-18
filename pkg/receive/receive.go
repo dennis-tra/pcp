@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/dennis-tra/pcp/pkg/mdns"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/sirupsen/logrus"
 
@@ -47,7 +49,7 @@ func NewState(ctx context.Context, program *tea.Program, words []string) (*Model
 func (m *Model) Init() tea.Cmd {
 	log.Traceln("tea init")
 
-	m.host.RegisterKeyExchangeHandler()
+	m.host.AuthProt.RegisterKeyExchangeHandler()
 
 	return m.host.Init()
 }
@@ -81,6 +83,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, tea.Quit)
 	}
 
+	switch m.host.MDNS.State {
+	case mdns.StateIdle:
+		if config.Global.MDNS && len(m.host.PrivateAddrs) > 0 {
+			m.host.MDNS, cmd = m.host.MDNS.Start()
+			cmds = append(cmds, cmd)
+		}
+	}
+
 	switch m.host.DHT.State {
 	case dht.StateIdle:
 		if config.Global.DHT {
@@ -99,7 +109,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	//	// TODO: if dht + mdns are in error -> stop
+	// TODO: if dht + mdns are in error -> stop
 
 	return m, tea.Batch(cmds...)
 }

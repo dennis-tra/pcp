@@ -220,7 +220,7 @@ package send
 //	}
 //
 //	// Only if --debug is activated
-//	n.DebugLogAuthenticatedPeer(peerID)
+//	n.debugLogAuthenticatedPeer(peerID)
 //
 //	// we are connected to the correct peer:
 //	// 1. stop accepting key exchange requests

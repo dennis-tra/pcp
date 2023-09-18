@@ -117,7 +117,7 @@ func (a *AuthProtocol) Update(msg tea.Msg) (*AuthProtocol, tea.Cmd) {
 	}
 }
 
-func (a *AuthProtocol) PakeStateStr(peerID peer.ID) string {
+func (a *AuthProtocol) AuthStateStr(peerID peer.ID) string {
 	s, ok := a.states[peerID]
 	if !ok {
 		return "no key exchange started"
@@ -161,7 +161,7 @@ func (a *AuthProtocol) IsAuthenticated(peerID peer.ID) bool {
 }
 
 // GetSessionKey returns the session key that was obtained via
-// the password authenticated key exchange (PAKE) protocol.
+// the password-authenticated key exchange (PAKE) protocol.
 func (a *AuthProtocol) GetSessionKey(peerID peer.ID) []byte {
 	state, ok := a.states[peerID]
 	if !ok {
@@ -201,13 +201,14 @@ func (a *AuthProtocol) StartKeyExchange(ctx context.Context, remotePeer peer.ID)
 
 	return func() tea.Msg {
 		s, err := a.host.NewStream(ctx, remotePeer, a.outProt)
-		authErrMsg := baseAuthErrMsg(s, remotePeer)
 		if err != nil {
-			return authErrMsg(err)
+			return authMsg[error]{peerID: remotePeer, payload: err}
 		}
 
 		defer s.Close()
 		defer io.ResetOnShutdown(a.ctx, s)()
+
+		authErrMsg := baseAuthErrMsg(s, remotePeer)
 
 		// Authenticating peer...
 		// initialize sender p ("0" indicates sender)

@@ -185,7 +185,7 @@ package receive
 //	}
 //	n.peerStates.Store(pi.ID, Connected)
 //
-//	n.DebugLogAuthenticatedPeer(pi.ID)
+//	n.debugLogAuthenticatedPeer(pi.ID)
 //
 //	// lock push request handler until this handler has finished
 //	// sometimes the push request comes too fast which messes up

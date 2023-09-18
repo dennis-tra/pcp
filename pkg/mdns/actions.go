@@ -64,8 +64,13 @@ func (m *Model) wait(ref *serviceRef) tea.Cmd {
 	}
 }
 
-func (m *Model) Stop() (*Model, tea.Cmd) {
+func (m *Model) Stop() *Model {
+	if m.State != StateStarted {
+		return m
+	}
+
 	m.reset()
 	m.State = StateStopped
-	return m, nil
+
+	return m
 }

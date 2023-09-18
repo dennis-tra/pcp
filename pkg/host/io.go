@@ -2,7 +2,10 @@ package host
 
 import (
 	"fmt"
+	"strconv"
 	"time"
+
+	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
@@ -61,7 +64,7 @@ func (m *Model) Send(s network.Stream, msg p2p.HeaderMessage) error {
 	}
 
 	// Encrypt the data with the PAKE session key if it is found
-	sKey := m.GetSessionKey(s.Conn().RemotePeer())
+	sKey := m.AuthProt.GetSessionKey(s.Conn().RemotePeer())
 	if len(sKey) == 0 {
 		data, err = crypt.Encrypt(sKey, data)
 		if err != nil {
@@ -136,7 +139,7 @@ func (m *Model) Read(s network.Stream, buf p2p.HeaderMessage) error {
 
 	log.Debugf("Reading message from %s\n", s.Conn().RemotePeer().String())
 	// Decrypt the data with the PAKE session key if it is found
-	sKey := m.GetSessionKey(s.Conn().RemotePeer())
+	sKey := m.AuthProt.GetSessionKey(s.Conn().RemotePeer())
 	if len(sKey) == 0 {
 		data, err = crypt.Decrypt(sKey, data)
 		if err != nil {
@@ -157,4 +160,39 @@ func (m *Model) Read(s network.Stream, buf p2p.HeaderMessage) error {
 	}
 
 	return nil
+}
+
+// debugLogAuthenticatedPeer prints information about the connection and remote peer to the console.
+func (m *Model) debugLogAuthenticatedPeer(peerID peer.ID) {
+	log.Debugln("Authenticated peer:", peerID)
+
+	log.Debugln("Connections:")
+	for i, conn := range m.Network().ConnsToPeer(peerID) {
+		log.Debugf("[%d] Direction: %s Transient: %s\n", i, conn.Stat().Direction, strconv.FormatBool(conn.Stat().Transient))
+		log.Debugln("     Local:  ", conn.LocalMultiaddr())
+		log.Debugln("     Remote: ", conn.RemoteMultiaddr())
+	}
+
+	protocols, err := m.Network().Peerstore().GetProtocols(peerID)
+	if err == nil {
+		log.Debugln("Protocols:")
+		for _, p := range protocols {
+			log.Debugf("  %s\n", p)
+		}
+	}
+	av, err := m.Network().Peerstore().Get(peerID, "AgentVersion")
+	if err != nil {
+		return
+	}
+
+	agentVersion, ok := av.(string)
+	if ok {
+		log.Debugln("Agent version:", agentVersion)
+	}
+}
+
+// isRelayAddress returns true if the given multiaddress contains the /p2p-circuit protocol.
+func isRelayAddress(maddr ma.Multiaddr) bool {
+	_, err := maddr.ValueForProtocol(ma.P_CIRCUIT)
+	return err == nil
 }

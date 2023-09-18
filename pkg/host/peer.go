@@ -41,7 +41,7 @@ func (m *Model) ViewPeerStates() string {
 		state := m.PeerStates[pID]
 		switch state {
 		case PeerStateConnected, PeerStateAuthenticating, PeerStateAuthenticated, PeerStateFailedAuthentication:
-			out += fmt.Sprintf("  -> %s: %s\n", bold.Render(peerID)[:16], m.AuthProtocol.PakeStateStr(pID))
+			out += fmt.Sprintf("  -> %s: %s\n", bold.Render(peerID)[:16], m.AuthProt.AuthStateStr(pID))
 		}
 	}
 
