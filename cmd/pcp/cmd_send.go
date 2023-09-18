@@ -5,7 +5,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/dennis-tra/pcp/pkg/send"
-	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 
 	"github.com/dennis-tra/pcp/pkg/config"
@@ -24,14 +23,7 @@ var sendCmd = &cli.Command{
 			EnvVars:     []string{"PCP_WORD_COUNT"},
 			Usage:       "the number of random words to use (min 3)",
 			Destination: &config.Send.WordCount,
-			Value:       4,
-			Action: func(cCtx *cli.Context, wordCount int) error {
-				log.Debugln("Validating given word count:", config.Send.WordCount)
-				if wordCount < 3 && !config.Global.Homebrew {
-					return fmt.Errorf("the number of words must not be less than 3")
-				}
-				return nil
-			},
+			Value:       config.Send.WordCount,
 		},
 	},
 	ArgsUsage: `FILE`,

@@ -30,7 +30,7 @@ type (
 
 func (m *Model) Bootstrap() (*Model, tea.Cmd) {
 	var cmds []tea.Cmd
-	for _, bp := range config.Global.BoostrapAddrInfos() {
+	for _, bp := range config.Global.BootstrapPeers {
 		m.BootstrapsPending += 1
 		cmds = append(cmds, m.connectToBootstrapper(bp))
 	}

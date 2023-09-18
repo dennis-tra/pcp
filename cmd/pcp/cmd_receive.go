@@ -25,7 +25,7 @@ var receiveCmd = &cli.Command{
 			EnvVars:     []string{"PCP_AUTO_ACCEPT"},
 			Usage:       "automatically accept the file transfer",
 			Destination: &config.Receive.AutoAccept,
-			Value:       false,
+			Value:       config.Receive.AutoAccept,
 		},
 	},
 	Description: `The receive subcommand starts searching for peers in your local 
