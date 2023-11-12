@@ -19,6 +19,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
@@ -134,7 +135,11 @@ func New(ctx context.Context, sender tea.Sender, role discovery.Role, wrds []str
 		),
 		libp2p.EnableHolePunching(holepunch.WithTracer(&holePunchTracer{sender: sender})),
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
-			ipfsDHT, err = kaddht.New(ctx, h, kaddht.EnableOptimisticProvide(), kaddht.Datastore(datastore.NewNullDatastore()))
+			ipfsDHT, err = kaddht.New(ctx, h,
+				kaddht.EnableOptimisticProvide(),
+				kaddht.Datastore(datastore.NewNullDatastore()),
+				kaddht.V1ProtocolOverride(protocol.ID(config.Global.ProtocolID)),
+			)
 			return ipfsDHT, err
 		}),
 		libp2p.NATManager(func(network network.Network) basichost.NATManager {
@@ -342,6 +347,7 @@ func (m *Model) View() string {
 	}
 
 	out += m.ViewPeerStates()
+	out += m.PushProt.View()
 
 	return out
 }
@@ -418,6 +424,8 @@ func (m *Model) handlePeerAuthenticated(pid peer.ID) (*Model, tea.Cmd) {
 		return m, nil
 	}
 
+	log.WithField("peer", pid).Infoln("Found peer!")
+
 	m.state = HostStateWaitingForDirectConn
 	m.PeerStates[pid] = PeerStateAuthenticated
 	m.authedPeer = pid
@@ -453,8 +461,14 @@ func (m *Model) handlePeerAuthenticated(pid peer.ID) (*Model, tea.Cmd) {
 	}
 
 	if direct > 0 {
-		m.state = HostStateWaitingForAcceptance
-		return m, m.PushProt.SendPushRequest(pid, "", 2, false)
+		switch m.role {
+		case discovery.RoleReceiver:
+			// TODO: configure timeout
+			return m, nil
+		case discovery.RoleSender:
+			m.state = HostStateWaitingForAcceptance
+			return m, m.PushProt.SendPushRequest(pid, "", 2, false)
+		}
 	}
 
 	if indirect == 0 {

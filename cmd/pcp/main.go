@@ -12,8 +12,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 
-	"gopkg.in/yaml.v3"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
@@ -189,8 +187,6 @@ func beforeFunc(cCtx *cli.Context) error {
 	}
 
 	config.Global.BootstrapPeers = bps
-	data, _ := yaml.Marshal(config.Global)
-	fmt.Println(string(data))
 
 	log.SetLevel(log.Level(config.Global.LogLevel))
 
