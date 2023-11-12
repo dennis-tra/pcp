@@ -149,8 +149,6 @@ require (
 )
 
 replace (
-	//github.com/charmbracelet/bubbletea v0.24.2 => github.com/dennis-tra/bubbletea v0.0.0-20230706161916-7f55fefb43b4
-	github.com/charmbracelet/bubbletea v0.24.2 => ../bubbletea
+	github.com/charmbracelet/bubbletea v0.24.2 => github.com/dennis-tra/bubbletea v0.0.0-20230706161916-7f55fefb43b4
 	github.com/libp2p/go-libp2p v0.31.0 => github.com/dennis-tra/go-libp2p v0.0.0-20230902183207-4a4e15280bb6
-//github.com/libp2p/go-libp2p-kad-dht v0.25.0 => ../go-libp2p-kad-dht
 )
