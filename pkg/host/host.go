@@ -42,9 +42,9 @@ var log = logrus.WithField("comp", "host")
 type HostState string
 
 const (
-	HostStateWaitingForAuthedPeer HostState = "authed_peer"
-	HostStateWaitingForDirectConn HostState = "direct_conn"
-	HostStateWaitingForAcceptance HostState = "acceptance"
+	HostStateWaitingForAuthedPeer HostState = "waiting_authed_peer"
+	HostStateWaitingForDirectConn HostState = "waiting_direct_conn"
+	HostStateWaitingForAcceptance HostState = "waiting_acceptance"
 	HostStateLostConnection       HostState = "lost_conn"
 )
 
@@ -334,13 +334,13 @@ func (m *Model) View() string {
 
 	style := lipgloss.NewStyle().Bold(true)
 
-	local := m.MDNS.View()
-	internet := m.DHT.View()
+	lan := m.MDNS.View()
+	wan := m.DHT.View()
 	if m.Reachability == network.ReachabilityPrivate && m.relayFinderActive && m.DHT.State == dht.StateBootstrapped {
-		internet = m.spinner.View() + "(finding signaling peers)"
+		wan = m.spinner.View() + "(finding signaling peers)"
 	}
 
-	out += fmt.Sprintf("%s %s\t %s %s\n", style.Render("Local Network:"), local, style.Render("Internet:"), internet)
+	out += fmt.Sprintf("%s %s\t %s %s\n", style.Render("Local Network:"), lan, style.Render("Internet:"), wan)
 
 	if possible, err := m.IsDirectConnectivityPossible(); !possible && errors.Is(err, ErrSymmetricNat) {
 		out += tui.Yellow.Render("You are behind a symmetric NAT. A direct connection will only be possible of your peer is publicly reachable.")
@@ -379,106 +379,6 @@ func (m *Model) connect(pi peer.AddrInfo) tea.Cmd {
 			ID:  pi.ID,
 			Err: m.Connect(m.ctx, pi),
 		}
-	}
-}
-
-func (m *Model) handlePeerFound(addrInfo peer.AddrInfo) (*Model, tea.Cmd) {
-	peerState, found := m.PeerStates[addrInfo.ID]
-	if found {
-		switch peerState {
-		case PeerStateNotConnected:
-			m.PeerStates[addrInfo.ID] = PeerStateConnecting
-			return m, m.connect(addrInfo)
-		case PeerStateConnecting:
-			log.Debugln("Ignoring discovered peer as we're already trying to connect", addrInfo.ID)
-		case PeerStateConnected:
-			log.Debugln("Ignoring discovered peer because as we're already connected", addrInfo.ID)
-		case PeerStateAuthenticating:
-			log.Debugln("Ignoring discovered peer because as we're in midst of authenticating each other", addrInfo.ID)
-		case PeerStateAuthenticated:
-			log.Debugln("Ignoring discovered peer as it's already authenticated", addrInfo.ID)
-		case PeerStateFailedConnecting:
-			log.Debugln("We tried to connect previously but couldn't establish a connection, try again", addrInfo.ID)
-			m.PeerStates[addrInfo.ID] = PeerStateConnecting
-			return m, m.connect(addrInfo)
-		case PeerStateFailedAuthentication:
-			log.Debugln("We tried to connect previously but the node didn't pass authentication -> skipping", addrInfo.ID)
-		}
-	} else {
-		m.PeerStates[addrInfo.ID] = PeerStateConnecting
-		return m, m.connect(addrInfo)
-	}
-	return m, nil
-}
-
-func (m *Model) handlePeerAuthenticated(pid peer.ID) (*Model, tea.Cmd) {
-	// check if we already have an authenticated peer
-	if m.authedPeer != "" {
-		log.WithField("authenticated", m.authedPeer.String()).WithField("new", pid.String()).Debugln("already connected and authenticated with another peer")
-		if err := m.Host.Network().ClosePeer(pid); err != nil {
-			log.WithError(err).Debugln("error closing newly authenticated peer")
-		}
-
-		m.PeerStates[pid] = PeerStateFailedAuthentication
-
-		return m, nil
-	}
-
-	log.WithField("peer", pid).Infoln("Found peer!")
-
-	m.state = HostStateWaitingForDirectConn
-	m.PeerStates[pid] = PeerStateAuthenticated
-	m.authedPeer = pid
-
-	m.debugLogAuthenticatedPeer(pid)
-	m.AuthProt.UnregisterKeyExchangeHandler()
-
-	if m.role == discovery.RoleReceiver {
-		m.PushProt.RegisterPushRequestHandler(pid)
-	}
-
-	m.DHT = m.DHT.Stop()
-	m.MDNS = m.MDNS.Stop()
-
-	for _, p := range m.Host.Peerstore().Peers() {
-		if p == pid {
-			continue
-		}
-
-		if err := m.Host.Network().ClosePeer(p); err != nil {
-			log.WithError(err).WithField("peer", p.String()).Warnln("Failed closing connection to peer")
-		}
-	}
-
-	direct := 0
-	indirect := 0
-	for _, conn := range m.Network().ConnsToPeer(pid) {
-		if isRelayAddress(conn.RemoteMultiaddr()) {
-			indirect += 1
-		} else {
-			direct += 1
-		}
-	}
-
-	if direct > 0 {
-		switch m.role {
-		case discovery.RoleReceiver:
-			// TODO: configure timeout
-			return m, nil
-		case discovery.RoleSender:
-			m.state = HostStateWaitingForAcceptance
-			return m, m.PushProt.SendPushRequest(pid, "", 2, false)
-		}
-	}
-
-	if indirect == 0 {
-		m.state = HostStateLostConnection
-		return m, Shutdown
-	}
-
-	return m, func() tea.Msg {
-		// TODO: configure timeout
-		return "timeout"
 	}
 }
 

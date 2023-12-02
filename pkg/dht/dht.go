@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dennis-tra/pcp/pkg/tui"
-
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -17,10 +15,11 @@ import (
 
 	"github.com/dennis-tra/pcp/pkg/config"
 	"github.com/dennis-tra/pcp/pkg/discovery"
+	"github.com/dennis-tra/pcp/pkg/tui"
 )
 
 const (
-	//
+	// Timeout for connecting to the bootstrap peers
 	bootstrapTimeout = 10 * time.Second
 
 	// Timeout for looking up our data in the DHT

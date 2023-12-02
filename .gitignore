@@ -53,3 +53,4 @@ Temporary Items
 .apdisk
 
 !cmd/pcp/*
+.tool-versions

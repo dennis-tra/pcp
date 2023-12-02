@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/dennis-tra/pcp/pkg/tui"
+
 	"github.com/charmbracelet/lipgloss"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
@@ -38,10 +40,25 @@ func (m *Model) ViewPeerStates() string {
 			continue
 		}
 
+		hpStr := ""
+		if hpState, found := m.hpStates[pID]; found {
+			switch hpState.Stage {
+			case HolePunchStageUnknown:
+			case HolePunchStageStarted:
+				hpStr += fmt.Sprintf("| hole punching attempt %d %s", hpState.Attempts+1, m.spinner.View())
+			case HolePunchStageSucceeded:
+				hpStr += "| " + tui.Green.Render(fmt.Sprintf("hole punched!"))
+			case HolePunchStageFailed:
+				hpStr += "| " + tui.Red.Render(fmt.Sprintf("hole punch failed: %s", hpState.Err))
+			}
+		} else if pID == m.authedPeer && m.state == HostStateWaitingForDirectConn {
+			hpStr = "| " + tui.Gray.Render(fmt.Sprintf("hole punching %s", m.spinner.View()))
+		}
+
 		state := m.PeerStates[pID]
 		switch state {
 		case PeerStateConnected, PeerStateAuthenticating, PeerStateAuthenticated, PeerStateFailedAuthentication:
-			out += fmt.Sprintf("  -> %s: %s\n", bold.Render(peerID)[:16], m.AuthProt.AuthStateStr(pID))
+			out += fmt.Sprintf("  -> %s: %s %s\n", bold.Render(peerID)[:16], m.AuthProt.AuthStateStr(pID), hpStr)
 		}
 	}
 

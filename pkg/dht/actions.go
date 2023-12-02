@@ -86,6 +86,10 @@ func (m *Model) Stop() *Model {
 		ref.cancel()
 	}
 
+	if err := m.dht.Close(); err != nil {
+		log.WithError(err).Warnln("Failed closing kademlia DHT")
+	}
+
 	return m
 }
 
